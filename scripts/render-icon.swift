@@ -16,5 +16,16 @@ let tail = NSBezierPath(); tail.move(to: NSPoint(x: 560, y: 363)); tail.line(to:
 NSColor(calibratedRed: 0.97, green: 0.96, blue: 0.84, alpha: 1).setFill()
 for x in [451, 506, 561] { NSBezierPath(ovalIn: NSRect(x: x, y: 427, width: 19, height: 19)).fill() }
 NSGraphicsContext.restoreGraphicsState()
-let data = bitmap.representation(using: .png, properties: [:])!
+// App Store marketing icons must not contain an alpha channel. AppKit draws
+// into RGBA; encode the finished opaque pixels as RGB without changing colors.
+let rgb = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: bitmap.pixelsWide, pixelsHigh: bitmap.pixelsHigh, bitsPerSample: 8, samplesPerPixel: 3, hasAlpha: false, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+for y in 0..<bitmap.pixelsHigh {
+    for x in 0..<bitmap.pixelsWide {
+        let source = bitmap.bitmapData! + y * bitmap.bytesPerRow + x * 4
+        precondition(source[3] == 255, "The icon artwork must be fully opaque")
+        let destination = rgb.bitmapData! + y * rgb.bytesPerRow + x * 3
+        for channel in 0..<3 { destination[channel] = source[channel] }
+    }
+}
+let data = rgb.representation(using: .png, properties: [:])!
 try data.write(to: URL(fileURLWithPath: CommandLine.arguments[1]))
