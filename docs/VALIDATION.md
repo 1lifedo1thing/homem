@@ -4,6 +4,8 @@ Implementation baseline: Memoh `51bb2073d8d99c961ce9f23555e8fb3bdd2aadc4`, inspe
 
 ## Completed checks
 
+- Xcode Cloud Build 1 (`7273dd7`) passed both the required simulator test action on iPhone 17 Pro / iOS 27 and the iOS archive action. The archive reported zero errors and warnings.
+
 - iPhone simulator Debug build succeeded with the pinned SwiftTerm and WebRTC packages.
 - Final rebuilt app passed Xcode bundle validation with `ad.neko.homem` and all license resources present.
 - `TestResults/FinalCore.xcresult`: **15 tests passed, zero failures, zero skips** — 10 core tests, three networking tests, and two real HTTP/SSE/WebSocket integration tests on iPhone 17 Pro / iOS 26.5. This run includes the final streaming fix.
@@ -27,7 +29,7 @@ For a simulator-independent transport check on the Mac, start `python3 scripts/f
 ## Verification limits
 
 - No real Memoh server, account, model provider, container, or OAuth registration was supplied. Local fixture results establish client transport behavior, not end-to-end compatibility with every deployment.
-- An intermediate expanded simulator run became unresponsive during UI automation and was stopped. Its wire tests had skipped after a two-second fixture startup timeout. The subsequent final core run used a longer allowance and passed both wire tests without skips. The additional onboarding screenshot test in the expanded UI suite has not completed successfully and is not included in the passing count.
+- An intermediate expanded simulator run became unresponsive during UI automation and was stopped. Its wire tests had skipped after a two-second fixture startup timeout. The subsequent final core run used a longer allowance and passed both wire tests without skips. The additional onboarding screenshot test subsequently passed in Xcode Cloud Build 1.
 - iPad uses adaptive layouts and is included in the target. A separate iPad simulator launch could not be completed reliably on this host; its layout is not claimed as visually verified.
 - Physical-device signing, device installation, TestFlight/App Store submission, accessibility audit, and testing on the oldest supported OS remain release checks.
 - See [FEATURES.md](FEATURES.md) for the explicit limits on desktop parity, specialized renderers, provider authentication, backup import, and background behavior.

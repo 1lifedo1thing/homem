@@ -24,7 +24,7 @@ The pre/post hooks and native networking smoke check have passed locally. The ap
 
 ## Apple-side workflow
 
-**Status: active.** The app record and workflow were created in Kitta Ltd on 17 September 2026. The first build was started from commit `7273dd7`; its result must be checked separately from workflow activation.
+**Status: active.** The app record and workflow were created in Kitta Ltd on 17 September 2026. The first build from commit `7273dd7` passed both its required simulator test action and iOS archive action.
 
 - App Store Connect app: [Homem (6812852139)](https://appstoreconnect.apple.com/apps/6812852139/distribution)
 - Cloud product: `13960BE0-6304-4C11-A080-C67D06BE2E79`
@@ -32,11 +32,17 @@ The pre/post hooks and native networking smoke check have passed locally. The ap
 - Starts on changes to `main` and pull requests from any source branch targeting `main`, with automatic cancellation of superseded builds.
 - Environment: Latest Release Xcode and macOS (Xcode 27 / macOS 27 when configured); clean builds.
 - Required simulator test action: Homem scheme, iPhone 17 Pro, latest OS included with the selected Xcode.
-- iOS archive action: Homem scheme, distribution preparation set to None.
-- [Build 1](https://appstoreconnect.apple.com/teams/cbaca10a-f696-4d2b-959e-0d3fa1b23452/xcode-cloud/products/13960BE0-6304-4C11-A080-C67D06BE2E79/builds/de595d62-2229-4007-967b-c338080cd2f8) was accepted and queued.
+- iOS archive action: Homem scheme, distribution preparation set to **TestFlight (Internal Testing Only)**.
+- [Build 1](https://appstoreconnect.apple.com/teams/cbaca10a-f696-4d2b-959e-0d3fa1b23452/xcode-cloud/products/13960BE0-6304-4C11-A080-C67D06BE2E79/builds/de595d62-2229-4007-967b-c338080cd2f8) passed tests and archive.
 
-Build 1 successfully fetched the primary repository, resolved every package dependency (including WebRTC), checked the project/workflow configuration, and ran the Cloud preparation hooks. The iOS archive succeeded with zero errors and warnings. The separate test worker also started its local transport fixture successfully. Public package dependencies required no additional repository grant. The required test action was still running at the time this setup record was written; consult the build link for its final result.
+Build 1 successfully fetched the primary repository, resolved every package dependency (including WebRTC), checked the project/workflow configuration, and ran the Cloud preparation hooks. The iOS archive succeeded with zero errors and warnings. The separate test worker also started its local transport fixture successfully. Public package dependencies required no additional repository grant. The required test action subsequently passed.
 
-No TestFlight testers, automatic external distribution, App Store submission, paid compute subscription, or export-compliance declaration is configured by these repository scripts.
+## TestFlight
+
+The workflow now includes a **TestFlight Internal Testing - iOS** post-action using the Archive - iOS artifact. Successful builds are delivered to [Homem Internal](https://appstoreconnect.apple.com/apps/6812852139/testflight/groups/926f0163-0a4e-41e4-b3b6-2eb289f969c3). The group has automatic distribution enabled for local Xcode uploads as well; Cloud delivery is handled by the workflow post-action.
+
+[Build 2](https://appstoreconnect.apple.com/teams/cbaca10a-f696-4d2b-959e-0d3fa1b23452/xcode-cloud/products/13960BE0-6304-4C11-A080-C67D06BE2E79/builds/ef5e32b1-31e1-42a8-ae48-45333fc42bcc/summary) was started after enabling TestFlight. Upload, Apple processing, and tester availability are separate stages; workflow activation alone does not mean the build is installable. Tester selection is pending the owner's choice.
+
+No external/public distribution, App Store submission, paid compute subscription, or export-compliance declaration has been configured.
 
 Apple references: [First workflow](https://developer.apple.com/documentation/xcode/configuring-your-first-xcode-cloud-workflow), [custom build scripts](https://developer.apple.com/documentation/xcode/writing-custom-build-scripts), [Cloud environment variables](https://developer.apple.com/documentation/xcode/environment-variable-reference).
