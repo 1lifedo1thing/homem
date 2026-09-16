@@ -1,0 +1,120 @@
+import XCTest
+@testable import Homem
+
+final class CoreTests: XCTestCase {
+    func testJSONRoundTripPreservesPluginConfiguration() throws {
+        let value = try JSONValue.parse(#"{"config":{"args":["--safe",3,true,null],"日本語":"記憶"},"number":1.25}"#)
+        XCTAssertEqual(try JSONDecoder().decode(JSONValue.self, from: value.encoded), value)
+    }
+    func testSSESupportsMultilineAndIgnoresHeartbeat() {
+        var parser = SSEParser()
+        XCTAssertNil(parser.consume(": heartbeat")); XCTAssertNil(parser.consume(""))
+        XCTAssertNil(parser.consume("event: progress"))
+        XCTAssertNil(parser.consume("data: {\"type\": \"step\","))
+        XCTAssertNil(parser.consume("data: \"message\": \"Installing\"}"))
+        XCTAssertEqual(parser.consume(""), "{\"type\": \"step\",\n\"message\": \"Installing\"}")
+        XCTAssertNil(parser.consume(""))
+    }
+    func testSSEByteFramesPreserveBlankLinesAndUnicode() {
+        for separator in ["\n", "\r\n", "\r"] {
+            var parser = SSEParser()
+            let wire = "data: {\"type\":\"step\",\"message\":\"日本語\"}\(separator)\(separator)data: {\"type\":\"done\"}\(separator)\(separator)"
+            let events = wire.utf8.compactMap { parser.consume(byte: $0) }
+            XCTAssertEqual(events, ["{\"type\":\"step\",\"message\":\"日本語\"}", "{\"type\":\"done\"}"])
+        }
+    }
+    @MainActor func testURLBasePathAndEscaping() throws {
+        let api = APIClient(baseURL: try APIClient.normalizedURL("https://example.com/memoh/api/"), token: "secret")
+        let request = try api.request("/bots/" + "a/b?#".pathComponent + "/messages", query: ["session_id": "a&b +日本"])
+        XCTAssertEqual(request.url?.path, "/memoh/api/bots/a/b?#/messages")
+        XCTAssertTrue(request.url!.absoluteString.contains("a%2Fb%3F%23"))
+        XCTAssertEqual(URLComponents(url: request.url!, resolvingAgainstBaseURL: false)?.queryItems?.first?.value, "a&b +日本")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer secret")
+    }
+    @MainActor func testRejectsCredentialURLsAndForeignEndpoints() throws {
+        for url in ["file:///etc/passwd", "https://u:p@example.com", "https://example.com?token=x", "example.com", "https://example.com/#x"] { XCTAssertThrowsError(try APIClient.normalizedURL(url)) }
+        let api = APIClient(baseURL: URL(string: "https://example.com")!)
+        XCTAssertThrowsError(try api.request("https://other.com"))
+        XCTAssertThrowsError(try api.request("/../other"))
+    }
+    func testRuntimeReplayAndRecovery() throws {
+        var state = RuntimeState()
+        state.apply(snapshot)
+        let delta: JSONValue = ["type": "runtime_delta", "session_id": "s", "epoch": "e", "seq": 2, "delta": ["message_appends": [["id": 1, "type": "text", "content": " world"]]]]
+        state.apply(delta); state.apply(delta)
+        XCTAssertEqual(state.messages[0]["content"], "Hello world")
+        var gap = delta; gap["seq"] = 4; state.apply(gap)
+        XCTAssertTrue(state.needsSnapshot)
+        var late = delta; late["seq"] = 3; state.apply(late)
+        XCTAssertEqual(state.sequence, 2)
+        state.apply(snapshot); XCTAssertFalse(state.needsSnapshot)
+        XCTAssertEqual(state.messages[0]["content"], "Hello")
+    }
+    func testRuntimeUpsertWinsOverAppendAndClearsRun() {
+        var state = RuntimeState(); state.apply(snapshot)
+        state.apply(["type": "runtime_delta", "epoch": "e", "seq": 2, "delta": ["message_appends": [["id": 1, "type": "text", "content": " there"]], "message_upserts": [["id": 1, "type": "text", "content": "Authoritative"]]]])
+        XCTAssertEqual(state.messages[0]["content"], "Authoritative")
+        state.apply(["type": "runtime_delta", "epoch": "e", "seq": 3, "delta": ["current_run_view": .null]])
+        XCTAssertFalse(state.active); XCTAssertTrue(state.messages.isEmpty)
+    }
+    func testSchemaValidationPreventsMalformedWrites() throws {
+        let schema: JSONValue = ["type": "object", "required": ["name"], "properties": ["name": ["type": "string"], "limit": ["type": "integer", "minimum": 1], "config": ["type": "object"]]]
+        XCTAssertThrowsError(try SchemaCatalog.shared.validate(["limit": 4], schema: schema))
+        XCTAssertThrowsError(try SchemaCatalog.shared.validate(["name": "Test", "limit": "abc"], schema: schema))
+        XCTAssertThrowsError(try SchemaCatalog.shared.validate(["name": "Test", "limit": 0], schema: schema))
+        XCTAssertThrowsError(try SchemaCatalog.shared.validate(["name": "Test", "config": "{"], schema: schema))
+        XCTAssertNoThrow(try SchemaCatalog.shared.validate(["name": "Test", "config": ["enabled": true]], schema: schema))
+    }
+    func testBundledContractIncludesCoreOperations() {
+        let catalog = SchemaCatalog.shared
+        XCTAssertGreaterThan(catalog.operations.count, 300)
+        for (path, method) in [("/bots", "POST"), ("/bots/{bot_id}/schedule", "POST"), ("/bots/{bot_id}/memory/{memory_id}", "PUT"), ("/bots/{bot_id}/container/fs/write", "POST"), ("/providers", "POST")] { XCTAssertNotNil(catalog.operation(path, method)) }
+    }
+    @MainActor func testDemoWritesAreIsolatedAndUnsupportedActionsFail() throws {
+        let demo = DemoServer()
+        let created = try demo.call("/bots/atlas/schedule", method: "POST", query: [:], body: ["name": "Test", "pattern": "0 9 * * *"])
+        XCTAssertFalse(created["id"].string.isEmpty)
+        _ = try demo.call("/bots/atlas/schedule/" + created["id"].string, method: "DELETE", query: [:], body: nil)
+        XCTAssertEqual(demo.collections["/bots/atlas/schedule"]?.count, 1)
+        XCTAssertThrowsError(try demo.call("/bots/atlas/container/start", method: "POST", query: [:], body: nil))
+    }
+    var snapshot: JSONValue { ["type": "runtime_snapshot", "session_id": "s", "snapshot": ["epoch": "e", "seq": 1, "current_run_view": ["run_id": "r", "status": "running", "turn_id": "t", "messages": [["id": 1, "type": "text", "content": "Hello"]]]]] }
+}
+
+final class StubURLProtocol: URLProtocol, @unchecked Sendable {
+    static var handler: ((URLRequest) throws -> (Int, Data))?
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        do { let (status, data) = try Self.handler!(request); client?.urlProtocol(self, didReceive: HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: ["Content-Type": "application/json"])!, cacheStoragePolicy: .notAllowed); client?.urlProtocol(self, didLoad: data); client?.urlProtocolDidFinishLoading(self) }
+        catch { client?.urlProtocol(self, didFailWithError: error) }
+    }
+    override func stopLoading() {}
+}
+
+@MainActor final class NetworkingTests: XCTestCase {
+    func client(token: String = "") -> APIClient {
+        let config = URLSessionConfiguration.ephemeral; config.protocolClasses = [StubURLProtocol.self]
+        return APIClient(baseURL: URL(string: "https://test.invalid/api")!, token: token, session: URLSession(configuration: config))
+    }
+    func testHTTPErrorPreservesServerMessage() async {
+        StubURLProtocol.handler = { _ in (403, Data(#"{"message":"Manage permission required"}"#.utf8)) }
+        do { _ = try await client().call("/bots"); XCTFail("Expected 403") } catch { XCTAssertTrue(error.localizedDescription.contains("Manage permission required")) }
+    }
+    func testHTMLProxyResponseIsNotSuccess() async {
+        StubURLProtocol.handler = { _ in (200, Data("<html>Login</html>".utf8)) }
+        do { _ = try await client().call("/bots"); XCTFail("Expected invalid response") } catch { XCTAssertTrue(error.localizedDescription.contains("API base")) }
+    }
+    func testTokenRefreshRetriesWithNewBearer() async throws {
+        var requests = 0
+        StubURLProtocol.handler = { req in
+            requests += 1
+            if req.url!.path.hasSuffix("/auth/refresh") { return (200, Data(#"{"access_token":"new-token"}"#.utf8)) }
+            if req.value(forHTTPHeaderField: "Authorization") == "Bearer new-token" { return (200, Data(#"{"items":[]}"#.utf8)) }
+            return (401, Data(#"{"message":"expired"}"#.utf8))
+        }
+        let api = client(token: "expired"); _ = try await api.call("/bots")
+        XCTAssertEqual(api.token, "new-token"); XCTAssertEqual(requests, 3)
+        try Keychain.save(nil, account: api.baseURL.absoluteString)
+    }
+}
