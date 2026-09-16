@@ -2,8 +2,10 @@
 
 A native Swift / SwiftUI iPhone and iPad client for [Memoh](https://github.com/felinics/Memoh).
 
-**Bundle identifier:** `ad.neko.homem`  
-**Deployment target:** iOS 17.0+  
+**Bundle identifier:** `ad.neko.homem`
+
+**Deployment target:** iOS 17.0+
+
 **API baseline:** Memoh commit `51bb2073d8d99c961ce9f23555e8fb3bdd2aadc4`
 
 Homem connects to an existing Memoh backend. It does not run an agent or a container on the phone. The interface uses SwiftUI and UIKit, SwiftTerm for the interactive terminal, and native WebRTC for the remote desktop. There is no web-app wrapper.
@@ -12,7 +14,7 @@ Homem connects to an existing Memoh backend. It does not run an agent or a conta
 
 1. Open `Homem.xcodeproj` in Xcode. Swift Package Manager resolves the pinned SwiftTerm and WebRTC packages.
 2. Select the **Homem** scheme and an iPhone or iPad simulator, then Run.
-3. On a physical device, choose your Apple signing team under Signing & Capabilities. The bundle identifier is already configured.
+3. Signing is configured for Kitta Ltd (`7P8CLHDH5G`). For another organization, choose its Apple signing team under Signing & Capabilities and update `project.yml`.
 4. Connect a server, or choose **Explore the demo**. Demo changes are local to the current app session and never contact a server.
 
 Enter the complete **API base URL**, including any reverse-proxy prefix:
@@ -59,6 +61,8 @@ Or start `python3 scripts/fixture-server.py` separately and run tests from Xcode
 With the fixture running, `bash scripts/wire-smoke.sh` also checks the app's actual HTTP, SSE, and WebSocket code directly on macOS without launching a simulator.
 
 Tested builds and remaining verification are recorded in [VALIDATION.md](docs/VALIDATION.md).
+
+Repository and Xcode Cloud configuration are documented in [XCODE_CLOUD.md](docs/XCODE_CLOUD.md).
 
 ## Source layout
 
