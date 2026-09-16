@@ -35,7 +35,7 @@ The pre/post hooks and native networking smoke check have passed locally. The ap
 - iOS archive action: Homem scheme, distribution preparation set to None.
 - [Build 1](https://appstoreconnect.apple.com/teams/cbaca10a-f696-4d2b-959e-0d3fa1b23452/xcode-cloud/products/13960BE0-6304-4C11-A080-C67D06BE2E79/builds/de595d62-2229-4007-967b-c338080cd2f8) was accepted and queued.
 
-Build 1 successfully fetched the primary repository, resolved every package dependency (including WebRTC), checked the project/workflow configuration, and ran the Cloud preparation hooks before starting the archive. Public package dependencies required no additional repository grant.
+Build 1 successfully fetched the primary repository, resolved every package dependency (including WebRTC), checked the project/workflow configuration, and ran the Cloud preparation hooks. The iOS archive succeeded with zero errors and warnings. The separate test worker also started its local transport fixture successfully. Public package dependencies required no additional repository grant. The required test action was still running at the time this setup record was written; consult the build link for its final result.
 
 No TestFlight testers, automatic external distribution, App Store submission, paid compute subscription, or export-compliance declaration is configured by these repository scripts.
 
