@@ -15,6 +15,8 @@
 <key>UISupportedInterfaceOrientations</key><array><string>UIInterfaceOrientationPortrait</string><string>UIInterfaceOrientationLandscapeLeft</string><string>UIInterfaceOrientationLandscapeRight</string></array>
 <key>UISupportedInterfaceOrientations~ipad</key><array><string>UIInterfaceOrientationPortrait</string><string>UIInterfaceOrientationPortraitUpsideDown</string><string>UIInterfaceOrientationLandscapeLeft</string><string>UIInterfaceOrientationLandscapeRight</string></array>
 <key>NSLocalNetworkUsageDescription</key><string>Connect to your self-hosted Memoh server on your local network.</string>
+<!-- WebRTC includes camera APIs even though the desktop viewer receives video only. -->
+<key>NSCameraUsageDescription</key><string>Homem’s video library supports camera capture, but this version only displays remote video and does not access your camera.</string>
 <key>NSMicrophoneUsageDescription</key><string>Record a voice message to attach to your conversation with a Memoh agent.</string>
 <key>NSAppTransportSecurity</key><dict><key>NSAllowsArbitraryLoads</key><true/></dict>
 <key>UIFileSharingEnabled</key><false/>

@@ -14,6 +14,17 @@ if ! grep -q 'hasAlpha: no' <<< "$icon_info" ||
 fi
 echo 'App Store icon preflight passed.'
 
+# Apple's processing scans embedded SDKs too. WebRTC references camera APIs even
+# though Homem's desktop viewer only receives video (ITMS-90683).
+for usage_key in NSCameraUsageDescription NSMicrophoneUsageDescription; do
+  usage_text="$(/usr/libexec/PlistBuddy -c "Print :$usage_key" "$repo_dir/Homem/Info.plist")"
+  if [[ -z "$usage_text" ]]; then
+    echo "error: Homem/Info.plist must include a nonempty $usage_key." >&2
+    exit 1
+  fi
+done
+echo 'Privacy purpose string preflight passed.'
+
 # SwiftTerm's pinned build tool plugin generates version metadata. Cloud workers
 # cannot display Xcode's interactive plugin approval dialog. This preference is
 # scoped to Apple's disposable worker; never change the local developer machine.

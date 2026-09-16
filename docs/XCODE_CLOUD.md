@@ -30,7 +30,7 @@ The pre/post hooks and native networking smoke check have passed locally. The ap
 - Cloud product: `13960BE0-6304-4C11-A080-C67D06BE2E79`
 - Workflow: [Homem CI](https://appstoreconnect.apple.com/teams/cbaca10a-f696-4d2b-959e-0d3fa1b23452/xcode-cloud/products/13960BE0-6304-4C11-A080-C67D06BE2E79/workflows/A3B8E4E8-2CBF-49A8-83E3-6E20DFFE1DA3)
 - Starts on changes to `main` and pull requests from any source branch targeting `main`, with automatic cancellation of superseded builds.
-- Environment: Latest Release Xcode and macOS (Xcode 27 / macOS 27 when configured); clean builds.
+- Environment: Xcode 26.6 (17F113), compatible latest-release macOS (Tahoe 26.5.1 when pinned); clean builds.
 - Required simulator test action: Homem scheme, iPhone 17 Pro, latest OS included with the selected Xcode.
 - iOS archive action: Homem scheme, distribution preparation set to **TestFlight (Internal Testing Only)**.
 - [Build 1](https://appstoreconnect.apple.com/teams/cbaca10a-f696-4d2b-959e-0d3fa1b23452/xcode-cloud/products/13960BE0-6304-4C11-A080-C67D06BE2E79/builds/de595d62-2229-4007-967b-c338080cd2f8) passed tests and archive.
@@ -41,8 +41,20 @@ Build 1 successfully fetched the primary repository, resolved every package depe
 
 The workflow now includes a **TestFlight Internal Testing - iOS** post-action using the Archive - iOS artifact. Successful builds are delivered to [Homem Internal](https://appstoreconnect.apple.com/apps/6812852139/testflight/groups/926f0163-0a4e-41e4-b3b6-2eb289f969c3). The group has automatic distribution enabled for local Xcode uploads as well; Cloud delivery is handled by the workflow post-action.
 
-[Build 2](https://appstoreconnect.apple.com/teams/cbaca10a-f696-4d2b-959e-0d3fa1b23452/xcode-cloud/products/13960BE0-6304-4C11-A080-C67D06BE2E79/builds/ef5e32b1-31e1-42a8-ae48-45333fc42bcc/summary) was started after enabling TestFlight. Upload, Apple processing, and tester availability are separate stages; workflow activation alone does not mean the build is installable. Tester selection is pending the owner's choice.
+[Build 2](https://appstoreconnect.apple.com/teams/cbaca10a-f696-4d2b-959e-0d3fa1b23452/xcode-cloud/products/13960BE0-6304-4C11-A080-C67D06BE2E79/builds/ef5e32b1-31e1-42a8-ae48-45333fc42bcc/summary) was started after enabling TestFlight. Upload, Apple processing, and tester availability are separate stages; workflow activation alone does not mean the build is installable. The internal group currently has three members configured in App Store Connect.
 
 No external/public distribution, App Store submission, paid compute subscription, or export-compliance declaration has been configured.
 
 Apple references: [First workflow](https://developer.apple.com/documentation/xcode/configuring-your-first-xcode-cloud-workflow), [custom build scripts](https://developer.apple.com/documentation/xcode/writing-custom-build-scripts), [Cloud environment variables](https://developer.apple.com/documentation/xcode/environment-variable-reference).
+
+## Distribution repair — 17 September 2026
+
+Cloud builds passed compilation, tests, signing, and IPA export but failed during App Store Connect preparation. Xcode’s `ContentDelivery.log` exposed the actual server rejection for Build 3: **ITMS-90683**, missing `NSCameraUsageDescription`. The prebuilt WebRTC framework references `AVCaptureDevice` and related camera APIs; Apple requires a purpose string even though Homem only receives remote desktop video and does not capture the camera.
+
+`Homem/Info.plist` now includes a truthful camera description. The Cloud post-clone preflight checks that both camera and microphone descriptions are present and nonempty. No camera capture or permission request was added.
+
+Commit `3fd5c51` also changed the 1024px marketing icon to RGB without an alpha channel and added an icon preflight. That packaging correction did not fix the processing rejection; builds 3 and 4 still failed because of the missing camera declaration. Standalone validation and upload succeeded, but those results did not mean Apple’s subsequent processing accepted the app.
+
+The workflow is pinned to Xcode 26.6 (17F113), the installed local toolchain. Its main/pull-request triggers and internal-only TestFlight preparation remain intact. The pin was a diagnostic step before the processing error was identified, not a proven fix. Build 5 was started with this toolchain before the camera declaration was added.
+
+The direct upload also warned that the prebuilt WebRTC framework lacks a dSYM (UUID `4C4C4496-5555-3144-A149-A7E882FEE780`). This was not the blocking rejection. No credentials or private delivery logs are stored in this repository.
