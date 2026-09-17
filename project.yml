@@ -39,10 +39,36 @@ targets:
         CODE_SIGN_ENTITLEMENTS: Homem/Homem.entitlements
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     dependencies:
+      - target: HomemShare
+        embed: true
       - package: HighlightSwift
       - package: L10n-swift
       - package: SwiftTerm
       - package: WebRTC
+  HomemShare:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: HomemShare
+      - path: Homem/Core/Credentials.swift
+      - path: Homem/Core/OfficialSession.swift
+      - path: Homem/Core/SharedAccountDirectory.swift
+      - path: Homem/Core/ShareUploadClient.swift
+      - path: Homem/Core/SharedFiles.swift
+      - path: Homem/Core/JSONValue.swift
+      - path: Homem/Core/Localization.swift
+      - path: Homem/Resources/Localizable.xcstrings
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ad.neko.homem.share
+        TARGETED_DEVICE_FAMILY: '1,2'
+        SUPPORTS_MACCATALYST: YES
+        INFOPLIST_FILE: HomemShare/Info.plist
+        CODE_SIGN_ENTITLEMENTS: HomemShare/HomemShare.entitlements
+        APPLICATION_EXTENSION_API_ONLY: YES
+        SKIP_INSTALL: YES
+    dependencies:
+      - package: L10n-swift
   HomemTests:
     type: bundle.unit-test
     platform: iOS

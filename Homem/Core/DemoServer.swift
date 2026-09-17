@@ -30,7 +30,7 @@ import Foundation
             documents[base + "/workspace-targets"] = ["targets": [["target_id": "native", "kind": "native", "primary": true], ["target_id": "demo-mac", "kind": "remote", "name": "Studio Mac", "online": true, "status": "online"], ["target_id": "offline-mac", "kind": "remote", "name": "Travel Mac", "online": false, "status": "offline"]]]
             documents[base + "/settings"] = ["chat_model_id": "demo-model", "language": "en", "max_context_tokens": 32000]
             documents[base + "/container"] = ["status": "running", "runtime": "docker", "image": "memoh/workspace", "id": .string("workspace-\(bot)")]
-            documents[base + "/token-usage"] = ["total_tokens": 28450, "input_tokens": 21340, "output_tokens": 7110]
+            documents[base + "/token-usage"] = ["chat": [["day": .string(String(ISO8601DateFormatter().string(from: .now).prefix(10))), "input_tokens": 21340, "output_tokens": 7110]], "discuss": [], "schedule": [], "acp_agent": [], "by_model": [["model_id": "demo-model", "model_name": "Example model", "input_tokens": 21340, "output_tokens": 7110]]]
             documents[base + "/checks"] = ["state": "ok", "issues": []]
             documents[base + "/memory/graph"] = ["nodes": [["id": "design", "label": "Design", "count": 4], ["id": "native", "label": "Native apps", "count": 3], ["id": "coffee", "label": "Coffee", "count": 2], ["id": "examples", "label": "Clear examples", "count": 6]], "edges": [["source": "design", "target": "native", "weight": 2], ["source": "native", "target": "examples", "weight": 3], ["source": "coffee", "target": "design", "weight": 1]]]
         }

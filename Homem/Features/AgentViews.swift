@@ -118,7 +118,7 @@ struct AgentDetailView: View {
             }
             Section("Insights".localized) {
                 NavigationLink("Health checks".localized, systemImage: "heart.text.clipboard") { ReadOnlyDocumentView(title: "Health checks", path: base + "/checks") }
-                NavigationLink("Token usage".localized, systemImage: "chart.bar") { ReadOnlyDocumentView(title: "Token usage", path: base + "/token-usage") }
+                NavigationLink("Token usage".localized, systemImage: "chart.bar") { TokenUsageView(botID: bot.id) }
                 NavigationLink("Schedule history".localized, systemImage: "clock.arrow.circlepath") { ReadOnlyDocumentView(title: "Schedule history", path: base + "/schedule/logs") }
                 NavigationLink("Compaction history".localized, systemImage: "archivebox") { ReadOnlyDocumentView(title: "Compaction history", path: base + "/compaction/logs") }
             }
@@ -249,7 +249,7 @@ struct ChannelConfigEditor: View {
 
 
 /// Compact used / limit readouts; missing samples never masquerade as zero usage.
-private struct AgentResourceSummary: View {
+struct AgentResourceSummary: View {
     @Environment(AppStore.self) private var store
     @Environment(\.scenePhase) private var scenePhase
     let botID: String

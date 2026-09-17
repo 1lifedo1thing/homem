@@ -3,53 +3,102 @@ import UniformTypeIdentifiers
 
 struct WorkspaceView: View {
     @Environment(AppStore.self) private var store
+    @Environment(\.appAccent) private var accent
     var botID: String
     var name: String
     var base: String { "/bots/\(botID.pathComponent)" }
     @State private var status: JSONValue = .null
     @State private var error: String?
     @State private var busy = false
+    @State private var missing = false
+    @State private var confirmStop = false
     @State private var selectedTool: WorkspaceTool?
+    @State private var operation: APIOperation?
+    private var state: String { status.text("status", "state") }
+    private var running: Bool { state == "running" }
+
     var body: some View {
-        List {
-            Section {
-                VStack(alignment: .leading, spacing: 18) {
-                    WorkspaceIdentity()
+        ScrollView {
+            VStack(spacing: 18) {
+                VStack(spacing: 18) {
                     HStack(spacing: 14) {
-                        AgentAvatar(name: name, avatarURL: store.bots.first { $0.id == botID }?.value.avatarURL ?? "", size: 52)
-                        VStack(alignment: .leading, spacing: 5) {
-                            Eyebrow(text: "Workspace")
-                            Text(name).font(.title2.bold())
+                        AgentAvatar(name: name, avatarURL: store.bots.first { $0.id == botID }?.value.avatarURL ?? "", size: 48)
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(name).font(.title3.bold()).lineLimit(2)
+                            StatusIndicator(text: missing ? "Not created" : state.nonEmpty?.fieldLabel ?? (error == nil ? "Loading" : "Unavailable"), color: running ? .green : .secondary)
                         }
-                        Spacer()
+                        Spacer(minLength: 8)
+                        AgentResourceSummary(botID: botID)
                     }
-                    StatusIndicator(text: status.text("status", "state").nonEmpty?.fieldLabel ?? (error == nil ? "Loading" : "Unavailable"), color: status.text("status", "state") == "running" ? .green : .secondary)
-                }.padding(.vertical, 8)
-            }.listRowBackground(Color.clear)
+                    Divider()
+                    WorkspaceShortcuts(selection: $selectedTool)
+                }.padding(18).modifier(DetailSurface())
 
-            Section {
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 10) { workspaceTools }
-                    VStack(spacing: 10) { workspaceTools }
-                }.listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
-            }.listRowBackground(Color.clear)
-
-            Section("Manage".localized) {
-                ResourceLink(title: "Working directories", icon: "folder.badge.gearshape", spec: .bot(botID, "workdirs", title: "Working directories", detail: "/bots/{bot_id}/workdirs/{workdir_id}"))
-                ResourceLink(title: "Snapshots", icon: "camera", spec: .bot(botID, "container/snapshots", title: "Snapshots"))
-                NavigationLink("Dependencies".localized, systemImage: "shippingbox") { DependenciesView(botID: botID) }
-                NavigationLink("Resource metrics".localized, systemImage: "chart.xyaxis.line") { ReadOnlyDocumentView(title: "Resource metrics", path: base + "/container/metrics") }
-                OperationButton(title: "Create workspace", path: base + "/container", template: "/bots/{bot_id}/container", method: "POST")
-                Button("Start workspace".localized) { Task { await action("start") } }.disabled(busy)
-                Button("Stop workspace".localized) { Task { await action("stop") } }.disabled(busy)
-                OperationButton(title: "Restore snapshot", path: base + "/container/snapshots/rollback", template: "/bots/{bot_id}/container/snapshots/rollback", method: "POST")
-            }
-            if let error { ErrorBanner(message: error) }
-        }.scrollContentBackground(.hidden).background(Theme.canvas).navigationTitle(AppLocalization.format("%@’s workspace", name)).navigationBarTitleDisplayMode(.inline).task { await load() }
+                VStack(spacing: 0) {
+                    workspaceLink("Working directories", icon: "folder.badge.gearshape") {
+                        ResourceListView(spec: .bot(botID, "workdirs", title: "Working directories", detail: "/bots/{bot_id}/workdirs/{workdir_id}"))
+                    }
+                    Divider().padding(.leading, 54)
+                    workspaceLink("Snapshots", icon: "camera") {
+                        ResourceListView(spec: .bot(botID, "container/snapshots", title: "Snapshots"))
+                    }
+                    Divider().padding(.leading, 54)
+                    workspaceLink("Dependencies", icon: "shippingbox") { DependenciesView(botID: botID) }
+                    Divider().padding(.leading, 54)
+                    workspaceLink("Resource metrics", icon: "chart.xyaxis.line") {
+                        ReadOnlyDocumentView(title: "Resource metrics", path: base + "/container/metrics")
+                    }
+                }.modifier(DetailSurface())
+                if let error { ErrorBanner(message: error) { Task { await load() } } }
+            }.padding(20).frame(maxWidth: 760).frame(maxWidth: .infinity)
+        }.background(Theme.canvas)
+            .navigationTitle("Workspace".localized).navigationBarTitleDisplayMode(.inline)
+            .task { await load() }.refreshable { await load() }
             .navigationDestination(item: $selectedTool) { tool in WorkspaceToolDestination(tool: tool, botID: botID) }
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        if missing {
+                            Button("Create workspace".localized, systemImage: "plus") { operation = SchemaCatalog.shared.operation("/bots/{bot_id}/container", "POST") }
+                        } else if !status.isNull {
+                            if running {
+                                Button("Stop workspace".localized, systemImage: "stop.circle", role: .destructive) { confirmStop = true }
+                            } else {
+                                Button("Start workspace".localized, systemImage: "play.circle") { Task { await action("start") } }
+                            }
+                            Button("Restore snapshot".localized, systemImage: "clock.arrow.circlepath") { operation = SchemaCatalog.shared.operation("/bots/{bot_id}/container/snapshots/rollback", "POST") }
+                        }
+                        Button("Refresh".localized, systemImage: "arrow.clockwise") { Task { await load() } }
+                    } label: {
+                        if busy { ProgressView() } else { Image(systemName: "ellipsis") }
+                    }.disabled(busy).accessibilityLabel("Workspace actions".localized)
+                }
+            }
+            .sheet(item: $operation, onDismiss: { Task { await load() } }) { op in
+                OperationView(operation: op, substitutions: ["bot_id": botID])
+            }
+            .alert("Stop workspace?".localized, isPresented: $confirmStop) {
+                Button("Stop workspace".localized, role: .destructive) { Task { await action("stop") } }
+                Button("Cancel".localized, role: .cancel) {}
+            } message: { Text("Running tasks and desktop connections will be interrupted.".localized) }
     }
-    private var workspaceTools: some View { WorkspaceShortcuts(selection: $selectedTool) }
-    func load() async { do { status = try await store.api?.call(base + "/container") ?? .null; error = nil } catch { self.error = error.localizedDescription } }
+    private func workspaceLink<Destination: View>(_ title: String, icon: String, @ViewBuilder destination: () -> Destination) -> some View {
+        NavigationLink(destination: destination) {
+            HStack(spacing: 12) {
+                Image(systemName: icon).font(.system(size: 19)).foregroundStyle(accent).frame(width: 26)
+                Text(title.localized).foregroundStyle(.primary)
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
+            }.padding(16).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+        }.buttonStyle(.plain)
+    }
+    func load() async {
+        do {
+            guard let api = store.api else { return }
+            status = try await api.call(base + "/container"); missing = false; error = nil
+        } catch ClientError.http(404, _) { status = .null; missing = true; error = nil }
+        catch { self.error = error.localizedDescription }
+    }
     func action(_ action: String) async {
         busy = true; defer { busy = false }
         do { _ = try await store.api?.call(base + "/container/" + action, method: "POST"); await load() } catch { self.error = error.localizedDescription }

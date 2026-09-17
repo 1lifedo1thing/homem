@@ -8,3 +8,4 @@ xcuserdata/
 *.xcarchive
 TestResults/
 build-catalyst/
+build-release/
