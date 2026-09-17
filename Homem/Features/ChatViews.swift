@@ -248,7 +248,7 @@ struct TurnView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(turn["role"] == "user" ? "You".localized : turn["role"] == "system" ? "Workspace".localized : agentName).font(.caption2.weight(.bold)).tracking(1.5).foregroundStyle(.secondary)
-            if turn["role"] == "user" { Text(turn["text"].string).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading).padding(16).background(accent.opacity(0.07), in: RoundedRectangle(cornerRadius: 18)) }
+            if turn["role"] == "user" { MarkdownContent(text: turn["text"].string).frame(maxWidth: .infinity, alignment: .leading).padding(16).background(accent.opacity(0.07), in: RoundedRectangle(cornerRadius: 18)) }
             ForEach(Array(turn["attachments"].array.enumerated()), id: \.offset) { _, item in AttachmentView(item: item, model: model) }
             MessageSequence(messages: turn["messages"].array, model: model)
         }.frame(maxWidth: .infinity, alignment: .leading)
@@ -274,12 +274,23 @@ struct MarkdownContent: View {
     let text: String
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            ForEach(Array(text.components(separatedBy: "```").enumerated()), id: \.offset) { i, part in
-                if i % 2 == 1 {
-                    ScrollView(.horizontal) { Text(part).font(.system(.footnote, design: .monospaced)).textSelection(.enabled).padding(14) }.background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 12))
-                } else { Text((try? AttributedString(markdown: part, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(part)).textSelection(.enabled).lineSpacing(5).frame(maxWidth: .infinity, alignment: .leading) }
+            ForEach(Array(MarkdownSegment.parse(text).enumerated()), id: \.offset) { _, part in
+                if part.isCode {
+                    CodeBlockView(code: part.text, language: part.language)
+                } else {
+                    Text(inlineMarkdown(part.text.trimmingCharacters(in: .newlines))).textSelection(.enabled).lineSpacing(5)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
         }
+    }
+    private func inlineMarkdown(_ text: String) -> AttributedString {
+        var result = (try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(text)
+        for run in result.runs where run.inlinePresentationIntent?.contains(.code) == true {
+            result[run.range].font = .system(.body, design: .monospaced)
+            result[run.range].backgroundColor = Color(.tertiarySystemFill)
+        }
+        return result
     }
 }
 

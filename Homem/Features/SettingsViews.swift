@@ -64,6 +64,7 @@ struct AboutView: View {
             }
             Section("Open source".localized) {
                 Link("Memoh · AGPL-3.0", destination: URL(string: "https://github.com/felinics/Memoh")!)
+                Link("HighlightSwift · MIT", destination: URL(string: "https://github.com/appstefan/HighlightSwift")!)
                 Link("SwiftTerm · MIT", destination: URL(string: "https://github.com/migueldeicaza/SwiftTerm")!)
                 Link("L10n-swift · MIT", destination: URL(string: "https://github.com/Decybel07/L10n-swift")!)
                 Link("WebRTC · BSD", destination: URL(string: "https://webrtc.org")!)
@@ -75,7 +76,7 @@ struct AboutView: View {
 }
 
 struct LicenseNoticesView: View {
-    let documents = ["THIRD_PARTY_NOTICES", "AGPL-3.0", "SwiftTerm-LICENSE", "WebRTC-LICENSE", "L10n-swift-LICENSE"]
+    let documents = ["THIRD_PARTY_NOTICES", "AGPL-3.0", "SwiftTerm-LICENSE", "WebRTC-LICENSE", "L10n-swift-LICENSE", "HighlightSwift-LICENSE", "highlight.js-LICENSE"]
     var body: some View {
         List(documents, id: \.self) { name in
             NavigationLink(name) {

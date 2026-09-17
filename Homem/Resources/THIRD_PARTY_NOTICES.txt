@@ -19,3 +19,7 @@ Dependency versions and revisions are locked in `Homem.xcodeproj/project.xcworks
 ## L10n-swift
 
 [Decybel07/L10n-swift](https://github.com/Decybel07/L10n-swift), version 5.10.3, supplies localization lookup and locale-aware formatting. Copyright Adrian Bobrowski. MIT license; the full notice is included in `docs/licenses/L10n-swift-LICENSE` and the app's license screen.
+
+## HighlightSwift and highlight.js
+
+[appstefan/HighlightSwift](https://github.com/appstefan/HighlightSwift), version 1.1.0, provides local syntax highlighting using bundled highlight.js. HighlightSwift is MIT licensed; highlight.js is BSD-3-Clause licensed. Full notices are included in `docs/licenses/HighlightSwift-LICENSE`, `docs/licenses/highlight.js-LICENSE`, and the app's license screen.

@@ -48,6 +48,12 @@ import Observation
                 ["id": 4, "type": "text", "content": "Your schedule is up to date."]
             ]]]
         }
+        if ProcessInfo.processInfo.arguments.contains("--ui-code") {
+            api!.demo.collections["messages/welcome"] = [["turn_id": "code", "role": "assistant", "messages": [
+                ["id": 1, "type": "text", "content": "Here’s a small example using `greeting`:\n```swift\nstruct Greeting {\n    let name = \"Memoh\"\n\n    func message() -> String {\n        return \"Hello, \\(name)!\"\n    }\n}\n```"],
+                ["id": 2, "type": "tool", "name": "write_file", "input": ["path": "/data/greeting.swift", "overwrite": true], "output": ["saved": true, "bytes": 128], "diff": "--- greeting.swift\n+++ greeting.swift\n@@ -1 +1 @@\n-print(\"Hi\")\n+print(\"Hello, Memoh!\")"]
+            ]]]
+        }
         if ProcessInfo.processInfo.arguments.contains("--ui-user-input") {
             api!.demo.collections["messages/welcome"] = [["turn_id": "question", "role": "assistant", "messages": [
                 ["id": 1, "type": "tool", "name": "ask_user", "user_input": [

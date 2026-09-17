@@ -13,6 +13,9 @@ settings:
     CODE_SIGN_STYLE: Automatic
     ENABLE_USER_SCRIPT_SANDBOXING: YES
 packages:
+  HighlightSwift:
+    url: https://github.com/appstefan/HighlightSwift.git
+    exactVersion: 1.1.0
   L10n-swift:
     url: https://github.com/Decybel07/L10n-swift.git
     exactVersion: 5.10.3
@@ -36,6 +39,7 @@ targets:
         CODE_SIGN_ENTITLEMENTS: Homem/Homem.entitlements
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     dependencies:
+      - package: HighlightSwift
       - package: L10n-swift
       - package: SwiftTerm
       - package: WebRTC

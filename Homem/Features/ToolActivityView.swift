@@ -66,14 +66,13 @@ struct ToolActivityView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     ForEach(Array(messages.enumerated()), id: \.offset) { _, message in
                         VStack(alignment: .leading, spacing: 6) {
-                            Text(ToolPresentation.title(message["name"].string).localized).font(.subheadline.weight(.medium))
-                            if !message["output"].isNull { Text(message["output"].string.nonEmpty ?? message["output"].pretty).font(.caption).textSelection(.enabled).lineLimit(8) }
-                            DisclosureGroup("Details".localized) {
-                                Text(message["name"].string).font(.caption.monospaced())
-                                if !message["input"].isNull { Text(message["input"].pretty).font(.caption.monospaced()).textSelection(.enabled) }
-                                if !message["output"].isNull { Text(message["output"].pretty).font(.caption.monospaced()).textSelection(.enabled) }
-                                if !message["diff"].string.isEmpty { Text(message["diff"].string).font(.caption.monospaced()).textSelection(.enabled) }
-                            }.font(.caption).foregroundStyle(.secondary)
+                            Text(message["name"].string).font(.caption.monospaced().weight(.medium))
+                                .foregroundStyle(.secondary).textSelection(.enabled)
+                            if !message["input"].isNull { payload(message["input"], title: "Input".localized, language: inputLanguage(message)) }
+                            if !message["output"].isNull { payload(message["output"], title: "Output".localized) }
+                            if !message["diff"].string.isEmpty {
+                                CodeBlockView(code: message["diff"].string, language: "diff", title: "Changes".localized)
+                            }
                         }
                     }
                 }.padding(.leading, 18).padding(.bottom, 8)
@@ -85,4 +84,13 @@ struct ToolActivityView: View {
             }
         }
     }
+    private func inputLanguage(_ message: JSONValue) -> String {
+        let name = message["name"].string.lowercased()
+        return ["exec", "shell", "terminal"].contains(where: name.contains) ? "bash" : "plaintext"
+    }
+    private func payload(_ value: JSONValue, title: String, language: String = "plaintext") -> some View {
+        let content = ToolCodeContent(value, language: language)
+        return CodeBlockView(code: content.text, language: content.language, title: title)
+    }
+
 }
