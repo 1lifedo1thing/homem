@@ -34,8 +34,13 @@ import Foundation
             documents[base + "/checks"] = ["state": "ok", "issues": []]
             documents[base + "/memory/graph"] = ["nodes": [["id": "design", "label": "Design", "count": 4], ["id": "native", "label": "Native apps", "count": 3], ["id": "coffee", "label": "Coffee", "count": 2], ["id": "examples", "label": "Clear examples", "count": 6]], "edges": [["source": "design", "target": "native", "weight": 2], ["source": "native", "target": "examples", "weight": 3], ["source": "coffee", "target": "design", "weight": 1]]]
         }
-        collections["/providers"] = [["id": "demo-provider", "name": "Example provider", "type": "openai", "base_url": "https://api.example.com/v1"]]
-        collections["/models"] = [["id": "demo-model", "name": "Default model", "type": "chat", "model_id": "example-model", "provider_id": "demo-provider"]]
+        collections["/providers"] = [["id": "demo-provider", "name": "OpenAI", "client_type": "openai-responses"], ["id": "demo-anthropic", "name": "Anthropic", "client_type": "anthropic-messages"]]
+        collections["/models"] = [
+            ["id": "demo-model", "name": "Default model", "type": "chat", "model_id": "example-model", "provider_id": "demo-provider", "enable": true],
+            ["id": "demo-fast", "name": "Fast", "type": "chat", "model_id": "example-fast", "provider_id": "demo-provider", "enable": false],
+            ["id": "demo-embedding", "name": "Text embedding", "type": "embedding", "model_id": "example-embedding", "provider_id": "demo-provider", "enable": true],
+            ["id": "demo-claude", "name": "Claude", "type": "chat", "model_id": "example-claude", "provider_id": "demo-anthropic", "enable": true]
+        ]
         collections["/channels"] = [["id": "telegram", "type": "telegram", "name": "Telegram"], ["id": "discord", "type": "discord", "name": "Discord"], ["id": "feishu", "type": "feishu", "name": "Lark"]]
         for path in ["/memory-providers", "/search-providers", "/fetch-providers", "/email-providers", "/speech-providers", "/speech-models", "/transcription-providers", "/video-providers", "/users/me/runtimes", "/supermarket/apps", "/users"] { collections[path] = [] }
         documents["/users/me"] = ["id": "demo-user", "username": "explorer", "display_name": "Explorer", "role": "admin", "timezone": "Asia/Tokyo"]
@@ -52,6 +57,7 @@ import Foundation
             let all = collections[String(path.dropLast(7))] ?? []
             return ["results": .array(all.filter { $0.displayTitle.localizedCaseInsensitiveContains(body["query"].string) })]
         }
+        if path.hasPrefix("/models/"), path.hasSuffix("/test"), method == "POST" { return ["status": "ok", "reachable": true, "latency_ms": 125] }
         if method == "GET" {
             if let values = collections[path] { return ["items": .array(values)] }
             if let value = documents[path] { return value }

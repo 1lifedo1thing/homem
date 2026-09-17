@@ -175,6 +175,7 @@ struct ChatContent: View {
             await model.start()
         }.onDisappear { model.stop(); voice.cancel() }
         .task(id: model.draft) { do { try await Task.sleep(for: .milliseconds(600)); model.saveDraft() } catch {} }
+        .onChange(of: store.modelCatalogRevision) { _, _ in Task { await model.loadModels() } }
         .onChange(of: scenePhase) { _, phase in if phase == .background { model.stop() }; if phase == .active { Task { await model.start() } } }
         .fileImporter(isPresented: $filePicker, allowedContentTypes: [.data], allowsMultipleSelection: true) { result in
             do { for url in try result.get() { try attach(url) } } catch { model.error = error.localizedDescription }

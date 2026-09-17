@@ -6,6 +6,7 @@ import Observation
     var savedAccounts: [SavedAccount]
     var activeAccountID: String?
     var connectionID = UUID()
+    var modelCatalogRevision = 0
     var workspaces: [JSONValue] = []
     var api: APIClient?
     var bots: [Record] = []

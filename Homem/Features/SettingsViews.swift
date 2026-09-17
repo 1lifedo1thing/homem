@@ -21,7 +21,7 @@ struct SettingsView: View {
             }
             Section("Intelligence".localized) {
                 ResourceLink(title: "Providers", icon: "network", spec: .global("/providers", title: "Providers"))
-                ResourceLink(title: "Models", icon: "cpu", spec: .global("/models", title: "Models"))
+                NavigationLink("Models".localized, systemImage: "cpu") { ModelsView() }
                 ResourceLink(title: "Memory providers", icon: "brain", spec: .global("/memory-providers", title: "Memory providers"))
                 ResourceLink(title: "Search providers", icon: "magnifyingglass", spec: .global("/search-providers", title: "Search providers"))
                 ResourceLink(title: "Fetch providers", icon: "globe", spec: .global("/fetch-providers", title: "Fetch providers"))

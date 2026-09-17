@@ -110,6 +110,9 @@ struct ResourceDetailView: View {
     @State private var edit = false
     var body: some View {
         List {
+            if spec.template == "/providers" {
+                Section { NavigationLink("Models".localized, systemImage: "cpu") { ModelsView(providerID: record.id) } }
+            }
             JSONDetails(value: value.isNull ? record.value : value)
             if spec.template.hasSuffix("/schedule") {
                 Section { NavigationLink("Execution history".localized) { ReadOnlyDocumentView(title: "Execution history", path: spec.path + "/\(record.id.pathComponent)/logs") } }

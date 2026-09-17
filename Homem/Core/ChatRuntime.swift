@@ -89,9 +89,15 @@ struct RuntimeState {
     func start() async {
         isStopped = false
         await loadHistory()
-        do { models = try await api.call("/models").items.map(Record.init).filter { $0.value["type"].string == "chat" } } catch { /* The bot default works without permission to list models. */ }
+        await loadModels()
         guard !api.isDemo else { connection = "Demo"; return }
         connect()
+    }
+    func loadModels() async {
+        do {
+            models = try await api.call("/models").items.map(Record.init).filter { $0.value["type"] == "chat" && $0.value["enable"] != false && $0.value["config"]["catalog_available"] != false }
+            if !modelID.isEmpty && !models.contains(where: { $0.id == modelID }) { modelID = ""; effort = "" }
+        } catch { /* Keep the bot default usable without model-list permission. */ }
     }
     func stop() {
         saveDraft()
