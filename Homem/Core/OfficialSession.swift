@@ -43,14 +43,14 @@ struct OfficialSession: Codable {
         self.teamID = teamID
     }
     var validCookies: [HTTPCookie] { cookies.compactMap(\.httpCookie).filter(OfficialServer.accepts) }
-    static func restore() -> OfficialSession? {
-        guard let raw = Keychain.read(OfficialServer.keychainAccount), let data = Data(base64Encoded: raw),
+    static func restore(account: String = OfficialServer.keychainAccount) -> OfficialSession? {
+        guard let raw = Keychain.read(account), let data = Data(base64Encoded: raw),
               let value = try? JSONDecoder().decode(Self.self, from: data),
               !value.teamID.isEmpty, !value.validCookies.isEmpty else { return nil }
         return value
     }
-    func save() throws {
-        try Keychain.save(JSONEncoder().encode(self).base64EncodedString(), account: OfficialServer.keychainAccount)
+    func save(account: String = OfficialServer.keychainAccount) throws {
+        try Keychain.save(JSONEncoder().encode(self).base64EncodedString(), account: account)
     }
 }
 
@@ -62,6 +62,7 @@ enum OfficialIdentity {
         for key in ["id", "username", "email", "display_name", "avatar_url", "timezone"] {
             result[key] = .string(response[key].string.nonEmpty ?? profile[key].string.nonEmpty ?? user[key].string)
         }
+        result["id"] = .string(response.text("id", "user_id").nonEmpty ?? user.text("id", "user_id"))
         return result
     }
     static func teams(_ response: JSONValue) -> [JSONValue] {
@@ -70,5 +71,57 @@ enum OfficialIdentity {
             if !item["role"].isNull { team["role"] = item["role"] }
             return team
         }.filter { !$0["team_id"].string.isEmpty }
+    }
+}
+
+struct SavedAccount: Codable, Identifiable, Equatable {
+    var id: String
+    var server: String
+    var identity: String
+    var name: String
+    var avatarURL: String
+    var official: Bool
+    var credentialKey: String { "saved-account|" + id }
+    var host: String { URL(string: server)?.host ?? server }
+}
+
+/// Only display metadata is stored in preferences. Tokens and cookie sessions stay in Keychain.
+struct AccountVault {
+    let defaults: UserDefaults
+    init(defaults: UserDefaults = .standard) { self.defaults = defaults }
+    var accounts: [SavedAccount] {
+        guard let data = defaults.data(forKey: "savedAccounts") else { return [] }
+        return (try? JSONDecoder().decode([SavedAccount].self, from: data)) ?? []
+    }
+    var activeID: String? { defaults.string(forKey: "activeAccountID") }
+    var migrated: Bool { defaults.bool(forKey: "accountsMigrated") }
+    func save(_ account: SavedAccount, secret: String) throws {
+        try Keychain.save(secret, account: account.credentialKey)
+        var list = accounts
+        if let index = list.firstIndex(where: { $0.id == account.id }) { list[index] = account }
+        else { list.append(account) }
+        defaults.set(try JSONEncoder().encode(list), forKey: "savedAccounts")
+        defaults.set(true, forKey: "accountsMigrated")
+    }
+    func activate(_ id: String?) { defaults.set(id, forKey: "activeAccountID") }
+    func remove(_ account: SavedAccount) {
+        try? Keychain.save(nil, account: account.credentialKey)
+        Keychain.removeDrafts(server: account.credentialKey)
+        defaults.set(try? JSONEncoder().encode(accounts.filter { $0.id != account.id }), forKey: "savedAccounts")
+        if activeID == account.id { activate(nil) }
+    }
+    @MainActor func client(for account: SavedAccount) throws -> APIClient {
+        let base = try APIClient.normalizedURL(account.server)
+        let client: APIClient
+        if account.official {
+            guard let session = OfficialSession.restore(account: account.credentialKey) else { throw ClientError.message("Sign in to Memoh again to continue.".localized) }
+            client = APIClient(baseURL: base, officialSession: session)
+            client.persistOfficialSession = true
+        } else {
+            guard let token = Keychain.read(account.credentialKey), !token.isEmpty else { throw ClientError.message("Sign in to Memoh again to continue.".localized) }
+            client = APIClient(baseURL: base, token: token)
+        }
+        client.credentialAccount = account.credentialKey
+        return client
     }
 }

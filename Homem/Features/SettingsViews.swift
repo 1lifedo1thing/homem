@@ -7,6 +7,7 @@ struct SettingsView: View {
     @AppStorage("color-scheme") private var colorScheme = "system"
     @Environment(\.openURL) private var openURL
     @State private var signOut = false
+    @State private var accounts = false
     var body: some View {
         List {
             Section {
@@ -14,10 +15,10 @@ struct SettingsView: View {
                     AgentAvatar(name: store.accountName, avatarURL: store.accountAvatarURL, size: 48)
                     VStack(alignment: .leading, spacing: 4) { Text(store.accountName).font(.headline); Text(store.isDemo ? "Demo workspace".localized : store.api?.baseURL.host ?? "Connected server".localized).font(.caption).foregroundStyle(.secondary) }
                 }.padding(.vertical, 8)
+                Button("Accounts".localized, systemImage: "person.crop.circle") { accounts = true }
                 NavigationLink("Profile".localized, systemImage: "person") { SettingsDocumentView(title: "Profile", path: "/users/me", template: "/users/me") }
                 if store.api?.isOfficial != true { OperationButton(title: "Change password", path: "/users/me/password", template: "/users/me/password", method: "PUT") }
             }
-            Section("Workspace".localized) { WorkspaceIdentity() }
             Section("Intelligence".localized) {
                 ResourceLink(title: "Providers", icon: "network", spec: .global("/providers", title: "Providers"))
                 ResourceLink(title: "Models", icon: "cpu", spec: .global("/models", title: "Models"))
@@ -46,6 +47,8 @@ struct SettingsView: View {
                 Button(store.isDemo ? "Connect your server".localized : "Sign out".localized, role: store.isDemo ? nil : .destructive) { if store.isDemo { store.signOut() } else { signOut = true } }
             } footer: { Text("Homem 1.0 · Native Swift client for Memoh".localized) }
         }.navigationTitle("Settings".localized)
+            .toolbar { ToolbarItem(placement: .topBarLeading) { WorkspacePickerMenu() } }
+            .sheet(isPresented: $accounts) { AccountsView() }
             .alert("Sign out of Memoh?".localized, isPresented: $signOut) { Button("Sign out".localized, role: .destructive) { store.signOut() } }
     }
 }
@@ -94,7 +97,7 @@ struct MarketplaceView: View {
         List {
             Section { Text("Apps and skills".localized).font(.title3.weight(.semibold)).padding(.vertical, 10) }
             ForEach(records.filter { search.isEmpty || $0.value.pretty.localizedCaseInsensitiveContains(search) }) { record in
-                NavigationLink { MarketplaceDetailView(record: record) } label: { VStack(alignment: .leading, spacing: 5) { Text(record.title).font(.headline); Text(record.subtitle).font(.caption).foregroundStyle(.secondary) } }
+                NavigationLink { MarketplaceDetailView(record: record) } label: { HStack(spacing: 14) { MarketplaceIcon(value: record.value, size: 36); VStack(alignment: .leading, spacing: 5) { Text(record.title).font(.headline); Text(record.subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(2) } }.padding(.vertical, 4) }
             }
             if let error { ErrorBanner(message: error) }
             if store.isDemo { Text("Connect your server to browse its live app registries.".localized).foregroundStyle(.secondary) }
@@ -111,6 +114,10 @@ struct MarketplaceDetailView: View {
     @State private var error: String?
     var body: some View {
         List {
+            HStack(spacing: 16) {
+                MarketplaceIcon(value: descriptor.isNull ? record.value : descriptor, size: 48, detail: true)
+                Text(record.title).font(.title2.bold())
+            }.padding(.vertical, 8)
             JSONDetails(value: descriptor.isNull ? record.value : descriptor)
             if let error { ErrorBanner(message: error) }
             Section("Install into".localized) { BotPicker(); Button("Install app".localized) { install = true }.disabled(store.selectedBot == nil || descriptor["revision"].string.isEmpty) }
@@ -123,5 +130,35 @@ struct MarketplaceDetailView: View {
                     SchemaEditor(title: "Install app", path: "/bots/\(bot.id.pathComponent)/apps", operation: op, initial: ["registry_id": descriptor["registry_id"], "app_id": descriptor["app_id"], "revision": descriptor["revision"]])
                 }
             }
+    }
+}
+
+
+struct MarketplaceIcon: View {
+    @Environment(AppStore.self) private var store
+    @Environment(\.colorScheme) private var colorScheme
+    let value: JSONValue
+    var size: CGFloat
+    var detail = false
+    private var source: String {
+        guard let path = MarketplaceIconSource.path(value["icon"], dark: colorScheme == .dark, detail: detail),
+              let base = store.api?.baseURL else { return "" }
+        return base.appendingPathComponent(path).absoluteString
+    }
+    var body: some View {
+        AgentAvatar(name: value.text("name", "title"), avatarURL: source, size: size, symbol: "bolt")
+    }
+}
+
+enum MarketplaceIconSource {
+    static func path(_ icon: JSONValue, dark: Bool, detail: Bool = false) -> String? {
+        let variants = (dark ? ["dark"] : []) + (detail ? ["detail", "card"] : ["card", "detail"])
+        for variant in variants {
+            let digest = icon[variant]["digest"].string
+            if digest.count == 64 && digest.allSatisfy({ "0123456789abcdef".contains($0) }) {
+                return "supermarket/artifacts/icon/" + digest
+            }
+        }
+        return nil
     }
 }

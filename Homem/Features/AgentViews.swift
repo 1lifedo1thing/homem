@@ -8,7 +8,6 @@ struct AgentsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                WorkspaceIdentity()
                 if let error = store.error { ErrorBanner(message: error) { Task { await store.reload() } } }
                 HStack {
                     Text(AppLocalization.format("Active · %lld", store.bots.filter { $0.value["is_active"].bool }.count)).font(.caption).foregroundStyle(.secondary)
@@ -32,7 +31,10 @@ struct AgentsView: View {
             }.padding(22).frame(maxWidth: 1100).frame(maxWidth: .infinity)
         }.background(Theme.canvas).navigationTitle("Agents".localized)
             .searchable(text: $search, prompt: "Find an agent")
-            .toolbar { Button { create = true } label: { Image(systemName: "plus") }.accessibilityLabel("Create agent".localized) }
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) { WorkspacePickerMenu() }
+                ToolbarItem(placement: .topBarTrailing) { Button { create = true } label: { Image(systemName: "plus") }.accessibilityLabel("Create agent".localized) }
+            }
             .refreshable { await store.reload() }
             .sheet(isPresented: $create, onDismiss: { Task { await store.reload() } }) {
                 if let op = SchemaCatalog.shared.operation("/bots", "POST") { SchemaEditor(title: "Create an agent", path: "/bots", operation: op) }
@@ -47,10 +49,11 @@ struct AgentCard: View {
             HStack(alignment: .center, spacing: 14) {
                 AgentAvatar(name: bot.title, avatarURL: bot.value.avatarURL, size: 52)
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(bot.title).font(.title2.weight(.bold))
+                    Text(bot.title).font(.title2.weight(.bold)).lineLimit(2)
                     StatusIndicator(text: bot.value["is_active"].bool ? "Active" : "Paused", color: bot.value["is_active"].bool ? .green : .secondary)
                 }
-                Spacer(minLength: 0)
+                Spacer(minLength: 4)
+                AgentResourceSummary(botID: bot.id)
             }
             if let description = bot.value["metadata"]["description"].string.nonEmpty {
                 Text(description).font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
@@ -241,5 +244,68 @@ struct ChannelConfigEditor: View {
             _ = try await store.api?.call(path, method: "PUT", body: ["credentials": credentials, "disabled": .bool(disabled)])
             dismiss()
         } catch { self.error = error.localizedDescription }
+    }
+}
+
+
+/// Compact used / limit readouts; missing samples never masquerade as zero usage.
+private struct AgentResourceSummary: View {
+    @Environment(AppStore.self) private var store
+    @Environment(\.scenePhase) private var scenePhase
+    let botID: String
+    @State private var snapshot: JSONValue = .null
+    private var metrics: JSONValue { snapshot["metrics"] }
+    private var limits: JSONValue {
+        let applied = snapshot["resource_limits"]["applied"]
+        return applied.isNull ? snapshot["resource_limits"]["desired"] : applied
+    }
+    private var cpuUsed: String {
+        let cpu = metrics["cpu"]
+        guard !cpu.isNull else { return "—" }
+        let cores = cpu["usage_nanocores"].isNull ? cpu["usage_percent"].number / 100 : cpu["usage_nanocores"].number / 1_000_000_000
+        return cores.formatted(.number.precision(.fractionLength(0...2)))
+    }
+    private var cpuLimit: String {
+        let value = limits["cpu_millicores"]
+        guard !value.isNull else { return "—" }
+        return value.number > 0 ? (value.number / 1000).formatted(.number.precision(.fractionLength(0...2))) : "∞"
+    }
+    private var memoryLimit: JSONValue {
+        let actual = metrics["memory"]["limit_bytes"]
+        return actual.isNull ? limits["memory_bytes"] : actual
+    }
+    var body: some View {
+        VStack(alignment: .trailing, spacing: 5) {
+            resource("CPU", symbol: "cpu", used: cpuUsed, limit: cpuLimit)
+            resource("RAM", symbol: "memorychip", used: bytes(metrics["memory"]["usage_bytes"]), limit: bytes(memoryLimit, limit: true))
+            resource("Storage", symbol: "internaldrive", used: bytes(metrics["storage"]["used_bytes"]), limit: bytes(limits["storage_bytes"], limit: true))
+        }.font(.caption2.monospacedDigit()).foregroundStyle(.secondary).fixedSize()
+            .accessibilityIdentifier("agentResources_" + botID)
+            .task(id: scenePhase) {
+                guard scenePhase == .active, let api = store.api else { return }
+                repeat {
+                    let value = try? await api.call("/bots/\(botID.pathComponent)/container/metrics")
+                    guard !Task.isCancelled else { return }
+                    snapshot = value ?? .null
+                    do { try await Task.sleep(for: .seconds(30)) } catch { return }
+                } while !Task.isCancelled
+            }
+    }
+    private func resource(_ name: String, symbol: String, used: String, limit: String) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: symbol).frame(width: 12)
+            if used == "—" {
+                Text(name == "CPU" && limit != "—" && limit != "∞" ? AppLocalization.format("%@ cores", limit) : limit)
+            } else {
+                Text(used).foregroundStyle(.primary) + Text(" / " + limit)
+            }
+        }.accessibilityElement(children: .ignore)
+            .accessibilityLabel(name.localized)
+            .accessibilityValue(used == "—" ? AppLocalization.format("Limit: %@", limit) : AppLocalization.format("%@ used · %@ limit", used, limit))
+    }
+    private func bytes(_ value: JSONValue, limit: Bool = false) -> String {
+        guard !value.isNull else { return "—" }
+        if limit && value.number <= 0 { return "∞" }
+        return ByteCountFormatter.string(fromByteCount: Int64(max(0, min(value.number, Double(Int64.max / 2)))), countStyle: .memory)
     }
 }

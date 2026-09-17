@@ -32,7 +32,6 @@ struct LibraryView: View {
                     }
                     Spacer()
                 }.padding(.vertical, 8)
-                WorkspaceIdentity()
             }.listRowBackground(Color.clear)
 
             if !store.bots.isEmpty {
@@ -52,6 +51,7 @@ struct LibraryView: View {
             if store.isDemo { Section { DemoBadge() } }
         }.scrollContentBackground(.hidden).background(Theme.canvas).navigationTitle("Library".localized)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) { WorkspacePickerMenu() }
                 ToolbarItem(placement: .topBarTrailing) {
                     AgentPickerMenu(selection: Binding(get: { store.selectedBot?.id ?? "" }, set: { store.selectedBotID = $0 }))
                 }
@@ -160,5 +160,128 @@ struct AgentPickerMenu: View {
             AgentAvatar(name: selected?.title ?? "Agent", avatarURL: selected?.value.avatarURL ?? "", size: 28)
             Image(systemName: "chevron.down").font(.system(size: 9, weight: .bold)).foregroundStyle(.secondary)
         }.frame(minWidth: 44, minHeight: 44)
+    }
+}
+
+
+struct WorkspacePickerMenu: View {
+    @Environment(AppStore.self) private var store
+    @State private var accounts = false
+    @State private var busy = false
+    @State private var error: String?
+    @State private var menuImages: [String: UIImage] = [:]
+    var body: some View {
+        Menu {
+            if !store.workspaces.isEmpty {
+                Picker("Workspace".localized, selection: Binding(get: { store.api?.officialSession?.teamID ?? "" }, set: { id in
+                    guard let team = store.workspaces.first(where: { $0["team_id"].string == id }) else { return }
+                    busy = true
+                    Task {
+                        defer { busy = false }
+                        do { try await store.switchWorkspace(team) }
+                        catch { self.error = error.localizedDescription }
+                    }
+                })) {
+                    ForEach(store.workspaces, id: \.self) { team in
+                        Label {
+                            Text(team.text("name", "slug"))
+                        } icon: {
+                            if let image = menuImages[team["team_id"].string] { Image(uiImage: image).renderingMode(.original) }
+                            else { Image(systemName: "square.stack") }
+                        }.tag(team["team_id"].string)
+                    }
+                }.pickerStyle(.inline).disabled(busy)
+            }
+            if !store.workspaces.isEmpty { Divider() }
+            Button("Accounts".localized, systemImage: "person.crop.circle") { accounts = true }
+        } label: {
+            HStack(spacing: 5) {
+                if busy { ProgressView() }
+                else { AgentAvatar(name: store.workspaceName, avatarURL: store.workspace.avatarURL, size: 28) }
+                Image(systemName: "chevron.down").font(.system(size: 9, weight: .bold)).foregroundStyle(.secondary)
+            }.frame(minWidth: 44, minHeight: 44)
+        }
+        .accessibilityLabel("Workspace".localized).accessibilityValue(store.workspaceName)
+        .accessibilityIdentifier("workspacePicker")
+        .sheet(isPresented: $accounts) { AccountsView() }
+        .alert("Workspace".localized, isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
+            Button("OK".localized) { error = nil }
+        } message: { Text(error ?? "") }
+        .task(id: store.workspaces) {
+            for team in store.workspaces {
+                guard let url = AvatarSource.url(team.avatarURL, baseURL: store.api?.baseURL),
+                      let data = try? await AvatarImages.data(url, request: try? store.api?.avatarRequest(url)),
+                      let image = AvatarImages.decode(data), !Task.isCancelled else { continue }
+                menuImages[team["team_id"].string] = UIGraphicsImageRenderer(size: CGSize(width: 22, height: 22)).image { _ in
+                    UIBezierPath(roundedRect: CGRect(x: 0, y: 0, width: 22, height: 22), cornerRadius: 5).addClip()
+                    let scale = max(22 / image.size.width, 22 / image.size.height)
+                    let width = image.size.width * scale, height = image.size.height * scale
+                    image.draw(in: CGRect(x: (22 - width) / 2, y: (22 - height) / 2, width: width, height: height))
+                }
+            }
+        }
+    }
+}
+
+struct AccountsView: View {
+    @Environment(AppStore.self) private var store
+    @Environment(\.dismiss) private var dismiss
+    @State private var add = false
+    @State private var busy: String?
+    @State private var error: String?
+    @State private var removal: SavedAccount?
+    var body: some View {
+        NavigationStack {
+            List {
+                ForEach(store.savedAccounts) { account in
+                    Button {
+                        busy = account.id
+                        Task {
+                            defer { busy = nil }
+                            do { try await store.switchAccount(account); dismiss() }
+                            catch { self.error = error.localizedDescription }
+                        }
+                    } label: {
+                        HStack(spacing: 12) {
+                            SavedAccountAvatar(account: account)
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(account.name).font(.body.weight(.medium)).foregroundStyle(.primary)
+                                Text(account.host).font(.caption).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            if busy == account.id { ProgressView() }
+                            else if account.id == store.activeAccountID { Image(systemName: "checkmark").foregroundStyle(.tint) }
+                        }.padding(.vertical, 4)
+                    }.disabled(busy != nil)
+                        .swipeActions(allowsFullSwipe: false) {
+                            Button("Remove account".localized, role: .destructive) { removal = account }
+                        }
+                        .contextMenu { Button("Remove account".localized, systemImage: "trash", role: .destructive) { removal = account } }
+                }
+                Button("Add account".localized, systemImage: "plus") { add = true }.accessibilityIdentifier("addAccount")
+                if let error { ErrorBanner(message: error) }
+            }.navigationTitle("Accounts".localized).navigationBarTitleDisplayMode(.inline)
+                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done".localized) { dismiss() } } }
+                .sheet(isPresented: $add) { ConnectionView(isAddingAccount: true) }
+                .alert("Remove account?".localized, isPresented: Binding(get: { removal != nil }, set: { if !$0 { removal = nil } }), presenting: removal) { account in
+                    Button("Remove account".localized, role: .destructive) { store.removeAccount(account); removal = nil }
+                    Button("Cancel".localized, role: .cancel) { removal = nil }
+                } message: { account in Text(AppLocalization.format("Remove %@ from this device?", account.name)) }
+        }
+    }
+}
+
+
+private struct SavedAccountAvatar: View {
+    @Environment(AppStore.self) private var store
+    let account: SavedAccount
+    @State private var client: APIClient?
+    var body: some View {
+        Group {
+            if let client { AgentAvatar(name: account.name, avatarURL: account.avatarURL, size: 36, imageAPI: client) }
+            else { AgentAvatar(name: account.name, size: 36) }
+        }.task(id: account.id) {
+            client = (try? store.avatarClient(for: account)) ?? URL(string: account.server).map { APIClient(baseURL: $0) }
+        }.onDisappear { client?.invalidate(); client = nil }
     }
 }

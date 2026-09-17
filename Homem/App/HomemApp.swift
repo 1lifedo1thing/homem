@@ -7,7 +7,7 @@ import SwiftUI
     var body: some Scene {
         WindowGroup {
             Group {
-                if store.api != nil { HomeShell().id(store.api!.baseURL.absoluteString) }
+                if store.api != nil { HomeShell().id(store.connectionID) }
                 else { ConnectionView() }
             }
             .environment(store)

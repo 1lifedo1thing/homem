@@ -1,6 +1,22 @@
 import XCTest
 
 final class HomemUITests: XCTestCase {
+    @MainActor func testWorkspaceToolbarAndAddAccountCanBeCancelled() throws {
+        let app = XCUIApplication(); app.launchArguments = ["--demo"]; app.launch()
+        let workspace = app.buttons["workspacePicker"]
+        XCTAssertTrue(workspace.waitForExistence(timeout: 10))
+        workspace.tap()
+        app.buttons["Accounts"].tap()
+        XCTAssertTrue(app.buttons["addAccount"].waitForExistence(timeout: 5))
+        app.buttons["addAccount"].tap()
+        XCTAssertTrue(app.buttons["officialSignIn"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["exploreDemo"].exists)
+        app.buttons["Cancel"].tap()
+        XCTAssertTrue(app.buttons["addAccount"].waitForExistence(timeout: 5))
+        app.buttons["Done"].tap()
+        XCTAssertTrue(workspace.waitForExistence(timeout: 5))
+        capture(app, "Workspace toolbar")
+    }
     @MainActor func testOfficialEmailIsPrimaryAndCustomServerRemainsAvailable() throws {
         let app = XCUIApplication(); app.launchArguments = ["--ui-onboarding"]; app.launch()
         let official = app.buttons["officialSignIn"]
@@ -34,7 +50,7 @@ final class HomemUITests: XCTestCase {
         let demo = app.buttons["exploreDemo"]
         if !demo.isHittable { app.swipeUp() }
         demo.tap()
-        XCTAssertTrue(app.staticTexts["A place for your next idea"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["conversation_welcome"].waitForExistence(timeout: 5))
         capture(app, "Conversations")
         selectTab("Agents", in: app)
         XCTAssertTrue(app.buttons["createAgent"].waitForExistence(timeout: 5))
@@ -81,7 +97,7 @@ final class HomemUITests: XCTestCase {
     }
     @MainActor func testDeleteAlertNamesConversationAndCancelPreservesIt() throws {
         let app = XCUIApplication(); app.launchArguments = ["--demo"]; app.launch()
-        let conversation = app.staticTexts["A weekend in Kyoto"]
+        let conversation = app.buttons["conversation_research"]
         XCTAssertTrue(conversation.waitForExistence(timeout: 10))
         conversation.swipeLeft()
         app.buttons["Delete"].firstMatch.tap()
@@ -120,7 +136,7 @@ final class HomemUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["--demo", "-AppleLanguages", "(\(language))", "-AppleLocale", language]
         app.launch()
-        XCTAssertTrue(app.staticTexts["A place for your next idea"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["conversation_welcome"].waitForExistence(timeout: 10))
         selectTab(tabs[1], in: app)
         app.staticTexts["Atlas"].firstMatch.tap()
         XCTAssertTrue(app.buttons["workspaceTool_files"].waitForExistence(timeout: 5))
@@ -146,7 +162,7 @@ final class HomemUITests: XCTestCase {
     }
     @MainActor func testCompactToolActivity() throws {
         let app = XCUIApplication(); app.launchArguments = ["--demo", "--ui-tool-activity", "-AppleLanguages", "(en)"]; app.launch()
-        app.staticTexts["A place for your next idea"].tap()
+        app.buttons["conversation_welcome"].tap()
         let activity = app.buttons["toolActivity"]
         XCTAssertTrue(activity.waitForExistence(timeout: 5))
         XCTAssertTrue(activity.label.contains("3 actions"))
@@ -166,8 +182,8 @@ final class HomemUITests: XCTestCase {
     }
     @MainActor func testDemoConversationAndWorkspace() throws {
         let app = XCUIApplication(); app.launchArguments = ["--demo"]; app.launch()
-        XCTAssertTrue(app.staticTexts["A place for your next idea"].waitForExistence(timeout: 10))
-        app.staticTexts["A place for your next idea"].tap()
+        XCTAssertTrue(app.buttons["conversation_welcome"].waitForExistence(timeout: 10))
+        app.buttons["conversation_welcome"].tap()
         let input = app.textFields["messageComposer"]
         XCTAssertTrue(input.waitForExistence(timeout: 5)); input.tap(); input.typeText("Hello from iOS")
         app.buttons["sendMessage"].tap()

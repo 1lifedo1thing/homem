@@ -19,15 +19,6 @@ struct ConversationsView: View {
     var body: some View {
         NavigationSplitView {
             List {
-                Section {
-                    HStack(spacing: 12) {
-                        WorkspaceIdentity()
-                        Spacer(minLength: 8)
-                        Text(store.selectedBot?.title ?? "Choose an agent".localized).font(.subheadline.weight(.semibold)).lineLimit(1)
-                    }.padding(.vertical, 6)
-                }.listRowSeparator(.hidden).listRowBackground(Color.clear)
-
-
                 if let error = error ?? store.error { ErrorBanner(message: error) { Task { await load() } } }
                 Section("Recent".localized) {
                     ForEach(sessions.filter { search.isEmpty || $0.title.localizedCaseInsensitiveContains(search) }) { session in
@@ -49,6 +40,7 @@ struct ConversationsView: View {
                                 }
                             }.padding(.vertical, 8)
                         }
+                        .accessibilityIdentifier("conversation_" + session.id)
                         .contextMenu { Button("Rename".localized, systemImage: "pencil") { rename = session; newTitle = session.title }; Button("Delete".localized, systemImage: "trash", role: .destructive) { deletion = session } }
                         .swipeActions(allowsFullSwipe: false) { Button("Delete".localized) { deletion = session }.tint(.red) }
                     }
@@ -59,6 +51,7 @@ struct ConversationsView: View {
                 .navigationTitle("Chats".localized)
                 .searchable(text: $search, prompt: "Find a conversation")
                 .toolbar {
+                    ToolbarItem(placement: .topBarLeading) { WorkspacePickerMenu() }
                     ToolbarItemGroup(placement: .topBarTrailing) {
                         Button { newChat = true } label: { Image(systemName: "square.and.pencil") }
                             .accessibilityLabel("New conversation".localized).accessibilityIdentifier("newConversation").disabled(store.bots.isEmpty)

@@ -25,7 +25,12 @@ import XCTest
             default: XCTFail("Unexpected identity request"); return (404, Data())
             }
         }
-        let store = AppStore(); store.api = api
+        let suite = "homem-tests-" + UUID().uuidString
+        let defaults = UserDefaults(suiteName: suite)!
+        let vault = AccountVault(defaults: defaults)
+        defer { for account in vault.accounts { vault.remove(account) }; defaults.removePersistentDomain(forName: suite) }
+        let store = AppStore(vault: vault, restore: false); store.api = api
+        api.credentialAccount = "test-" + UUID().uuidString
         await store.reload()
         XCTAssertNil(store.error)
         XCTAssertEqual(store.accountName, "Account")
@@ -149,4 +154,136 @@ private func officialTestBody(_ request: URLRequest) throws -> JSONValue {
         data.append(contentsOf: bytes.prefix(count))
     }
     return try JSONDecoder().decode(JSONValue.self, from: data)
+}
+
+
+@MainActor final class AccountSwitchingTests: XCTestCase {
+    var suite: String!
+    var defaults: UserDefaults!
+    var vault: AccountVault!
+    override func setUp() {
+        super.setUp()
+        suite = "homem-accounts-tests-" + UUID().uuidString
+        defaults = UserDefaults(suiteName: suite)!
+        vault = AccountVault(defaults: defaults)
+    }
+    override func tearDown() {
+        for account in vault.accounts { vault.remove(account) }
+        defaults.removePersistentDomain(forName: suite)
+        super.tearDown()
+    }
+    func account(_ name: String, server: String = "https://fixture.invalid/api", official: Bool = false) -> SavedAccount {
+        SavedAccount(id: UUID().uuidString, server: server, identity: name, name: name, avatarURL: "", official: official)
+    }
+    func testLegacyLoginAndDraftAreImportedOnce() async throws {
+        let base = URL(string: "https://legacy-\(UUID().uuidString.lowercased()).invalid/api")!
+        let draftKey = "draft|\(base.absoluteString)|bot|session"
+        try Keychain.save("legacy-token", account: base.absoluteString)
+        try Keychain.save("unfinished message", account: draftKey)
+        defer { try? Keychain.save(nil, account: base.absoluteString); try? Keychain.save(nil, account: draftKey); StubURLProtocol.handler = nil }
+        let config = URLSessionConfiguration.ephemeral; config.protocolClasses = [StubURLProtocol.self]
+        let api = APIClient(baseURL: base, token: "legacy-token", session: URLSession(configuration: config))
+        StubURLProtocol.handler = { request in
+            (200, Data((request.url!.path.hasSuffix("/bots") ? "{\"items\":[]}" : "{\"id\":\"legacy-user\",\"username\":\"Legacy\"}").utf8))
+        }
+        let store = AppStore(vault: vault, restore: false); store.api = api
+        await store.reload()
+        XCTAssertNil(store.error)
+        XCTAssertEqual(vault.accounts.count, 1)
+        XCTAssertEqual(Keychain.read(vault.accounts[0].credentialKey), "legacy-token")
+        XCTAssertEqual(Keychain.read("draft|\(api.draftScope)|bot|session"), "unfinished message")
+        XCTAssertNil(Keychain.read(base.absoluteString)); XCTAssertNil(Keychain.read(draftKey))
+        await store.reload()
+        XCTAssertEqual(vault.accounts.count, 1)
+        store.signOut()
+        XCTAssertNil(AppStore(vault: vault).api)
+    }
+    func testTokenRefreshOnlyUpdatesItsOwnAccount() async throws {
+        let first = account("first"), second = account("second")
+        try vault.save(first, secret: "expired"); try vault.save(second, secret: "second-token")
+        let config = URLSessionConfiguration.ephemeral; config.protocolClasses = [StubURLProtocol.self]
+        let api = APIClient(baseURL: URL(string: first.server)!, token: "expired", session: URLSession(configuration: config))
+        api.credentialAccount = first.credentialKey
+        defer { StubURLProtocol.handler = nil }
+        StubURLProtocol.handler = { request in
+            if request.url!.path.hasSuffix("/auth/refresh") { return (200, Data(#"{"access_token":"refreshed"}"#.utf8)) }
+            return request.value(forHTTPHeaderField: "Authorization") == "Bearer refreshed" ? (200, Data("{}".utf8)) : (401, Data("{}".utf8))
+        }
+        _ = try await api.call("/bots")
+        XCTAssertEqual(Keychain.read(first.credentialKey), "refreshed")
+        XCTAssertEqual(Keychain.read(second.credentialKey), "second-token")
+    }
+    func testSameServerAccountsKeepTokensAndDraftsSeparate() throws {
+        let first = account("first"), second = account("second")
+        try vault.save(first, secret: "first-token")
+        try vault.save(second, secret: "second-token")
+        let a = try vault.client(for: first), b = try vault.client(for: second)
+        XCTAssertEqual(try a.request("/bots").value(forHTTPHeaderField: "Authorization"), "Bearer first-token")
+        XCTAssertEqual(try b.request("/bots").value(forHTTPHeaderField: "Authorization"), "Bearer second-token")
+        XCTAssertNotEqual(a.draftScope, b.draftScope)
+        try Keychain.save("first draft", account: "draft|\(a.draftScope)|bot|session")
+        try Keychain.save("second draft", account: "draft|\(b.draftScope)|bot|session")
+        vault.activate(first.id)
+        vault.remove(first)
+        XCTAssertNil(vault.activeID)
+        XCTAssertNil(Keychain.read(first.credentialKey))
+        XCTAssertNil(Keychain.read("draft|\(a.draftScope)|bot|session"))
+        XCTAssertEqual(Keychain.read(second.credentialKey), "second-token")
+        XCTAssertEqual(Keychain.read("draft|\(b.draftScope)|bot|session"), "second draft")
+        XCTAssertEqual(vault.accounts, [second])
+    }
+    func testOfficialAccountsRestoreIndependentCookiesAndWorkspaces() throws {
+        let first = account("first", server: OfficialServer.apiURL.absoluteString, official: true)
+        let second = account("second", server: OfficialServer.apiURL.absoluteString, official: true)
+        for (item, team) in [(first, "team-one"), (second, "team-two")] {
+            let cookie = HTTPCookie(properties: [.name: "session", .value: item.name, .domain: "app.memoh.net", .path: "/", .secure: "TRUE"])!
+            let session = OfficialSession(cookies: [cookie], teamID: team)
+            try vault.save(item, secret: JSONEncoder().encode(session).base64EncodedString())
+        }
+        let a = try vault.client(for: first), b = try vault.client(for: second)
+        XCTAssertEqual(try a.request("/bots").value(forHTTPHeaderField: "Cookie"), "session=first")
+        XCTAssertEqual(try b.request("/bots").value(forHTTPHeaderField: "Cookie"), "session=second")
+        XCTAssertEqual(try a.request("/bots").value(forHTTPHeaderField: "X-Team-ID"), "team-one")
+        XCTAssertEqual(try b.request("/bots").value(forHTTPHeaderField: "X-Team-ID"), "team-two")
+        let scope = a.draftScope
+        a.officialSession?.teamID = "other-workspace"
+        XCTAssertNotEqual(scope, a.draftScope)
+        XCTAssertNotEqual(a.draftScope, b.draftScope)
+        XCTAssertEqual(a.credentialAccount, first.credentialKey)
+        vault.activate(second.id)
+        let restored = AppStore(vault: vault)
+        XCTAssertEqual(restored.api?.officialSession?.teamID, "team-two")
+        XCTAssertEqual(restored.activeAccountID, second.id)
+    }
+    func testSwitchResetsNavigationAndSignOutRemovesOnlySelectedAccount() async throws {
+        let first = account("first"), second = account("second", server: "https://other.invalid/api")
+        try vault.save(first, secret: "first-token"); try vault.save(second, secret: "second-token")
+        vault.activate(first.id)
+        let store = AppStore(vault: vault)
+        let oldClient = try XCTUnwrap(store.api), oldConnection = store.connectionID
+        // Cancel the load immediately: account selection itself must survive offline use.
+        let task = Task { try await store.switchAccount(second) }
+        task.cancel()
+        try await task.value
+        XCTAssertTrue(oldClient.signedOut)
+        XCTAssertNotEqual(store.connectionID, oldConnection)
+        XCTAssertEqual(store.activeAccountID, second.id)
+        XCTAssertEqual(store.api?.baseURL.host, "other.invalid")
+        XCTAssertEqual(store.savedAccounts.count, 2)
+        store.signOut()
+        XCTAssertNil(store.api)
+        XCTAssertEqual(store.savedAccounts, [first])
+        XCTAssertEqual(Keychain.read(first.credentialKey), "first-token")
+        XCTAssertNil(Keychain.read(second.credentialKey))
+        XCTAssertTrue(vault.migrated)
+    }
+    func testMarketplaceSelectsDarkAndDetailIconsAndRejectsInvalidDigests() {
+        let card = String(repeating: "a", count: 64), dark = String(repeating: "b", count: 64), detail = String(repeating: "c", count: 64)
+        let icon: JSONValue = ["card": ["digest": .string(card)], "dark": ["digest": .string(dark)], "detail": ["digest": .string(detail)]]
+        XCTAssertEqual(MarketplaceIconSource.path(icon, dark: true), "supermarket/artifacts/icon/" + dark)
+        XCTAssertEqual(MarketplaceIconSource.path(icon, dark: false), "supermarket/artifacts/icon/" + card)
+        XCTAssertEqual(MarketplaceIconSource.path(icon, dark: false, detail: true), "supermarket/artifacts/icon/" + detail)
+        XCTAssertEqual(MarketplaceIconSource.path(["card": ["digest": .string(card)]], dark: true), "supermarket/artifacts/icon/" + card)
+        XCTAssertNil(MarketplaceIconSource.path(["card": ["digest": "../../bad"]], dark: false))
+    }
 }

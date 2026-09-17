@@ -71,136 +71,87 @@ struct OfficialSignInView: View {
         }
     }
     private var signInForm: some View {
-        Form {
-            signInHeader
-            loginFields
-            if let error = login.error { Section { ErrorBanner(message: error) } }
-            if login.busy { Section { ProgressView("Connecting to Memoh…".localized) } }
-            Section {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                Text(subtitle).font(.subheadline).foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 16) {
+                    switch login.step {
+                    case .email:
+                        TextField("Email address".localized, text: $login.email)
+                            .textContentType(.emailAddress).keyboardType(.emailAddress)
+                            .textInputAutocapitalization(.never).autocorrectionDisabled()
+                            .focused($focusedField, equals: .email).submitLabel(.continue)
+                            .onSubmit { if login.validEmail && !login.busy { sendCode() } }
+                            .padding(16).background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+                            .disabled(login.busy).accessibilityIdentifier("officialEmail")
+                        Button { sendCode() } label: { actionLabel("Send sign-in code") }
+                            .buttonStyle(.borderedProminent).controlSize(.large)
+                            .disabled(login.busy || !login.validEmail).accessibilityIdentifier("sendOfficialCode")
+                    case .code, .mfa:
+                        TextField("114514", text: $login.code)
+                            .accessibilityLabel(login.step == .mfa ? "Authenticator code".localized : "Email code".localized)
+                            .textContentType(.oneTimeCode).keyboardType(.numberPad)
+                            .font(.title2.monospaced()).tracking(6).focused($focusedField, equals: .code)
+                            .padding(16).background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+                            .disabled(login.busy).accessibilityIdentifier("officialCode")
+                            .onChange(of: login.code) { _, value in
+                                let digits = String(value.filter { $0.isASCII && $0.isNumber }.prefix(6))
+                                if digits != value { login.code = digits; return }
+                                if login.validCode && !login.busy { verifyCode() }
+                            }
+                        Button { verifyCode() } label: { actionLabel("Verify and continue") }
+                            .buttonStyle(.borderedProminent).controlSize(.large).disabled(login.busy || !login.validCode)
+                        HStack {
+                            if login.step == .code {
+                                TimelineView(.periodic(from: .now, by: 1)) { context in
+                                    let seconds = max(0, Int(ceil(login.resendAfter.timeIntervalSince(context.date))))
+                                    Button(seconds > 0 ? AppLocalization.format("Resend in %llds", seconds) : "Resend code".localized) { run { try await login.sendCode() } }
+                                        .disabled(login.busy || seconds > 0)
+                                }
+                            }
+                            Spacer()
+                            Button("Use a different email".localized) { login.changeEmail(); focusedField = .email }.disabled(login.busy)
+                        }.font(.footnote)
+                    case .workspaces:
+                        ForEach(login.teams, id: \.self) { team in
+                            Button {
+                                run { try await store.connectOfficial(client: login.client, teamID: team["team_id"].string, workspace: team); dismiss() }
+                            } label: {
+                                HStack(spacing: 12) {
+                                    AgentAvatar(name: team.text("name", "slug"), avatarURL: team.avatarURL, size: 36, baseURL: OfficialServer.origin, imageAPI: login.client)
+                                    Text(team.text("name", "slug").nonEmpty ?? "Memoh workspace".localized).foregroundStyle(.primary)
+                                    Spacer()
+                                    Image(systemName: "chevron.right").font(.caption).foregroundStyle(.secondary)
+                                }.padding(14).background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+                            }.buttonStyle(.plain).disabled(login.busy)
+                        }
+                        if login.busy { ProgressView().frame(maxWidth: .infinity) }
+                        if login.teams.isEmpty { Text("Finish creating or joining a workspace on Memoh, then return here.".localized).font(.subheadline).foregroundStyle(.secondary) }
+                        Button("Refresh workspaces".localized) { run { try await login.loadWorkspaces() } }.disabled(login.busy)
+                    }
+                }
+                if let error = login.error { ErrorBanner(message: error) }
                 Button(login.step == .workspaces ? "Open Memoh in browser".localized : "Continue in browser".localized) { openBrowser() }
-                    .disabled(login.busy).accessibilityIdentifier("officialBrowser")
-            } footer: {
-                Text("Prefer GitHub or Google? Continue on the official website.".localized)
-            }
-        }.scrollDismissesKeyboard(.interactively)
-            .task { updateFocus() }
-            .onChange(of: login.step) { _, _ in updateFocus() }
+                    .font(.subheadline).frame(maxWidth: .infinity).disabled(login.busy).accessibilityIdentifier("officialBrowser")
+            }.padding(24).frame(maxWidth: 440).frame(maxWidth: .infinity)
+        }.background(Theme.canvas).scrollDismissesKeyboard(.interactively)
+            .task { updateFocus() }.onChange(of: login.step) { _, _ in updateFocus() }
+    }
+    private func actionLabel(_ title: String) -> some View {
+        HStack(spacing: 10) {
+            if login.busy { ProgressView().tint(.white) }
+            Text(title.localized).fontWeight(.semibold)
+        }.frame(maxWidth: .infinity).padding(.vertical, 5)
     }
     private func updateFocus() {
-        switch login.step {
-        case .email: focusedField = .email
-        case .code, .mfa: focusedField = .code
-        case .workspaces: focusedField = nil
-        }
-    }
-    private var heading: String {
-        switch login.step {
-        case .email: return "Welcome to Memoh"
-        case .code: return "Check your inbox"
-        case .mfa: return "One more step"
-        case .workspaces: return "Your workspaces"
-        }
+        switch login.step { case .email: focusedField = .email; case .code, .mfa: focusedField = .code; case .workspaces: focusedField = nil }
     }
     private var subtitle: String {
         switch login.step {
-        case .email: return "Enter your email to sign in or create an account."
+        case .email: return "Enter your email to sign in or create an account.".localized
         case .code: return AppLocalization.format("We sent a six-digit code to %@.", login.email)
-        case .mfa: return "Enter the code from your authenticator app."
-        case .workspaces: return "Choose where you’d like to continue."
-        }
-    }
-    private var signInHeader: some View {
-        Section {
-            VStack(alignment: .leading, spacing: 10) {
-                Label("app.memoh.net", systemImage: "checkmark.seal.fill").font(.subheadline).foregroundStyle(accent)
-                Text(heading.localized).font(.title2.bold())
-                Text(subtitle.localized).font(.subheadline).foregroundStyle(.secondary)
-            }.padding(.vertical, 12)
-        }.listRowBackground(Color.clear)
-    }
-    @ViewBuilder private var loginFields: some View {
-        switch login.step {
-        case .email:
-            Section {
-                TextField("Email address".localized, text: $login.email)
-                    .textContentType(.emailAddress).keyboardType(.emailAddress)
-                    .textInputAutocapitalization(.never).autocorrectionDisabled()
-                    .focused($focusedField, equals: .email).submitLabel(.continue)
-                    .onSubmit { if login.validEmail { sendCode() } }
-                    .disabled(login.busy).accessibilityIdentifier("officialEmail")
-                Button {
-                    sendCode()
-                } label: {
-                    HStack {
-                        Spacer()
-                        if login.busy { ProgressView() }
-                        Text((login.busy ? "Sending…" : "Send sign-in code").localized)
-                        Spacer()
-                    }
-                }.buttonStyle(.borderedProminent).controlSize(.large)
-                    .disabled(login.busy || !login.validEmail).accessibilityIdentifier("sendOfficialCode")
-            } footer: {
-                Text("No password to remember. Your session is saved securely on this device.".localized)
-            }
-        case .code, .mfa:
-            Section {
-                TextField("114514", text: $login.code)
-                    .accessibilityLabel(login.step == .mfa ? "Authenticator code".localized : "Email code".localized)
-                    .textContentType(.oneTimeCode).keyboardType(.numberPad)
-                    .font(.title2.monospaced()).tracking(6).focused($focusedField, equals: .code)
-                    .disabled(login.busy).accessibilityIdentifier("officialCode")
-                    .onChange(of: login.code) { _, value in
-                        let digits = String(value.filter { $0.isASCII && $0.isNumber }.prefix(6))
-                        if digits != value {
-                            login.code = digits
-                            return
-                        }
-                        if login.validCode && !login.busy { verifyCode() }
-                    }
-                Button(login.busy ? "Verifying…".localized : "Verify and continue".localized) { verifyCode() }
-                    .buttonStyle(.borderedProminent).controlSize(.large)
-                    .disabled(login.busy || !login.validCode)
-                if login.step == .code {
-                    TimelineView(.periodic(from: .now, by: 1)) { context in
-                        let seconds = max(0, Int(ceil(login.resendAfter.timeIntervalSince(context.date))))
-                        Button(seconds > 0 ? AppLocalization.format("Resend in %llds", seconds) : "Resend code".localized) { run { try await login.sendCode() } }
-                            .disabled(login.busy || seconds > 0)
-                    }
-                }
-                Button("Use a different email".localized) {
-                    login.changeEmail()
-                    focusedField = .email
-                }.disabled(login.busy)
-            } footer: {
-                if login.step == .code {
-                    Text("You can paste your code or use the suggestion above the keyboard. Check spam if it hasn’t arrived.".localized)
-                }
-            }
-        case .workspaces:
-            Section("Choose your workspace".localized) {
-                ForEach(login.teams, id: \.self) { team in
-                    Button {
-                        run {
-                            try await store.connectOfficial(client: login.client, teamID: team["team_id"].string, workspace: team)
-                            dismiss()
-                        }
-                    } label: {
-                        HStack(spacing: 12) {
-                            AgentAvatar(name: team.text("name", "slug"), avatarURL: team.avatarURL, size: 42, baseURL: OfficialServer.origin, imageAPI: login.client)
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(team.text("name", "slug").nonEmpty ?? "Memoh workspace".localized).font(.headline).foregroundStyle(.primary)
-                                if let description = team["description"].string.nonEmpty { Text(description).font(.caption).foregroundStyle(.secondary).lineLimit(2) }
-                            }
-                            Spacer()
-                            Image(systemName: "arrow.right").font(.subheadline.weight(.semibold))
-                        }.padding(.vertical, 6)
-                    }.disabled(login.busy)
-                }
-                if login.teams.isEmpty {
-                    Text("Finish creating or joining a workspace on Memoh, then return here.".localized)
-                }
-                Button("Refresh workspaces".localized) { run { try await login.loadWorkspaces() } }.disabled(login.busy)
-            }
+        case .mfa: return "Enter the code from your authenticator app.".localized
+        case .workspaces: return "Choose where you’d like to continue.".localized
         }
     }
     private func sendCode() {

@@ -83,9 +83,9 @@ struct RuntimeState {
     var sessionPath: String { prefix + "/sessions/\(sessionID.pathComponent)" }
     init(api: APIClient, botID: String, sessionID: String) {
         self.api = api; self.botID = botID; self.sessionID = sessionID
-        if !api.isDemo { draft = Keychain.read("draft|\(api.baseURL.absoluteString)|\(botID)|\(sessionID)") ?? "" }
+        if !api.isDemo { draft = Keychain.read("draft|\(api.draftScope)|\(botID)|\(sessionID)") ?? "" }
     }
-    func saveDraft() { if !api.isDemo && !api.signedOut { try? Keychain.save(draft.isEmpty ? nil : draft, account: "draft|\(api.baseURL.absoluteString)|\(botID)|\(sessionID)") } }
+    func saveDraft() { if !api.isDemo && !api.signedOut { try? Keychain.save(draft.isEmpty ? nil : draft, account: "draft|\(api.draftScope)|\(botID)|\(sessionID)") } }
     func start() async {
         isStopped = false
         await loadHistory()

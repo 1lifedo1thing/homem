@@ -33,6 +33,17 @@ enum Keychain {
         }
         guard status == errSecSuccess else { throw ClientError.message("Could not securely save this sign-in (\(status)).") }
     }
+    static func migrateDrafts(from oldScope: String, to newScope: String) {
+        let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "ad.neko.homem", kSecReturnAttributes as String: true, kSecMatchLimit as String: kSecMatchLimitAll]
+        var result: CFTypeRef?
+        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess, let items = result as? [[String: Any]] else { return }
+        let prefix = "draft|\(oldScope)|"
+        for item in items {
+            guard let key = item[kSecAttrAccount as String] as? String, key.hasPrefix(prefix), let value = read(key) else { continue }
+            let destination = "draft|\(newScope)|" + key.dropFirst(prefix.count)
+            do { try save(value, account: destination); try save(nil, account: key) } catch { /* Keep the original draft if migration fails. */ }
+        }
+    }
     static func removeDrafts(server: String) {
         let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "ad.neko.homem", kSecReturnAttributes as String: true, kSecMatchLimit as String: kSecMatchLimitAll]
         var result: CFTypeRef?
@@ -59,6 +70,8 @@ final class SafeRedirectDelegate: NSObject, URLSessionTaskDelegate, @unchecked S
     var officialSession: OfficialSession?
     var isOfficial: Bool { officialSession != nil }
     var persistOfficialSession = false
+    var credentialAccount: String?
+    var draftScope: String { (credentialAccount ?? baseURL.absoluteString) + (officialSession.map { "|" + $0.teamID } ?? "") }
     let session: URLSession
     private let desktopSession: URLSession
     let demo = DemoServer()
@@ -80,6 +93,12 @@ final class SafeRedirectDelegate: NSObject, URLSessionTaskDelegate, @unchecked S
         }
     }
     deinit { desktopSession.invalidateAndCancel() }
+    func invalidate() {
+        signedOut = true
+        refreshTask?.cancel()
+        session.invalidateAndCancel()
+        desktopSession.invalidateAndCancel()
+    }
     static func normalizedURL(_ input: String) throws -> URL {
         guard var c = URLComponents(string: input.trimmingCharacters(in: .whitespacesAndNewlines)),
               ["https", "http"].contains(c.scheme?.lowercased() ?? ""), let host = c.host, !host.isEmpty,
@@ -148,7 +167,7 @@ final class SafeRedirectDelegate: NSObject, URLSessionTaskDelegate, @unchecked S
             }
         }
         if let officialSession, persistOfficialSession {
-            try OfficialSession(cookies: session.configuration.httpCookieStorage?.cookies ?? [], teamID: officialSession.teamID).save()
+            try OfficialSession(cookies: session.configuration.httpCookieStorage?.cookies ?? [], teamID: officialSession.teamID).save(account: credentialAccount ?? OfficialServer.keychainAccount)
         }
         if http.statusCode == 401, retry, !isOfficial, !token.isEmpty, !request.url!.path.hasSuffix("/auth/refresh") {
             do {
@@ -162,7 +181,7 @@ final class SafeRedirectDelegate: NSObject, URLSessionTaskDelegate, @unchecked S
                 }
                 let next = try await refreshTask!.value; refreshTask = nil
                 guard !signedOut else { throw ClientError.message("This session has signed out.".localized) }
-                try Keychain.save(next, account: baseURL.absoluteString); token = next
+                try Keychain.save(next, account: credentialAccount ?? baseURL.absoluteString); token = next
                 var renewed = request; renewed.setValue("Bearer \(next)", forHTTPHeaderField: "Authorization")
                 return try await perform(renewed, retry: false)
             } catch { refreshTask = nil; unauthorized = true; throw error }
