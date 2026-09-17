@@ -60,6 +60,7 @@ final class SafeRedirectDelegate: NSObject, URLSessionTaskDelegate, @unchecked S
     var isOfficial: Bool { officialSession != nil }
     var persistOfficialSession = false
     let session: URLSession
+    private let desktopSession: URLSession
     let demo = DemoServer()
     private var refreshTask: Task<String, Error>?
 
@@ -70,10 +71,15 @@ final class SafeRedirectDelegate: NSObject, URLSessionTaskDelegate, @unchecked S
         config.timeoutIntervalForRequest = 45
         config.timeoutIntervalForResource = 120
         self.session = session ?? URLSession(configuration: config, delegate: SafeRedirectDelegate(), delegateQueue: nil)
+        let desktopConfig = URLSessionConfiguration.ephemeral
+        desktopConfig.httpCookieStorage = nil; desktopConfig.urlCredentialStorage = nil
+        desktopConfig.timeoutIntervalForResource = 7 * 24 * 60 * 60
+        desktopSession = URLSession(configuration: desktopConfig, delegate: SafeRedirectDelegate(), delegateQueue: nil)
         if let officialSession {
             for cookie in officialSession.validCookies { self.session.configuration.httpCookieStorage?.setCookie(cookie) }
         }
     }
+    deinit { desktopSession.invalidateAndCancel() }
     static func normalizedURL(_ input: String) throws -> URL {
         guard var c = URLComponents(string: input.trimmingCharacters(in: .whitespacesAndNewlines)),
               ["https", "http"].contains(c.scheme?.lowercased() ?? ""), let host = c.host, !host.isEmpty,
@@ -202,7 +208,8 @@ final class SafeRedirectDelegate: NSObject, URLSessionTaskDelegate, @unchecked S
     }
     func runtimeDisplaySocket(sessionID: String, token: String) async throws -> URLSessionWebSocketTask {
         let request = try await runtimeDisplayRequest(sessionID: sessionID, token: token)
-        let socket = session.webSocketTask(with: request)
+        // A live desktop must not inherit the API session's two-minute resource limit.
+        let socket = desktopSession.webSocketTask(with: request)
         socket.maximumMessageSize = 64 * 1_024 * 1_024
         socket.resume()
         return socket

@@ -186,7 +186,7 @@ struct OfficialSignInView: View {
                         }
                     } label: {
                         HStack(spacing: 12) {
-                            AgentAvatar(name: team.text("name", "slug"), avatarURL: team.avatarURL, size: 42, symbol: "square.stack.3d.up", baseURL: OfficialServer.origin)
+                            AgentAvatar(name: team.text("name", "slug"), avatarURL: team.avatarURL, size: 42, baseURL: OfficialServer.origin, imageAPI: login.client)
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(team.text("name", "slug").nonEmpty ?? "Memoh workspace".localized).font(.headline).foregroundStyle(.primary)
                                 if let description = team["description"].string.nonEmpty { Text(description).font(.caption).foregroundStyle(.secondary).lineLimit(2) }

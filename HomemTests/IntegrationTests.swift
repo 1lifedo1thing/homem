@@ -16,6 +16,21 @@ import XCTest
         api.token = response["access_token"].string
         return api
     }
+    func testNativeDesktopSurvivesIdleWithPingAndFragmentedFrames() async throws {
+        let api = try await connectedClient()
+        let socket = try await api.socket("/display-test/ws")
+        let desktop = RuntimeDesktopConnection(socket: socket, heartbeatInterval: .milliseconds(150), pingTimeout: .seconds(2))
+        let probe = DesktopFrameProbe()
+        let task = Task { try await desktop.run { image in await probe.received(width: image.width, height: image.height) } }
+        let deadline = Date().addingTimeInterval(5)
+        while await probe.count < 3, Date() < deadline { try await Task.sleep(for: .milliseconds(30)) }
+        let count = await probe.count
+        XCTAssertGreaterThanOrEqual(count, 3, "Quiet desktops must stay responsive through WebSocket pings")
+        let size = await probe.size
+        XCTAssertEqual(size, [2, 2])
+        await desktop.close(); task.cancel()
+        _ = await task.result
+    }
     func testFirstMessageQueuedBeforeConnectionKeepsLocationAndAttachments() async throws {
         let api = try await connectedClient()
         let model = ChatModel(api: api, botID: "fixture-bot", sessionID: "fixture-session")
@@ -74,4 +89,10 @@ import XCTest
         let users = model.visibleTurns.filter { $0["role"] == "user" && $0["text"].string == prompt }
         XCTAssertEqual(users.count, 1)
     }
+}
+
+private actor DesktopFrameProbe {
+    var count = 0
+    var size = [Int]()
+    func received(width: Int, height: Int) { count += 1; size = [width, height] }
 }

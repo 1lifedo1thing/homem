@@ -105,10 +105,12 @@ struct AgentAvatar: View {
     var size: CGFloat = 48
     var symbol: String? = nil
     var baseURL: URL? = nil
+    var imageAPI: APIClient? = nil
+    private var client: APIClient? { imageAPI ?? store.api }
     @State private var loaded: UIImage?
     @State private var loadedURL: URL?
     @State private var svg: String?
-    private var url: URL? { AvatarSource.url(avatarURL, baseURL: baseURL ?? store.api?.baseURL) }
+    private var url: URL? { AvatarSource.url(avatarURL, baseURL: baseURL ?? client?.baseURL) }
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: size * 0.25, style: .continuous).fill(Color(.tertiarySystemFill))
@@ -130,8 +132,8 @@ struct AgentAvatar: View {
         .task(id: url) {
             loaded = nil; loadedURL = nil; svg = nil
             guard let url else { return }
-            let request = try? store.api?.avatarRequest(url)
-            let cacheKey = ((request == nil ? "public" : String(describing: ObjectIdentifier(store.api!))) + "|" + url.absoluteString) as NSString
+            let request = try? client?.avatarRequest(url)
+            let cacheKey = ((request == nil ? "public" : String(describing: ObjectIdentifier(client!))) + "|" + url.absoluteString) as NSString
             if let cached = AvatarImages.cache.object(forKey: cacheKey) { loaded = cached; loadedURL = url; return }
             let data: Data
             do { data = try await AvatarImages.data(url, request: request) }
@@ -182,7 +184,7 @@ struct WorkspaceIdentity: View {
     @Environment(AppStore.self) private var store
     var body: some View {
         HStack(spacing: 8) {
-            AgentAvatar(name: store.workspaceName, avatarURL: store.workspace.avatarURL, size: 22, symbol: "square.stack.3d.up")
+            AgentAvatar(name: store.workspaceName, avatarURL: store.workspace.avatarURL, size: 26)
             Text(store.workspaceName).font(.subheadline.weight(.medium)).foregroundStyle(.secondary).lineLimit(1)
         }.accessibilityElement(children: .combine)
     }

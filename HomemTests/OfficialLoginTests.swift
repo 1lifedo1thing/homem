@@ -12,6 +12,28 @@ import XCTest
         let config = URLSessionConfiguration.ephemeral; config.protocolClasses = [StubURLProtocol.self]
         return APIClient(baseURL: OfficialServer.apiURL, session: URLSession(configuration: config), officialSession: OfficialSession(cookies: cookies, teamID: teamID))
     }
+    func testReloadUsesPlatformAccountAndWorkspaceAvatarsWithoutReplacingPermissions() async throws {
+        let api = client(cookies: [cookie()], teamID: "team-1")
+        StubURLProtocol.handler = { request in
+            switch request.url!.path {
+            case "/api/memoh/users/me": return (200, Data(#"{"username":"workspace-user","role":"admin"}"#.utf8))
+            case "/api/memoh/bots": return (200, Data(#"{"items":[]}"#.utf8))
+            case "/api/v1/users/me":
+                return (200, Data(#"{"user":{"username":"account-name","avatar_url":"/fallback.png"},"user_profile":{"display_name":"Account","avatar_url":"/account.png"}}"#.utf8))
+            case "/api/v1/teams":
+                return (200, Data(#"{"teams":[{"team":{"team_id":"other","name":"Other","avatar_url":"/other.png"}},{"team":{"team_id":"team-1","name":"Workspace","avatar_url":"/workspace.svg"}}]}"#.utf8))
+            default: XCTFail("Unexpected identity request"); return (404, Data())
+            }
+        }
+        let store = AppStore(); store.api = api
+        await store.reload()
+        XCTAssertNil(store.error)
+        XCTAssertEqual(store.accountName, "Account")
+        XCTAssertEqual(store.accountAvatarURL, "/account.png")
+        XCTAssertEqual(store.workspace.avatarURL, "/workspace.svg")
+        XCTAssertEqual(store.workspaceName, "Workspace")
+        XCTAssertTrue(store.canAdmin)
+    }
     func testRuntimeDesktopUsesGatewayTicketOriginAndProtocol() async throws {
         let api = client(cookies: [cookie()], teamID: "team-1")
         StubURLProtocol.handler = { request in

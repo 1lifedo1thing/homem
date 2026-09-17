@@ -49,11 +49,7 @@ import Observation
     func loadWorkspaces() async throws {
         _ = try await client.platformCall("/users/me")
         let response = try await client.platformCall("/teams")
-        teams = response["teams"].array.map { item in
-            var team = item["team"].isNull ? item : item["team"]
-            if !item["role"].isNull { team["role"] = item["role"] }
-            return team
-        }.filter { !$0["team_id"].string.isEmpty }
+        teams = OfficialIdentity.teams(response)
         client.unauthorized = false
         step = .workspaces; error = nil
     }

@@ -1,9 +1,47 @@
 import XCTest
 import WebRTC
+import CoreGraphics
 @testable import Homem
 
 /// A real local WebRTC peer answers through the HTTP test transport. No production session is used.
 @MainActor final class DesktopConnectionTests: XCTestCase {
+    func testOfficialDesktopRecoversAfterNetworkDropAndStopsWhenDismissed() async throws {
+        let api = APIClient(baseURL: OfficialServer.apiURL, officialSession: OfficialSession(cookies: []))
+        var connections = [RecoverableDesktopFixture]()
+        let model = DesktopModel(api: api, botID: "fixture") { _, _ in
+            let connection = RecoverableDesktopFixture()
+            connections.append(connection)
+            return connection
+        }
+        await model.connect()
+        try await waitUntil { model.hasVideo }
+        XCTAssertEqual(model.status, "Connected")
+        await connections[0].drop()
+        try await waitUntil { connections.count == 2 && model.status == "Connected" }
+        XCTAssertNil(model.error)
+        model.disconnect()
+        let count = connections.count
+        try await Task.sleep(for: .seconds(1.2))
+        XCTAssertEqual(connections.count, count)
+        XCTAssertEqual(model.status, "Disconnected")
+        XCTAssertNil(model.runtimeImage)
+    }
+    func testOfficialDesktopCancelsPendingRecoveryOnDismissal() async throws {
+        let api = APIClient(baseURL: OfficialServer.apiURL, officialSession: OfficialSession(cookies: []))
+        var count = 0
+        let model = DesktopModel(api: api, botID: "fixture") { _, _ in count += 1; throw URLError(.networkConnectionLost) }
+        await model.connect()
+        XCTAssertEqual(model.status, "Reconnecting")
+        model.disconnect()
+        try await Task.sleep(for: .seconds(1.2))
+        XCTAssertEqual(count, 1)
+        XCTAssertEqual(model.status, "Disconnected")
+    }
+    private func waitUntil(_ condition: () -> Bool) async throws {
+        let deadline = Date().addingTimeInterval(5)
+        while !condition(), Date() < deadline { try await Task.sleep(for: .milliseconds(30)) }
+        XCTAssertTrue(condition())
+    }
     func testNativeOfferReceivesVideoTrackAndCleansUpSession() async throws {
         let remote = DesktopPeerFixture()
         let config = URLSessionConfiguration.ephemeral
@@ -96,4 +134,19 @@ private final class DesktopOfferProtocol: URLProtocol, @unchecked Sendable {
     nonisolated func peerConnection(_ peerConnection: RTCPeerConnection, didGenerate candidate: RTCIceCandidate) {}
     nonisolated func peerConnection(_ peerConnection: RTCPeerConnection, didRemove candidates: [RTCIceCandidate]) {}
     nonisolated func peerConnection(_ peerConnection: RTCPeerConnection, didOpen dataChannel: RTCDataChannel) {}
+}
+
+private actor RecoverableDesktopFixture: DesktopTransport {
+    private var interrupted = false
+    func run(frame: @Sendable (CGImage) async -> Void) async throws {
+        let bytes = Data(repeating: 127, count: 16)
+        let provider = CGDataProvider(data: bytes as CFData)!
+        let image = CGImage(width: 2, height: 2, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: 8, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.noneSkipLast.rawValue), provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent)!
+        await frame(image)
+        while !interrupted { try await Task.sleep(for: .milliseconds(30)) }
+        throw URLError(.networkConnectionLost)
+    }
+    func drop() { interrupted = true }
+    func close() { interrupted = true }
+    func send(_ data: Data) async throws {}
 }

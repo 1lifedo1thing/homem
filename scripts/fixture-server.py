@@ -60,7 +60,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", "0")
             self.end_headers()
             return
-        if path.endswith("/web/ws"):
+        if path.endswith("/web/ws") or path == "/api/display-test/ws":
             return self.websocket()
         if path == "/api/users/me":
             return self.send_json({"id": "fixture-user", "username": "fixture", "display_name": "Fixture User", "role": "admin"})
@@ -115,6 +115,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Connection", "Upgrade")
         self.send_header("Sec-WebSocket-Accept", accept)
         self.end_headers()
+        if urlparse(self.path).path == "/api/display-test/ws":
+            return self.desktop()
         seq = 1
         run = None
         try:
@@ -156,6 +158,52 @@ class Handler(BaseHTTPRequestHandler):
                     seq += 1
                     self.ws_send({"type": "runtime_delta", "session_id": session, "epoch": "fixture-epoch", "seq": seq, "delta": {"run": {"run_id": "fixture-run", "status": "completed"}}})
                     run = None
+        except (ConnectionError, BrokenPipeError):
+            return
+
+    def desktop(self):
+        # A quiet desktop: after the first frame, updates arrive only when a ping
+        # proves the client is keeping the transport alive. No production service.
+        self.ws_send(b"RFB 003.", opcode=2)
+        self.ws_send(b"008\n", opcode=2)
+        phase, first_frame = 0, False
+        def frame():
+            update = b"\x00\x00\x00\x01" + struct.pack("!HHHHi", 0, 0, 2, 2, 0) + bytes([40, 80, 160, 0]) * 4
+            self.ws_send(update[:19], opcode=2)
+            self.ws_send(update[19:], opcode=2)
+        try:
+            while True:
+                header = self.rfile.read(2)
+                if len(header) < 2:
+                    return
+                opcode, length = header[0] & 15, header[1] & 127
+                if length == 126:
+                    length = struct.unpack("!H", self.rfile.read(2))[0]
+                elif length == 127:
+                    length = struct.unpack("!Q", self.rfile.read(8))[0]
+                mask = self.rfile.read(4) if header[1] & 128 else b""
+                data = self.rfile.read(length)
+                if mask:
+                    data = bytes(c ^ mask[i % 4] for i, c in enumerate(data))
+                if opcode == 8:
+                    return
+                if opcode == 9:
+                    self.ws_send(data, opcode=10)
+                    if first_frame:
+                        frame()
+                    continue
+                if phase == 0:
+                    assert data == b"RFB 003.008\n"
+                    self.ws_send(b"\x01\x01", opcode=2)
+                elif phase == 1:
+                    assert data == b"\x01"
+                    self.ws_send(b"\x00" * 4, opcode=2)
+                elif phase == 2:
+                    self.ws_send(struct.pack("!HH", 2, 2) + b"\x00" * 20, opcode=2)
+                elif data[0] == 3 and not first_frame:
+                    first_frame = True
+                    frame()
+                phase += 1
         except (ConnectionError, BrokenPipeError):
             return
 

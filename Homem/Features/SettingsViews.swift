@@ -11,8 +11,8 @@ struct SettingsView: View {
         List {
             Section {
                 HStack(spacing: 14) {
-                    AgentAvatar(name: store.profile.text("display_name", "username"), avatarURL: store.profile.avatarURL, size: 48)
-                    VStack(alignment: .leading, spacing: 4) { Text(store.profile.text("display_name", "username").nonEmpty ?? "Your account".localized).font(.headline); Text(store.isDemo ? "Demo workspace".localized : store.api?.baseURL.host ?? "Connected server".localized).font(.caption).foregroundStyle(.secondary) }
+                    AgentAvatar(name: store.accountName, avatarURL: store.accountAvatarURL, size: 48)
+                    VStack(alignment: .leading, spacing: 4) { Text(store.accountName).font(.headline); Text(store.isDemo ? "Demo workspace".localized : store.api?.baseURL.host ?? "Connected server".localized).font(.caption).foregroundStyle(.secondary) }
                 }.padding(.vertical, 8)
                 NavigationLink("Profile".localized, systemImage: "person") { SettingsDocumentView(title: "Profile", path: "/users/me", template: "/users/me") }
                 if store.api?.isOfficial != true { OperationButton(title: "Change password", path: "/users/me/password", template: "/users/me/password", method: "PUT") }

@@ -63,7 +63,9 @@ struct DesktopContent: View {
     var error: String?
     var track: RTCVideoTrack?
     var runtimeImage: UIImage?
-    private var runtime: RuntimeDesktopConnection?
+    private var runtime: (any DesktopTransport)?
+    typealias RuntimeFactory = @MainActor (APIClient, String) async throws -> any DesktopTransport
+    private let runtimeFactory: RuntimeFactory
     private var runtimeTask: Task<Void, Never>?
     var hasVideo = false
     var videoSize = CGSize(width: 1280, height: 720)
@@ -73,25 +75,35 @@ struct DesktopContent: View {
     private var generation = UUID()
     private var connecting = false
     private var watchdog: Task<Void, Never>?
+    private var recovery: Task<Void, Never>?
+    private var retries = 0
     private static let factory: RTCPeerConnectionFactory = {
         RTCInitializeSSL()
         return RTCPeerConnectionFactory(encoderFactory: RTCDefaultVideoEncoderFactory(), decoderFactory: RTCDefaultVideoDecoderFactory())
     }()
     var base: String { "/bots/\(botID.pathComponent)/container/display" }
-    init(api: APIClient, botID: String) { self.api = api; self.botID = botID; super.init() }
-    func connect() async {
+    init(api: APIClient, botID: String, runtimeFactory: RuntimeFactory? = nil) {
+        self.api = api; self.botID = botID
+        self.runtimeFactory = runtimeFactory ?? { api, base in
+            let session = try await api.call(base + "/runtime-session", method: "POST")
+            let socket = try await api.runtimeDisplaySocket(sessionID: session["session_id"].string, token: session["token"].string)
+            return RuntimeDesktopConnection(socket: socket)
+        }
+        super.init()
+    }
+    func connect(retrying: Bool = false) async {
+        if !retrying { retries = 0 }
         guard !connecting, peer == nil, runtime == nil else { return }
-        disconnect(); let attempt = generation
+        let previousFrame = retrying ? runtimeImage : nil
+        disconnect(); runtimeImage = previousFrame
+        let attempt = generation
         connecting = true
         defer { if generation == attempt { connecting = false } }
         error = nil; status = "Preparing desktop"
         do {
             if api.isOfficial {
-                let session = try await api.call(base + "/runtime-session", method: "POST")
-                guard attempt == generation else { return }
-                let socket = try await api.runtimeDisplaySocket(sessionID: session["session_id"].string, token: session["token"].string)
-                guard attempt == generation else { socket.cancel(with: .goingAway, reason: nil); return }
-                let connection = RuntimeDesktopConnection(socket: socket)
+                let connection = try await runtimeFactory(api, base)
+                guard attempt == generation else { await connection.close(); return }
                 runtime = connection; status = "Connecting"
                 watchConnection(attempt)
                 runtimeTask = Task { [weak self] in
@@ -101,9 +113,8 @@ struct DesktopContent: View {
                         }
                     } catch {
                         guard let self, self.generation == attempt else { return }
-                        DebugDiagnostics.record("Desktop gateway failed: \((error as NSError).domain) \((error as NSError).code), HTTP \((socket.response as? HTTPURLResponse)?.statusCode ?? 0), close \(socket.closeCode.rawValue)")
-                        self.disconnect()
-                        self.error = "The desktop connection was lost. Try reconnecting.".localized
+                        DebugDiagnostics.record("Desktop gateway failed: \((error as NSError).domain) \((error as NSError).code)")
+                        self.connectionFailed(error)
                     }
                 }
                 return
@@ -145,8 +156,8 @@ struct DesktopContent: View {
         } catch {
             if attempt == generation {
                 DebugDiagnostics.record("Desktop error: \(error.localizedDescription)")
-                disconnect()
-                if !(error is CancellationError) { self.error = error.localizedDescription }
+                if error is CancellationError { disconnect() }
+                else { connectionFailed(error) }
             }
         }
     }
@@ -155,17 +166,37 @@ struct DesktopContent: View {
         watchdog = Task { [weak self] in
             do { try await Task.sleep(for: .seconds(25)) } catch { return }
             guard let self, generation == attempt, status != "Connected" || !hasVideo else { return }
-            disconnect()
-            error = "The desktop could not connect. Check your connection and try again.".localized
+            connectionFailed(URLError(.timedOut))
         }
     }
     private func receiveFrame(_ image: CGImage, attempt: UUID) {
         guard generation == attempt else { return }
         if !hasVideo { DebugDiagnostics.record("Desktop gateway frame: \(image.width)x\(image.height)") }
         runtimeImage = UIImage(cgImage: image); videoSize = CGSize(width: image.width, height: image.height)
-        hasVideo = true; if status != "Connected" { status = "Connected" }; watchdog?.cancel()
+        hasVideo = true; retries = 0; if status != "Connected" { status = "Connected" }; watchdog?.cancel()
+    }
+    private func connectionFailed(_ failure: Error) {
+        let frame = runtimeImage
+        disconnect()
+        let canRetry: Bool
+        if let http = failure as? ClientError, case .http(let status, _) = http { canRetry = status >= 500 }
+        else { canRetry = failure is URLError || (failure as NSError).domain == NSURLErrorDomain }
+        guard api.isOfficial, canRetry, retries < 3 else {
+            error = failure is ClientError ? failure.localizedDescription : "The desktop connection was lost. Try reconnecting.".localized
+            return
+        }
+        retries += 1
+        runtimeImage = frame; status = "Reconnecting"; error = nil
+        let attempt = generation, delay = 1 << (retries - 1)
+        recovery = Task { [weak self] in
+            do { try await Task.sleep(for: .seconds(delay)) } catch { return }
+            guard let self, self.generation == attempt, !Task.isCancelled else { return }
+            self.recovery = nil
+            await self.connect(retrying: true)
+        }
     }
     func disconnect() {
+        recovery?.cancel(); recovery = nil
         runtimeTask?.cancel(); runtimeTask = nil
         if let runtime { Task { await runtime.close() } }; runtime = nil; runtimeImage = nil
         generation = UUID(); connecting = false; watchdog?.cancel(); watchdog = nil; channel?.close(); channel = nil; peer?.close(); peer = nil; track = nil; hasVideo = false; status = "Disconnected"

@@ -174,13 +174,43 @@ private extension Data {
     mutating func appendBE<T: FixedWidthInteger>(_ value: T) { var big = value.bigEndian; Swift.withUnsafeBytes(of: &big) { append(contentsOf: $0) } }
 }
 
+protocol DesktopTransport: Sendable {
+    func run(frame: @Sendable (CGImage) async -> Void) async throws
+    func send(_ data: Data) async throws
+    func close() async
+}
+
 /// Serializes protocol decoding and input writes away from SwiftUI's main actor.
-actor RuntimeDesktopConnection {
+actor RuntimeDesktopConnection: DesktopTransport {
     private let socket: URLSessionWebSocketTask
     private var decoder = RFBClient()
     private var writes: Task<Void, Error>?
-    init(socket: URLSessionWebSocketTask) { self.socket = socket }
+    private var heartbeat: Task<Void, Never>?
+    private let heartbeatInterval: Duration
+    private let pingTimeout: Duration
+    init(socket: URLSessionWebSocketTask, heartbeatInterval: Duration = .seconds(20), pingTimeout: Duration = .seconds(10)) {
+        self.socket = socket; self.heartbeatInterval = heartbeatInterval; self.pingTimeout = pingTimeout
+    }
     func run(frame: @Sendable (CGImage) async -> Void) async throws {
+        let socket = socket
+        heartbeat = Task {
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(for: heartbeatInterval)
+                    let deadline = Task { try await Task.sleep(for: pingTimeout); socket.cancel(with: .goingAway, reason: nil) }
+                    defer { deadline.cancel() }
+                    try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                        socket.sendPing { error in
+                            if let error { continuation.resume(throwing: error) } else { continuation.resume() }
+                        }
+                    }
+                } catch {
+                    if !Task.isCancelled { socket.cancel(with: .goingAway, reason: nil) }
+                    return
+                }
+            }
+        }
+        defer { heartbeat?.cancel(); heartbeat = nil }
         while !Task.isCancelled {
             let message = try await socket.receive()
             guard case .data(let data) = message else { throw RFBClient.Failure.invalid }
@@ -196,5 +226,5 @@ actor RuntimeDesktopConnection {
         writes = next
         try await next.value
     }
-    func close() { writes?.cancel(); writes = nil; socket.cancel(with: .goingAway, reason: nil) }
+    func close() { heartbeat?.cancel(); heartbeat = nil; writes?.cancel(); writes = nil; socket.cancel(with: .goingAway, reason: nil) }
 }

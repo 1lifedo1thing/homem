@@ -53,3 +53,22 @@ struct OfficialSession: Codable {
         try Keychain.save(JSONEncoder().encode(self).base64EncodedString(), account: OfficialServer.keychainAccount)
     }
 }
+
+/// Platform identity is separate from the workspace API's authorization profile.
+enum OfficialIdentity {
+    static func account(_ response: JSONValue) -> JSONValue {
+        let user = response["user"], profile = response["user_profile"]
+        var result = response
+        for key in ["id", "username", "email", "display_name", "avatar_url", "timezone"] {
+            result[key] = .string(response[key].string.nonEmpty ?? profile[key].string.nonEmpty ?? user[key].string)
+        }
+        return result
+    }
+    static func teams(_ response: JSONValue) -> [JSONValue] {
+        response["teams"].array.map { item in
+            var team = item["team"].isNull ? item : item["team"]
+            if !item["role"].isNull { team["role"] = item["role"] }
+            return team
+        }.filter { !$0["team_id"].string.isEmpty }
+    }
+}

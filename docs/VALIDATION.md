@@ -93,6 +93,14 @@ Screenshots from the passing UI run:
 
 - Final Catalyst `Test-HomemCatalyst-2026.09.17_22-28-19-+0900.xcresult`: 12 gateway/protocol/login/Keychain tests passed. After the workspace-picker change, the iPhone composer test passed again in `Test-Homem-2026.09.17_22-28-38-+0900.xcresult`. Both final native Catalyst menus were manually opened and dismissed without a crash, including inside the new-chat sheet. The 431-string translation check passed.
 
+## iPhone desktop stability and identities — 17 September 2026
+
+- Tested the user-authenticated official desktop on iPhone 17 Pro / iOS 26.5. The preceding build remained connected during a roughly three-minute observation, so the reported physical-phone instability was not reproduced directly. The updated build rendered 1280×960 frames, accepted pointer/right-click/Escape input, closed the socket on backgrounding, and automatically obtained fresh frames after foregrounding and switching tabs.
+- Official desktop sockets now have a dedicated session instead of inheriting the REST session's 120-second resource limit. Pings every 20 seconds detect dead connections, with a 10-second pong deadline. Transient failures reconnect with fresh tickets and bounded 1/2/4-second retries; leaving the screen cancels pending recovery. The last frame remains visible during recovery. These are resilience changes, not proof that the previous timeout caused the physical-device report.
+- `Test-Homem-2026.09.17_23-03-39-+0900.xcresult`: **44 core tests passed, zero failures/skips**, including real loopback WebSocket/RFB fragmentation and idle keepalives, injected connection loss/recovery, cancellation on dismissal, and platform identity mapping. Catalyst's 15 focused tests also passed, followed by the standalone WebSocket keepalive fixture check. Translation validation still passes all 431 strings.
+- Account identity now comes from the official platform profile, including nested `user_profile`/`user` avatar fields. Workspace API roles remain separate. Verified the actual account image in iPhone Settings. The selected live workspace has no avatar URL; its emoji/initials appear as the fallback. Workspace selection can authenticate private avatar requests before the main app connection is established.
+- At verification time, GitHub had no Actions workflows/runs and no check on `master` commit `31a9c78`; the successful Xcode Cloud archive check was on older `a2881e9`. No TestFlight availability is inferred from a source push.
+
 ## Reproduce
 
 For local Mac debugging, run `bash scripts/build-catalyst.sh`, then open `build-catalyst/Build/Products/Debug-maccatalyst/Homem.app`. Keep development signing enabled: ad-hoc builds do not have the app identity required for Keychain access. The `HomemCatalyst` scheme runs the core tests on Mac Catalyst.
