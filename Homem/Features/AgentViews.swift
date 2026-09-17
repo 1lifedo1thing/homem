@@ -8,23 +8,24 @@ struct AgentsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Good company.\nGreat possibilities.").font(.system(.title, design: .rounded, weight: .bold))
-                        Text("A home for every kind of intelligence.").font(.subheadline).foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Image(systemName: "sun.max").font(.title).foregroundStyle(.orange).padding(.top, 5)
-                }
+                WorkspaceIdentity()
                 if let error = store.error { ErrorBanner(message: error) { Task { await store.reload() } } }
-                HStack { Text("YOUR WORKSPACE").font(.caption2.weight(.semibold)).tracking(1.5).foregroundStyle(.secondary); Spacer(); Text("\(store.bots.count) agents").font(.caption).foregroundStyle(.secondary) }
+                HStack {
+                    Eyebrow(text: "\(store.bots.filter { $0.value["is_active"].bool }.count) ACTIVE")
+                    Spacer()
+                    Text("\(store.bots.count) agents").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                }
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 300), spacing: 16)], spacing: 16) {
                     ForEach(store.bots.filter { search.isEmpty || $0.title.localizedCaseInsensitiveContains(search) }) { bot in
                         NavigationLink { AgentDetailView(bot: bot) } label: { AgentCard(bot: bot) }.buttonStyle(.plain)
                     }
                     Button { create = true } label: {
-                        VStack(spacing: 12) { Image(systemName: "plus.circle").font(.largeTitle); Text("Make room for someone new").font(.subheadline.weight(.medium)); Text("Create an agent").font(.caption).foregroundStyle(.secondary) }
-                            .foregroundStyle(accent).frame(maxWidth: .infinity, minHeight: 155).background(accent.opacity(0.035), in: RoundedRectangle(cornerRadius: 22)).overlay(RoundedRectangle(cornerRadius: 22).stroke(accent.opacity(0.22), style: StrokeStyle(lineWidth: 1, dash: [5, 5])))
+                        HStack(spacing: 12) {
+                            Image(systemName: "plus").font(.headline).frame(width: 42, height: 42).background(accent.opacity(0.10), in: RoundedRectangle(cornerRadius: 12))
+                            Text("Create an agent").font(.headline)
+                            Spacer()
+                            Image(systemName: "arrow.right").font(.subheadline)
+                        }.foregroundStyle(accent).padding(18).background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 20))
                     }.accessibilityIdentifier("createAgent")
                 }
                 if store.isDemo { DemoBadge() }
@@ -42,15 +43,27 @@ struct AgentsView: View {
 struct AgentCard: View {
     let bot: Record
     var body: some View {
-        VStack(alignment: .leading, spacing: 17) {
-            HStack { AgentAvatar(name: bot.title, size: 55); Spacer(); StatusPill(text: bot.value["is_active"].bool ? "Active" : "Paused", color: bot.value["is_active"].bool ? .green : .secondary) }
-            VStack(alignment: .leading, spacing: 6) {
-                Text(bot.title).font(.title3.weight(.semibold))
-                Text(bot.value["metadata"]["description"].string.nonEmpty ?? "Your own agent, with a workspace and memory.").font(.subheadline).foregroundStyle(.secondary).lineLimit(2).frame(minHeight: 38, alignment: .top)
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(alignment: .center, spacing: 14) {
+                AgentAvatar(name: bot.title, avatarURL: bot.value["avatar_url"].string, size: 52)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(bot.title).font(.title2.weight(.bold))
+                    StatusPill(text: bot.value["is_active"].bool ? "Active" : "Paused", color: bot.value["is_active"].bool ? .green : .secondary)
+                }
+                Spacer(minLength: 0)
+            }
+            if let description = bot.value["metadata"]["description"].string.nonEmpty {
+                Text(description).font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
             }
             Divider()
-            HStack { Label("Workspace", systemImage: "square.grid.2x2"); Spacer(); Image(systemName: "arrow.up.right") }.font(.caption.weight(.medium)).foregroundStyle(.secondary)
-        }.padding(20).background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 22))
+            HStack {
+                Label("Workspace & tools", systemImage: "shippingbox")
+                Spacer()
+                Image(systemName: "arrow.up.right").fontWeight(.semibold)
+            }.font(.caption).foregroundStyle(.secondary)
+        }.padding(20).background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 20))
+            .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(.primary.opacity(0.045), lineWidth: 0.5))
+
     }
 }
 
@@ -68,7 +81,7 @@ struct AgentDetailView: View {
         List {
             Section {
                 VStack(alignment: .leading, spacing: 15) {
-                    HStack { AgentAvatar(name: current.title, size: 72); Spacer(); StatusPill(text: current.value["is_active"].bool ? "Active" : "Paused", color: current.value["is_active"].bool ? .green : .secondary) }
+                    HStack { AgentAvatar(name: current.title, avatarURL: current.value["avatar_url"].string, size: 72); Spacer(); StatusPill(text: current.value["is_active"].bool ? "Active" : "Paused", color: current.value["is_active"].bool ? .green : .secondary) }
                     Text(current.title).font(.largeTitle.weight(.bold))
                     Text(current.value["metadata"]["description"].string.nonEmpty ?? "A dedicated workspace, tools, and memories. All yours.").foregroundStyle(.secondary)
                 }.padding(.vertical, 8)

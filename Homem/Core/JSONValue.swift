@@ -64,6 +64,11 @@ extension JSONValue: ExpressibleByStringLiteral, ExpressibleByDictionaryLiteral,
 }
 
 extension String {
+    var wireDate: Date? {
+        let format = ISO8601DateFormatter()
+        format.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return format.date(from: self) ?? ISO8601DateFormatter().date(from: self)
+    }
     var fieldLabel: String { replacingOccurrences(of: "_", with: " ").replacingOccurrences(of: "-", with: " ").capitalized }
     var nonEmpty: String? { isEmpty ? nil : self }
     var pathComponent: String { addingPercentEncoding(withAllowedCharacters: .alphanumerics.union(CharacterSet(charactersIn: "-_.~"))) ?? self }

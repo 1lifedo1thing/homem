@@ -53,6 +53,14 @@ Screenshots from the passing UI run:
 - Chats, New Chat, and Library now use a top-right avatar menu reflecting the selected agent, with a checkmarked agent list and a spoken selected-agent value.
 - The targeted new-chat UI test passed on iPhone 17 Pro / iOS 26.5 (`Test-Homem-2026.09.17_17-25-55-+0900.xcresult`). It changes Atlas to Mika, verifies the selected agent and reset run location, sends the first message, and dismisses the composer keyboard. The updated screenshot was inspected.
 
+## Bot and workspace identities — 17 September 2026
+
+- Bot avatars now use the server's `avatar_url` throughout chat, agent details, library, and the toolbar dropdown. The official workspace picker and signed-in workspace identity use the team's `avatar_url`; user profile images are also displayed.
+- Images load without API credentials, are size-limited, downsampled off the main actor, and cached in memory. Absolute HTTP(S), server-relative, and base64 raster image URLs are supported. Missing or invalid images fall back to initials or a workspace symbol.
+- Reworked the main screens around identity, compact metadata, stronger typography, and quieter surfaces, using Flighty's information hierarchy as a visual reference. Removed the promotional headings and name-based fake avatars. The user's appearance and accent settings still apply.
+- iPhone 17 Pro / iOS 26.5: **23 tests passed**, zero failures (`Test-Homem-2026.09.17_19-53-06-+0900.xcresult`), covering image decoding, URL resolution, official sign-in, dropdown selection, first-message sending, deletion cancellation, workspace files, and Dark/Rose persistence. Screenshots of both anchored dropdowns, chat setup, the chat list, agents, and dark mode were exported and inspected.
+- iPad (A16): the new-chat/dropdown/keyboard flow and 16 core/sign-in checks passed in `Test-Homem-2026.09.17_19-55-52-+0900.xcresult`. The iPad floating-tab accessibility selector was corrected for the theme test; the final theme and valid/invalid image checks both passed in `Test-Homem-2026.09.17_19-57-33-+0900.xcresult`.
+
 ## Reproduce
 
 Run `bash scripts/test.sh` from the project root, setting `HOMEM_TEST_DESTINATION` to an installed iOS simulator if needed. This starts the loopback fixture and runs the XCTest targets. Result bundles are local build artifacts and are excluded from source control.

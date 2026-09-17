@@ -11,6 +11,7 @@ struct RunLocation: Identifiable {
     let value: JSONValue
     var id: String { value["target_id"].string }
     var name: String { value["kind"] == "native" ? "Memoh workspace" : value["name"].string.nonEmpty ?? "Computer" }
+    var symbol: String { value["kind"] == "native" ? "shippingbox" : "desktopcomputer" }
     var available: Bool {
         value["kind"] == "native"
             || (value["online"] != false && (value["status"] == "online" || value["status"].string.isEmpty && value["online"].bool))
@@ -53,8 +54,10 @@ struct NewConversationView: View {
     @State private var error: String?
     @State private var busy = false
     @State private var filePicker = false
+    @State private var locationPicker = false
     @FocusState private var focused: Bool
     private var bot: Record? { store.bots.first { $0.id == botID } }
+    private var location: RunLocation? { locations.first { $0.id == targetID } }
     private var canSend: Bool {
         bot != nil && !busy && !loadingLocations && (targetID.isEmpty || locations.contains { $0.id == targetID && $0.available })
             && (!text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachments.isEmpty)
@@ -63,23 +66,18 @@ struct NewConversationView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("What’s on your mind?").font(.title2.bold())
-                        Text("Ask a question, share a file, or start with an idea.").foregroundStyle(.secondary)
-                    }
-                    VStack(spacing: 0) {
-                        HStack {
-                            Label("Run on", systemImage: "desktopcomputer").foregroundStyle(.secondary)
-                            Spacer()
-                            Picker("Run on", selection: $targetID) {
-                                Text("Agent default").tag("")
-                                ForEach(locations) { location in
-                                    Text(location.name + (location.available ? "" : " · Offline")).tag(location.id).disabled(
-                                        !location.available)
-                                }
-                            }.labelsHidden().disabled(loadingLocations).accessibilityIdentifier("newChatRunLocation")
-                        }.padding()
-                    }.background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18))
+                    VStack(alignment: .leading, spacing: 22) {
+                        HStack(spacing: 16) {
+                            AgentAvatar(name: bot?.title ?? "Agent", avatarURL: bot?.value["avatar_url"].string ?? "", size: 60)
+                            VStack(alignment: .leading, spacing: 6) {
+                                Eyebrow(text: "NEW CONVERSATION")
+                                Text(bot?.title ?? "Choose an agent").font(.system(.largeTitle, weight: .bold)).lineLimit(2)
+                            }
+                            Spacer(minLength: 0)
+                        }
+                        Divider()
+                        runLocationButton
+                    }.padding(.vertical, 8)
                     if loadingLocations { ProgressView("Finding run locations…").font(.caption) }
                     if let locationError {
                         VStack(alignment: .leading, spacing: 8) {
@@ -88,8 +86,9 @@ struct NewConversationView: View {
                         }
                     }
                     VStack(alignment: .leading, spacing: 16) {
+                        Eyebrow(text: "MESSAGE")
                         TextField("Message \(bot?.title ?? "your agent")…", text: $text, axis: .vertical)
-                            .lineLimit(3...10).focused($focused).accessibilityIdentifier("newChatMessage")
+                            .lineLimit(5...12).focused($focused).accessibilityIdentifier("newChatMessage")
                         ForEach(Array(attachments.enumerated()), id: \.offset) { index, item in
                             HStack {
                                 Label(item["name"].string, systemImage: "paperclip").lineLimit(1)
@@ -102,7 +101,8 @@ struct NewConversationView: View {
                             }.font(.subheadline)
                         }
 
-                    }.padding(18).background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 20))
+                    }.padding(20).background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 20))
+                        .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(.primary.opacity(0.06), lineWidth: 0.5))
                     if let error { ErrorBanner(message: error) }
                 }.padding(22).frame(maxWidth: 640).frame(maxWidth: .infinity)
             }.scrollDismissesKeyboard(.interactively).background(Color(.systemGroupedBackground))
@@ -126,6 +126,54 @@ struct NewConversationView: View {
                     } catch { self.error = error.localizedDescription }
                 }
         }
+    }
+    private var runLocationButton: some View {
+        Button { locationPicker = true } label: {
+            HStack(spacing: 12) {
+                AgentAvatar(name: location?.name ?? "Workspace", size: 40, symbol: location?.symbol ?? "arrow.triangle.branch")
+                VStack(alignment: .leading, spacing: 4) {
+                    Eyebrow(text: "RUN ON")
+                    Text(location?.name ?? "Agent default").font(.subheadline.weight(.semibold)).foregroundStyle(.primary)
+                }
+                Spacer(minLength: 8)
+                if let location { StatusPill(text: location.available ? "Online" : "Offline", color: location.available ? .green : .secondary) }
+                Image(systemName: "chevron.down").font(.caption.weight(.bold)).foregroundStyle(.secondary)
+            }.frame(minHeight: 48).contentShape(Rectangle())
+        }.buttonStyle(.plain).disabled(loadingLocations)
+            .accessibilityLabel("Run on, " + (location?.name ?? "Agent default"))
+            .accessibilityIdentifier("newChatRunLocation")
+            .popover(isPresented: $locationPicker, arrowEdge: .top) {
+                VStack(alignment: .leading, spacing: 0) {
+                    Eyebrow(text: "RUN LOCATION").padding(18)
+                    Divider()
+                    ScrollView {
+                        VStack(spacing: 2) {
+                            locationOption(id: "", name: "Agent default", symbol: "arrow.triangle.branch", detail: "Use this agent’s preferred workspace", available: true)
+                            ForEach(locations) { target in
+                                locationOption(id: target.id, name: target.name, symbol: target.symbol,
+                                               detail: target.available ? "Online" : "Offline", available: target.available)
+                            }
+                        }.padding(6)
+                    }.frame(maxHeight: 340)
+                }.frame(width: 300).fixedSize(horizontal: false, vertical: true).presentationCompactAdaptation(.popover)
+            }
+    }
+    private func locationOption(id: String, name: String, symbol: String, detail: String, available: Bool) -> some View {
+        Button {
+            targetID = id
+            locationPicker = false
+        } label: {
+            HStack(spacing: 12) {
+                AgentAvatar(name: name, size: 40, symbol: symbol)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(name).font(.headline).foregroundStyle(.primary)
+                    Text(detail).font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 0)
+                if targetID == id { Image(systemName: "checkmark").font(.subheadline.bold()) }
+            }.padding(12).contentShape(Rectangle())
+        }.buttonStyle(.plain).disabled(!available).opacity(available ? 1 : 0.45)
+            .accessibilityLabel(name).accessibilityValue(targetID == id ? "Selected" : detail)
     }
     private var composerActions: some View {
         HStack {

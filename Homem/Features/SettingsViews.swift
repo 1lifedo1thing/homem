@@ -10,12 +10,13 @@ struct SettingsView: View {
         List {
             Section {
                 HStack(spacing: 14) {
-                    Image(systemName: "person.crop.circle.fill").font(.system(size: 44)).foregroundStyle(accent)
+                    AgentAvatar(name: store.profile.text("display_name", "username"), avatarURL: store.profile["avatar_url"].string, size: 48)
                     VStack(alignment: .leading, spacing: 4) { Text(store.profile.text("display_name", "username").nonEmpty ?? "Your account").font(.headline); Text(store.isDemo ? "Demo workspace" : store.api?.baseURL.host ?? "Connected server").font(.caption).foregroundStyle(.secondary) }
                 }.padding(.vertical, 8)
                 NavigationLink("Profile", systemImage: "person") { SettingsDocumentView(title: "Profile", path: "/users/me", template: "/users/me") }
                 if store.api?.isOfficial != true { OperationButton(title: "Change password", path: "/users/me/password", template: "/users/me/password", method: "PUT") }
             }
+            Section("Workspace") { WorkspaceIdentity() }
             Section("Intelligence") {
                 ResourceLink(title: "Providers", icon: "network", spec: .global("/providers", title: "Providers"))
                 ResourceLink(title: "Models", icon: "cpu", spec: .global("/models", title: "Models"))

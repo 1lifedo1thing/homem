@@ -5,6 +5,8 @@ import Observation
     var api: APIClient?
     var bots: [Record] = []
     var profile: JSONValue = .null
+    var workspace: JSONValue = .null
+    var workspaceName: String { workspace.text("name", "slug").nonEmpty ?? (isDemo ? "Demo workspace" : api?.isOfficial == true ? "Memoh workspace" : api?.baseURL.host ?? "Workspace") }
     var error: String?
     var loading = false
     var selectedBotID: String = ""
@@ -22,6 +24,7 @@ import Observation
         }
     }
     func enterDemo() {
+        workspace = .null
         api = APIClient(baseURL: URL(string: "https://demo.invalid/api")!, isDemo: true)
         bots = api!.demo.collections["/bots", default: []].map(Record.init)
         profile = api!.demo.documents["/users/me"] ?? .null
@@ -38,7 +41,7 @@ import Observation
         let user = try await client.call("/users/me")
         try Keychain.save(client.token, account: url.absoluteString)
         UserDefaults.standard.set(url.absoluteString, forKey: "serverURL")
-        profile = user; bots = []; api = client
+        profile = user; bots = []; workspace = .null; api = client
         await reload()
     }
     func reload() async {
@@ -48,12 +51,17 @@ import Observation
             async let botResult = api.call("/bots")
             async let userResult = api.call("/users/me")
             let (botValue, user) = try await (botResult, userResult)
+            guard self.api === api else { return }
             bots = botValue.items.map(Record.init); profile = user
             if !bots.contains(where: { $0.id == selectedBotID }) { selectedBotID = bots.first?.id ?? "" }
             error = nil
+            if api.isOfficial, let result = try? await api.platformCall("/teams"), self.api === api {
+                workspace = result["teams"].array.map { $0["team"].isNull ? $0 : $0["team"] }
+                    .first { $0["team_id"].string == api.officialSession?.teamID } ?? .null
+            }
         } catch { self.error = error.localizedDescription }
     }
-    func connectOfficial(client: APIClient, teamID: String) async throws {
+    func connectOfficial(client: APIClient, teamID: String, workspace: JSONValue = .null) async throws {
         guard client.isOfficial, !teamID.isEmpty else { throw ClientError.invalidResponse }
         client.officialSession?.teamID = teamID
         // Verify the workspace API before replacing any existing connection.
@@ -66,6 +74,7 @@ import Observation
         client.unauthorized = false
         client.persistOfficialSession = true
         UserDefaults.standard.set(OfficialServer.apiURL.absoluteString, forKey: "serverURL")
+        self.workspace = workspace
         profile = user; bots = botValue.items.map(Record.init); selectedBotID = bots.first?.id ?? ""; api = client
     }
     func signOut() {
@@ -75,6 +84,6 @@ import Observation
             try? Keychain.save(nil, account: OfficialServer.keychainAccount)
             for cookie in api?.session.configuration.httpCookieStorage?.cookies ?? [] { api?.session.configuration.httpCookieStorage?.deleteCookie(cookie) }
         }
-        api?.session.invalidateAndCancel(); api = nil; bots = []; profile = .null; error = nil
+        api?.session.invalidateAndCancel(); api = nil; bots = []; profile = .null; workspace = .null; error = nil
     }
 }

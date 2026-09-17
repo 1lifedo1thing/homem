@@ -2,6 +2,23 @@ import XCTest
 @testable import Homem
 
 final class CoreTests: XCTestCase {
+    func testAvatarSourcesSupportOfficialAndCustomHosts() {
+        let base = URL(string: "https://selfhost.example/api")!
+        XCTAssertEqual(AvatarSource.url("/avatars/one.png", baseURL: base)?.absoluteString, "https://selfhost.example/avatars/one.png")
+        XCTAssertEqual(AvatarSource.url("https://cdn.example/bot.png", baseURL: base)?.host, "cdn.example")
+        XCTAssertNil(AvatarSource.url("", baseURL: base))
+        XCTAssertNil(AvatarSource.url("file:///etc/passwd", baseURL: base))
+        XCTAssertNil(AvatarSource.url("https://user:password@example.com/icon.png", baseURL: base))
+        XCTAssertEqual(AvatarSource.initials("  Kitta Studio "), "KS")
+        XCTAssertEqual(AvatarSource.initials("小猫"), "小")
+    }
+    @MainActor func testAvatarImageDecodingAndInvalidImageFallback() async throws {
+        let png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNQSnv3HwAEmgJ2pp70QwAAAABJRU5ErkJggg=="
+        let image = try await AvatarImages.load(XCTUnwrap(URL(string: png)))
+        XCTAssertNotNil(image)
+        let invalid = try await AvatarImages.load(XCTUnwrap(URL(string: "data:image/png;base64,bm90LWFuLWltYWdl")))
+        XCTAssertNil(invalid)
+    }
     func testJSONRoundTripPreservesPluginConfiguration() throws {
         let value = try JSONValue.parse(#"{"config":{"args":["--safe",3,true,null],"日本語":"記憶"},"number":1.25}"#)
         XCTAssertEqual(try JSONDecoder().decode(JSONValue.self, from: value.encoded), value)

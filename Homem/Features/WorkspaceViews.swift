@@ -12,12 +12,20 @@ struct WorkspaceView: View {
     var body: some View {
         List {
             Section {
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack { AgentAvatar(name: name, size: 54); Spacer(); StatusPill(text: status.text("status", "state").nonEmpty ?? "Workspace", color: .teal) }
-                    Text("A computer of their own.").font(.title2.weight(.semibold))
-                    Text("Files, a terminal, and a desktop. Your agent’s world, within reach.").font(.subheadline).foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 18) {
+                    WorkspaceIdentity()
+                    HStack(spacing: 14) {
+                        AgentAvatar(name: name, size: 52, symbol: "shippingbox")
+                        VStack(alignment: .leading, spacing: 5) {
+                            Eyebrow(text: "AGENT WORKSPACE")
+                            Text(name).font(.title2.bold())
+                        }
+                        Spacer()
+                    }
+                    StatusPill(text: status.text("status", "state").nonEmpty?.fieldLabel ?? "Loading", color: status.text("status", "state") == "running" ? .green : .secondary)
                 }.padding(.vertical, 8)
-            }
+            }.listRowBackground(Color.clear)
+
             Section {
                 NavigationLink("Files", systemImage: "folder") { FileBrowserView(botID: botID, path: "/data") }
                 NavigationLink("Terminal", systemImage: "terminal") { TerminalScreen(botID: botID) }

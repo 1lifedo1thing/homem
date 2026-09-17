@@ -178,11 +178,21 @@ struct OfficialSignInView: View {
         case .workspaces:
             Section("Choose your workspace") {
                 ForEach(login.teams, id: \.self) { team in
-                    Button(team.text("name", "slug").nonEmpty ?? "Memoh workspace") {
+                    Button {
                         run {
-                            try await store.connectOfficial(client: login.client, teamID: team["team_id"].string)
+                            try await store.connectOfficial(client: login.client, teamID: team["team_id"].string, workspace: team)
                             dismiss()
                         }
+                    } label: {
+                        HStack(spacing: 12) {
+                            AgentAvatar(name: team.text("name", "slug"), avatarURL: team["avatar_url"].string, size: 42, symbol: "square.stack.3d.up", baseURL: OfficialServer.origin)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(team.text("name", "slug").nonEmpty ?? "Memoh workspace").font(.headline).foregroundStyle(.primary)
+                                if let description = team["description"].string.nonEmpty { Text(description).font(.caption).foregroundStyle(.secondary).lineLimit(2) }
+                            }
+                            Spacer()
+                            Image(systemName: "arrow.right").font(.subheadline.weight(.semibold))
+                        }.padding(.vertical, 6)
                     }.disabled(login.busy)
                 }
                 if login.teams.isEmpty {
@@ -208,7 +218,7 @@ struct OfficialSignInView: View {
     }
     private func connectSingleWorkspace() async throws {
         guard login.step == .workspaces, login.teams.count == 1, let team = login.teams.first else { return }
-        try await store.connectOfficial(client: login.client, teamID: team["team_id"].string)
+        try await store.connectOfficial(client: login.client, teamID: team["team_id"].string, workspace: team)
         dismiss()
     }
     private func run(_ action: @escaping @MainActor () async throws -> Void) {

@@ -36,10 +36,10 @@ final class HomemUITests: XCTestCase {
         demo.tap()
         XCTAssertTrue(app.staticTexts["A place for your next idea"].waitForExistence(timeout: 5))
         capture(app, "Conversations")
-        app.tabBars.buttons["Agents"].tap()
-        XCTAssertTrue(app.staticTexts["Good company.\nGreat possibilities."].waitForExistence(timeout: 5))
+        selectTab("Agents", in: app)
+        XCTAssertTrue(app.buttons["createAgent"].waitForExistence(timeout: 5))
         capture(app, "Agent overview")
-        app.tabBars.buttons["Library"].tap()
+        selectTab("Library", in: app)
         capture(app, "Library")
         app.buttons["Schedules"].tap()
         XCTAssertTrue(app.staticTexts["Morning perspective"].waitForExistence(timeout: 5))
@@ -56,10 +56,13 @@ final class HomemUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Attach"].exists)
         app.buttons["newChatRunLocation"].tap()
         XCTAssertTrue(app.buttons["Studio Mac"].waitForExistence(timeout: 3))
+        capture(app, "Workspace icon dropdown")
         app.buttons["Studio Mac"].tap()
         let agentMenu = app.navigationBars["New chat"].buttons["agentPickerMenu"]
         XCTAssertEqual(agentMenu.value as? String, "Atlas")
-        agentMenu.tap(); app.buttons["Mika"].tap()
+        agentMenu.tap()
+        capture(app, "Agent avatar dropdown")
+        app.buttons["Mika"].tap()
         XCTAssertEqual(agentMenu.value as? String, "Mika")
         XCTAssertTrue(app.buttons["newChatRunLocation"].label.contains("Agent default"))
         capture(app, "Simple new chat")
@@ -91,24 +94,29 @@ final class HomemUITests: XCTestCase {
     }
     @MainActor func testThemePreferencesPersist() throws {
         let app = XCUIApplication(); app.launchArguments = ["--demo"]; app.launch()
-        app.tabBars.buttons["Settings"].tap()
+        selectTab("Settings", in: app)
         app.swipeUp()
         let appearance = app.buttons["appearancePicker"]
         XCTAssertTrue(appearance.waitForExistence(timeout: 5))
         appearance.tap(); app.buttons["Dark"].tap()
         app.buttons["accentPicker"].tap(); app.buttons["Rose"].tap()
         app.terminate(); app.launch()
-        app.tabBars.buttons["Settings"].tap(); app.swipeUp()
+        selectTab("Settings", in: app); app.swipeUp()
         XCTAssertTrue(app.buttons["appearancePicker"].label.contains("Dark"))
         XCTAssertTrue(app.buttons["accentPicker"].label.contains("Rose"))
-        app.tabBars.buttons["Chats"].tap(); app.buttons["New conversation"].tap()
+        selectTab("Chats", in: app); app.buttons["New conversation"].tap()
         XCTAssertTrue(app.textFields["newChatMessage"].waitForExistence(timeout: 5))
         app.textFields["newChatMessage"].tap(); app.textFields["newChatMessage"].typeText("A little color")
         capture(app, "Dark Rose new chat")
         app.buttons["Cancel"].tap()
-        app.tabBars.buttons["Settings"].tap()
+        selectTab("Settings", in: app)
         app.buttons["appearancePicker"].tap(); app.buttons["System"].tap()
         app.buttons["accentPicker"].tap(); app.buttons["System"].tap()
+    }
+    @MainActor private func selectTab(_ name: String, in app: XCUIApplication) {
+        let compactTab = app.tabBars.buttons[name]
+        if compactTab.exists { compactTab.tap() }
+        else { app.buttons[name].firstMatch.tap() } // iPad uses a floating tab control.
     }
     @MainActor private func capture(_ app: XCUIApplication, _ name: String) {
         let attachment = XCTAttachment(screenshot: app.screenshot()); attachment.name = name; attachment.lifetime = .keepAlways; add(attachment)
@@ -122,8 +130,8 @@ final class HomemUITests: XCTestCase {
         app.buttons["sendMessage"].tap()
         XCTAssertTrue(app.staticTexts["Hello from iOS"].waitForExistence(timeout: 5))
         let chat = XCTAttachment(screenshot: app.screenshot()); chat.name = "Native chat"; chat.lifetime = .keepAlways; add(chat)
-        app.tabBars.buttons["Agents"].tap()
-        XCTAssertTrue(app.staticTexts["Good company.\nGreat possibilities."].waitForExistence(timeout: 5))
+        selectTab("Agents", in: app)
+        XCTAssertTrue(app.buttons["createAgent"].waitForExistence(timeout: 5))
         let agents = XCTAttachment(screenshot: app.screenshot()); agents.name = "Agents"; agents.lifetime = .keepAlways; add(agents)
         app.staticTexts["Atlas"].firstMatch.tap()
         app.buttons["Files, terminal & desktop"].tap()
@@ -135,7 +143,7 @@ final class HomemUITests: XCTestCase {
     }
     @MainActor func testCreateMemoryAndScheduleNavigation() throws {
         let app = XCUIApplication(); app.launchArguments = ["--demo"]; app.launch()
-        app.tabBars.buttons["Library"].tap()
+        selectTab("Library", in: app)
         app.buttons["Memories"].tap()
         XCTAssertTrue(app.staticTexts["Prefers thoughtful answers with concrete examples."].waitForExistence(timeout: 5))
         app.buttons["Add Memories"].tap()
@@ -144,7 +152,7 @@ final class HomemUITests: XCTestCase {
         app.buttons["Save"].tap()
         XCTAssertTrue(app.staticTexts["Remember this native app test"].waitForExistence(timeout: 5))
         let library = XCTAttachment(screenshot: app.screenshot()); library.name = "Created memory"; library.lifetime = .keepAlways; add(library)
-        app.tabBars.buttons["Settings"].tap()
+        selectTab("Settings", in: app)
         XCTAssertTrue(app.staticTexts["Providers"].waitForExistence(timeout: 5))
         app.buttons["Providers"].tap()
         XCTAssertTrue(app.staticTexts["Example provider"].waitForExistence(timeout: 5))

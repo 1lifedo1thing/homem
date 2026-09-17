@@ -20,22 +20,29 @@ struct ConversationsView: View {
         NavigationSplitView {
             List {
                 Section {
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack { Text("A little space to think.").font(.title2.weight(.semibold)); Spacer(); Image(systemName: "sparkle").foregroundStyle(accent) }
-                        Text("Pick up a conversation. Start something new.").font(.subheadline).foregroundStyle(.secondary)
-                        if store.isDemo { DemoBadge().padding(.top, 4) }
-                    }.padding(.vertical, 10)
-                }.listRowBackground(Color.clear).listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 16, trailing: 0))
+                    VStack(alignment: .leading, spacing: 18) {
+                        WorkspaceIdentity()
+                        HStack(alignment: .center, spacing: 14) {
+                            AgentAvatar(name: store.selectedBot?.title ?? "Agent", avatarURL: store.selectedBot?.value["avatar_url"].string ?? "", size: 54)
+                            VStack(alignment: .leading, spacing: 5) {
+                                Eyebrow(text: "CONVERSATIONS WITH")
+                                Text(store.selectedBot?.title ?? "Choose an agent").font(.system(.title, weight: .bold))
+                            }
+                            Spacer()
+                        }
+                    }.padding(.vertical, 8)
+                }.listRowBackground(Color.clear).listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 8, trailing: 0))
+
                 if let error = error ?? store.error { ErrorBanner(message: error) { Task { await load() } } }
                 Section("Conversations") {
                     ForEach(sessions.filter { search.isEmpty || $0.title.localizedCaseInsensitiveContains(search) }) { session in
                         let destination = ChatDestination(botID: store.selectedBot?.id ?? "", sessionID: session.id, title: session.title, botName: store.selectedBot?.title ?? "Agent")
                         NavigationLink(value: destination) {
                             HStack(spacing: 13) {
-                                AgentAvatar(name: store.selectedBot?.title ?? "", size: 42)
+                                AgentAvatar(name: store.selectedBot?.title ?? "", avatarURL: store.selectedBot?.value["avatar_url"].string ?? "", size: 34)
                                 VStack(alignment: .leading, spacing: 5) {
-                                    Text(session.title).font(.body.weight(.medium)).lineLimit(2)
-                                    HStack(spacing: 5) { Text(store.selectedBot?.title ?? "Agent"); Text("·"); Text(session.value["type"].string.fieldLabel.nonEmpty ?? "Chat") }.font(.caption).foregroundStyle(.secondary)
+                                    Text(session.title).font(.body.weight(.semibold)).lineLimit(2)
+                                    HStack(spacing: 6) { Image(systemName: session.value["type"] == "schedule" ? "clock" : "bubble.left"); Text(session.value["type"].string.fieldLabel.nonEmpty ?? "Chat"); if let date = session.value["updated_at"].string.wireDate { Text("·"); Text(date, style: .date) } }.font(.caption).foregroundStyle(.secondary)
                                 }
                             }.padding(.vertical, 7)
                         }
@@ -45,7 +52,7 @@ struct ConversationsView: View {
                     if !cursor.isEmpty { Button("Load more conversations") { Task { await load(more: true) } } }
                     if sessions.isEmpty && !loading && error == nil { Text("Your next conversation starts here.").foregroundStyle(.secondary).padding(.vertical) }
                 }
-            }.listStyle(.insetGrouped)
+            }.listStyle(.insetGrouped).listRowSpacing(10)
                 .navigationTitle("Chats")
                 .searchable(text: $search, prompt: "Find a conversation")
                 .toolbar {
@@ -111,6 +118,7 @@ struct ChatScreen: View {
 }
 
 struct ChatContent: View {
+    @Environment(AppStore.self) private var store
     @Environment(\.appAccent) private var accent
     @State var model: ChatModel
     let destination: ChatDestination
@@ -127,7 +135,7 @@ struct ChatContent: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 26) {
-                    HStack { AgentAvatar(name: destination.botName, size: 34); VStack(alignment: .leading, spacing: 3) { Text(destination.botName).font(.subheadline.weight(.semibold)); Text(model.connection).font(.caption).foregroundStyle(.secondary) }; Spacer(); if model.api.isDemo { DemoBadge() } }.padding(.bottom, 8)
+                    HStack { AgentAvatar(name: destination.botName, avatarURL: store.bots.first { $0.id == destination.botID }?.value["avatar_url"].string ?? "", size: 34); VStack(alignment: .leading, spacing: 3) { Text(destination.botName).font(.subheadline.weight(.semibold)); Text(model.connection).font(.caption).foregroundStyle(.secondary) }; Spacer(); if model.api.isDemo { DemoBadge() } }.padding(.bottom, 8)
                     if model.hasMore { Button("Load earlier messages") { Task { await model.loadHistory(older: true) } }.frame(maxWidth: .infinity) }
                     if model.history.isEmpty && !model.loading && !model.active { EmptyState(title: "What’s on your mind?", symbol: "sparkle", detail: "Ask a question, share a file, or start with an idea.").padding(.top, 30) }
                     ForEach(Array(model.visibleTurns.enumerated()), id: \.offset) { _, turn in

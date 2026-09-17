@@ -47,7 +47,7 @@ import XCTest
                 XCTAssertEqual(request.value(forHTTPHeaderField: "Cookie"), "session=verified")
                 return (200, Data(#"{"user":{"id":"person"}}"#.utf8))
             case "/api/v1/teams":
-                return (200, Data(#"{"teams":[{"team":{"team_id":"team-1","name":"My workspace"},"role":"TEAM_ROLE_OWNER"}]}"#.utf8))
+                return (200, Data(#"{"teams":[{"team":{"team_id":"team-1","name":"My workspace","avatar_url":"https://cdn.example/workspace.png"},"role":"TEAM_ROLE_OWNER"}]}"#.utf8))
             default: XCTFail("Unexpected endpoint"); return (404, Data())
             }
         }
@@ -58,6 +58,7 @@ import XCTest
         login.code = "123456"; try await login.verifyCode()
         XCTAssertEqual(login.step, .workspaces)
         XCTAssertEqual(login.teams.first?["team_id"], "team-1")
+        XCTAssertEqual(login.teams.first?["avatar_url"], "https://cdn.example/workspace.png")
         XCTAssertEqual(paths.count, 4)
         XCTAssertFalse(api.persistOfficialSession)
         XCTAssertTrue(api.session.configuration.httpCookieStorage?.cookies?.first?.isHTTPOnly == true)
