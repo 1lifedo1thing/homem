@@ -10,7 +10,7 @@ struct NewChatDraft: Hashable {
 struct RunLocation: Identifiable {
     let value: JSONValue
     var id: String { value["target_id"].string }
-    var name: String { value["kind"] == "native" ? "Memoh workspace" : value["name"].string.nonEmpty ?? "Computer" }
+    var name: String { value["kind"] == "native" ? "Memoh workspace".localized : value["name"].string.nonEmpty ?? "Computer".localized }
     var symbol: String { value["kind"] == "native" ? "shippingbox" : "desktopcomputer" }
     var available: Bool {
         value["kind"] == "native"
@@ -24,10 +24,10 @@ enum ChatAttachment {
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
         guard size <= 10 * 1024 * 1024, existingCount < 5 else {
-            throw ClientError.message("Attach up to five files, each smaller than 10 MB.")
+            throw ClientError.message("Attach up to five files, each smaller than 10 MB.".localized)
         }
         let data = try Data(contentsOf: url)
-        guard data.count <= 10 * 1024 * 1024 else { throw ClientError.message("This file is larger than 10 MB.") }
+        guard data.count <= 10 * 1024 * 1024 else { throw ClientError.message("This file is larger than 10 MB.".localized) }
         let type = UTType(filenameExtension: url.pathExtension)
         let mime = type?.preferredMIMEType ?? "application/octet-stream"
         let kind =
@@ -68,26 +68,26 @@ struct NewConversationView: View {
                 VStack(alignment: .leading, spacing: 24) {
                     VStack(alignment: .leading, spacing: 18) {
                         HStack(spacing: 16) {
-                            AgentAvatar(name: bot?.title ?? "Agent", avatarURL: bot?.value["avatar_url"].string ?? "", size: 44)
+                            AgentAvatar(name: bot?.title ?? "Agent", avatarURL: bot?.value.avatarURL ?? "", size: 44)
                             VStack(alignment: .leading, spacing: 6) {
                                 Eyebrow(text: "TO")
-                                Text(bot?.title ?? "Choose an agent").font(.system(.title2, weight: .bold)).lineLimit(2)
+                                Text(bot?.title ?? "Choose an agent".localized).font(.system(.title2, weight: .bold)).lineLimit(2)
                             }
                             Spacer(minLength: 0)
                         }
                         Divider()
                         runLocationButton
                     }.padding(.vertical, 8)
-                    if loadingLocations { ProgressView("Finding run locations…").font(.caption) }
+                    if loadingLocations { ProgressView("Finding run locations…".localized).font(.caption) }
                     if let locationError {
                         VStack(alignment: .leading, spacing: 8) {
                             Text(locationError).font(.caption).foregroundStyle(.secondary)
-                            Button("Try again") { Task { await loadLocations() } }.font(.caption)
+                            Button("Try again".localized) { Task { await loadLocations() } }.font(.caption)
                         }
                     }
                     Divider()
                     VStack(alignment: .leading, spacing: 16) {
-                        TextField("Message \(bot?.title ?? "your agent")…", text: $text, axis: .vertical)
+                        TextField(AppLocalization.format("Message %@…", bot?.title ?? "Agent".localized), text: $text, axis: .vertical)
                             .lineLimit(5...12).focused($focused).accessibilityIdentifier("newChatMessage")
                         ForEach(Array(attachments.enumerated()), id: \.offset) { index, item in
                             HStack {
@@ -97,7 +97,7 @@ struct NewConversationView: View {
                                     attachments.remove(at: index)
                                 } label: {
                                     Image(systemName: "xmark.circle.fill")
-                                }.accessibilityLabel("Remove \(item["name"].string)")
+                                }.accessibilityLabel(AppLocalization.format("Remove %@", item["name"].string))
                             }.font(.subheadline)
                         }
 
@@ -109,9 +109,9 @@ struct NewConversationView: View {
                     composerActions.padding(.horizontal, 22).padding(.vertical, 12)
                         .frame(maxWidth: 640).frame(maxWidth: .infinity).background(.bar)
                 }
-                .navigationTitle("New chat").navigationBarTitleDisplayMode(.inline)
+                .navigationTitle("New chat".localized).navigationBarTitleDisplayMode(.inline)
                 .toolbar {
-                    ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(busy) }
+                    ToolbarItem(placement: .cancellationAction) { Button("Cancel".localized) { dismiss() }.disabled(busy) }
                     ToolbarItem(placement: .topBarTrailing) { AgentPickerMenu(selection: $botID).disabled(busy) }
                 }
                 .interactiveDismissDisabled(busy).disabled(busy)
@@ -132,14 +132,14 @@ struct NewConversationView: View {
                 AgentAvatar(name: location?.name ?? "Workspace", size: 32, symbol: location?.symbol ?? "arrow.triangle.branch")
                 VStack(alignment: .leading, spacing: 4) {
                     Eyebrow(text: "RUN ON")
-                    Text(location?.name ?? "Agent default").font(.subheadline.weight(.semibold)).foregroundStyle(.primary)
+                    Text(location?.name ?? "Agent default".localized).font(.subheadline.weight(.semibold)).foregroundStyle(.primary)
                 }
                 Spacer(minLength: 8)
                 if let location { StatusIndicator(text: location.available ? "Online" : "Offline", color: location.available ? .green : .secondary) }
                 Image(systemName: "chevron.down").font(.caption.weight(.bold)).foregroundStyle(.secondary)
             }.frame(minHeight: 48).contentShape(Rectangle())
         }.buttonStyle(.plain).disabled(loadingLocations)
-            .accessibilityLabel("Run on, " + (location?.name ?? "Agent default"))
+            .accessibilityLabel(AppLocalization.format("Run on, %@", location?.name ?? "Agent default".localized))
             .accessibilityIdentifier("newChatRunLocation")
             .popover(isPresented: $locationPicker, arrowEdge: .top) {
                 VStack(alignment: .leading, spacing: 0) {
@@ -165,8 +165,8 @@ struct NewConversationView: View {
             HStack(spacing: 12) {
                 AgentAvatar(name: name, size: 40, symbol: symbol)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(name).font(.headline).foregroundStyle(.primary)
-                    Text(detail).font(.caption).foregroundStyle(.secondary)
+                    Text(id.isEmpty ? name.localized : name).font(.headline).foregroundStyle(.primary)
+                    Text(detail.localized).font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 0)
                 if targetID == id { Image(systemName: "checkmark").font(.subheadline.bold()) }
@@ -179,7 +179,7 @@ struct NewConversationView: View {
             Button {
                 filePicker = true
             } label: {
-                Label("Attach", systemImage: "plus")
+                Label("Attach".localized, systemImage: "plus")
             }.disabled(attachments.count >= 5)
             Spacer()
             if focused {
@@ -187,14 +187,14 @@ struct NewConversationView: View {
                     focused = false
                 } label: {
                     Image(systemName: "keyboard.chevron.compact.down").frame(width: 44, height: 44)
-                }.accessibilityLabel("Hide keyboard")
+                }.accessibilityLabel("Hide keyboard".localized)
             }
             Button {
                 Task { await create() }
             } label: {
                 HStack {
                     if busy { ProgressView() } else { Image(systemName: "arrow.up") }
-                    Text(busy ? "Starting…" : "Send")
+                    Text((busy ? "Starting…" : "Send").localized)
                 }
             }.buttonStyle(.borderedProminent).disabled(!canSend).accessibilityIdentifier("startConversation")
         }

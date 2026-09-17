@@ -8,7 +8,7 @@ A native Swift / SwiftUI iPhone and iPad client for [Memoh](https://github.com/f
 
 **API baseline:** Memoh commit `51bb2073d8d99c961ce9f23555e8fb3bdd2aadc4`
 
-Homem connects to an existing Memoh backend. It does not run an agent or a container on the phone. The interface uses SwiftUI and UIKit, SwiftTerm for the interactive terminal, and native WebRTC for the remote desktop. The workspace remains native; an optional embedded browser is used for official account sign-in and account/workspace setup.
+Homem connects to an existing Memoh backend. It does not run an agent or a container on the phone. The interface uses SwiftUI and UIKit, SwiftTerm for the interactive terminal, and native WebRTC for the remote desktop. The workspace remains native; an optional embedded browser is used for official account sign-in and account/workspace setup. SVG avatars use an isolated WebKit renderer with scripts and network access disabled.
 
 ## Run
 
@@ -21,7 +21,7 @@ Homem connects to an existing Memoh backend. It does not run an agent or a conta
 
 The primary sign-in option connects to [app.memoh.net](https://app.memoh.net). Enter your email, receive a six-digit sign-in code, and verify it in native screens. Resend cooldowns and authenticator-based two-factor challenges are supported. Then select a workspace to open the native app.
 
-**Continue in browser** opens the official website in an isolated, temporary browser, including its GitHub/Google options and account/workspace setup. After signing in, tap **Continue in Homem** and select a workspace. Identity providers may reject embedded browsers; native email sign-in remains available without changing browser identity or bypassing provider restrictions.
+**Continue in browser** opens the official website in an isolated, temporary browser, including its GitHub/Google options and account/workspace setup. SVG avatars use an isolated WebKit renderer with scripts and network access disabled. After signing in, tap **Continue in Homem** and select a workspace. Identity providers may reject embedded browsers; native email sign-in remains available without changing browser identity or bypassing provider restrictions.
 
 Only HTTPS cookies scoped to `app.memoh.net` or its parent domain are transferred to the native session. Identity-provider cookies are discarded. The selected workspace and session are saved in Keychain only after its native API succeeds. Official requests use `/api/v1` for platform authentication/workspace selection and `/api/memoh` for workspace operations, with workspace headers and short-lived WebSocket tickets. Custom servers use separate bearer credentials and receive no official cookies.
 
@@ -98,3 +98,7 @@ Repository and Xcode Cloud configuration are documented in [XCODE_CLOUD.md](docs
 ## License and attribution
 
 Homem is an independent client, not an official Memoh distribution. This project is distributed under AGPL-3.0, with the Memoh API schema attributed to MemohAI. See [LICENSE](LICENSE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+## Languages
+
+English, Simplified Chinese, Spanish, and Japanese are supported through [L10n-swift](https://github.com/Decybel07/L10n-swift) and bundled Xcode string catalogs. The app follows the iOS app language preference. See [localization guidance](docs/LOCALIZATION.md).

@@ -30,11 +30,11 @@ struct OfficialSignInView: View {
                                 browser.reload()
                             }.padding(.horizontal)
                         }
-                        Text("After signing in, tap Continue. You can switch to email at any time.").font(.caption).foregroundStyle(
+                        Text("After signing in, tap Continue. You can switch to email at any time.".localized).font(.caption).foregroundStyle(
                             .secondary
                         ).padding(.horizontal)
                         if let error = login.error { ErrorBanner(message: error).padding(.horizontal) }
-                        Button("Continue in Homem") {
+                        Button("Continue in Homem".localized) {
                             run {
                                 let cookies = await browser.configuration.websiteDataStore.httpCookieStore.allCookies()
                                 try await login.useBrowserCookies(cookies)
@@ -46,17 +46,17 @@ struct OfficialSignInView: View {
                 } else {
                     signInForm
                 }
-            }.navigationTitle("Sign in to Memoh").navigationBarTitleDisplayMode(.inline)
+            }.navigationTitle("Sign in to Memoh".localized).navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
-                        Button("Cancel") {
+                        Button("Cancel".localized) {
                             task?.cancel()
                             dismiss()
                         }
                     }
                     if browser != nil {
                         ToolbarItem(placement: .topBarTrailing) {
-                            Button("Use email") {
+                            Button("Use email".localized) {
                                 browser = nil
                                 login.error = nil
                             }.disabled(login.busy)
@@ -75,12 +75,12 @@ struct OfficialSignInView: View {
             signInHeader
             loginFields
             if let error = login.error { Section { ErrorBanner(message: error) } }
-            if login.busy { Section { ProgressView("Connecting to Memoh…") } }
+            if login.busy { Section { ProgressView("Connecting to Memoh…".localized) } }
             Section {
-                Button(login.step == .workspaces ? "Open Memoh in browser" : "Continue in browser") { openBrowser() }
+                Button(login.step == .workspaces ? "Open Memoh in browser".localized : "Continue in browser".localized) { openBrowser() }
                     .disabled(login.busy).accessibilityIdentifier("officialBrowser")
             } footer: {
-                Text("Prefer GitHub or Google? Continue on the official website.")
+                Text("Prefer GitHub or Google? Continue on the official website.".localized)
             }
         }.scrollDismissesKeyboard(.interactively)
             .task { updateFocus() }
@@ -104,7 +104,7 @@ struct OfficialSignInView: View {
     private var subtitle: String {
         switch login.step {
         case .email: return "Enter your email to sign in or create an account."
-        case .code: return "We sent a six-digit code to \(login.email)."
+        case .code: return AppLocalization.format("We sent a six-digit code to %@.", login.email)
         case .mfa: return "Enter the code from your authenticator app."
         case .workspaces: return "Choose where you’d like to continue."
         }
@@ -113,8 +113,8 @@ struct OfficialSignInView: View {
         Section {
             VStack(alignment: .leading, spacing: 10) {
                 Label("app.memoh.net", systemImage: "checkmark.seal.fill").font(.subheadline).foregroundStyle(accent)
-                Text(heading).font(.title2.bold())
-                Text(subtitle).font(.subheadline).foregroundStyle(.secondary)
+                Text(heading.localized).font(.title2.bold())
+                Text(subtitle.localized).font(.subheadline).foregroundStyle(.secondary)
             }.padding(.vertical, 12)
         }.listRowBackground(Color.clear)
     }
@@ -122,7 +122,7 @@ struct OfficialSignInView: View {
         switch login.step {
         case .email:
             Section {
-                TextField("Email address", text: $login.email)
+                TextField("Email address".localized, text: $login.email)
                     .textContentType(.emailAddress).keyboardType(.emailAddress)
                     .textInputAutocapitalization(.never).autocorrectionDisabled()
                     .focused($focusedField, equals: .email).submitLabel(.continue)
@@ -134,17 +134,17 @@ struct OfficialSignInView: View {
                     HStack {
                         Spacer()
                         if login.busy { ProgressView() }
-                        Text(login.busy ? "Sending…" : "Send sign-in code")
+                        Text((login.busy ? "Sending…" : "Send sign-in code").localized)
                         Spacer()
                     }
                 }.buttonStyle(.borderedProminent).controlSize(.large)
                     .disabled(login.busy || !login.validEmail).accessibilityIdentifier("sendOfficialCode")
             } footer: {
-                Text("No password to remember. Your session is saved securely on this device.")
+                Text("No password to remember. Your session is saved securely on this device.".localized)
             }
         case .code, .mfa:
             Section {
-                TextField(login.step == .mfa ? "Authenticator code" : "Email code", text: $login.code)
+                TextField(login.step == .mfa ? "Authenticator code".localized : "Email code".localized, text: $login.code)
                     .textContentType(.oneTimeCode).keyboardType(.numberPad)
                     .font(.title2.monospaced()).tracking(6).focused($focusedField, equals: .code)
                     .disabled(login.busy).accessibilityIdentifier("officialCode")
@@ -156,27 +156,27 @@ struct OfficialSignInView: View {
                         }
                         if login.validCode && !login.busy { verifyCode() }
                     }
-                Button(login.busy ? "Verifying…" : "Verify and continue") { verifyCode() }
+                Button(login.busy ? "Verifying…".localized : "Verify and continue".localized) { verifyCode() }
                     .buttonStyle(.borderedProminent).controlSize(.large)
                     .disabled(login.busy || !login.validCode)
                 if login.step == .code {
                     TimelineView(.periodic(from: .now, by: 1)) { context in
                         let seconds = max(0, Int(ceil(login.resendAfter.timeIntervalSince(context.date))))
-                        Button(seconds > 0 ? "Resend in \(seconds)s" : "Resend code") { run { try await login.sendCode() } }
+                        Button(seconds > 0 ? AppLocalization.format("Resend in %llds", seconds) : "Resend code".localized) { run { try await login.sendCode() } }
                             .disabled(login.busy || seconds > 0)
                     }
                 }
-                Button("Use a different email") {
+                Button("Use a different email".localized) {
                     login.changeEmail()
                     focusedField = .email
                 }.disabled(login.busy)
             } footer: {
                 if login.step == .code {
-                    Text("You can paste your code or use the suggestion above the keyboard. Check spam if it hasn’t arrived.")
+                    Text("You can paste your code or use the suggestion above the keyboard. Check spam if it hasn’t arrived.".localized)
                 }
             }
         case .workspaces:
-            Section("Choose your workspace") {
+            Section("Choose your workspace".localized) {
                 ForEach(login.teams, id: \.self) { team in
                     Button {
                         run {
@@ -185,9 +185,9 @@ struct OfficialSignInView: View {
                         }
                     } label: {
                         HStack(spacing: 12) {
-                            AgentAvatar(name: team.text("name", "slug"), avatarURL: team["avatar_url"].string, size: 42, symbol: "square.stack.3d.up", baseURL: OfficialServer.origin)
+                            AgentAvatar(name: team.text("name", "slug"), avatarURL: team.avatarURL, size: 42, symbol: "square.stack.3d.up", baseURL: OfficialServer.origin)
                             VStack(alignment: .leading, spacing: 4) {
-                                Text(team.text("name", "slug").nonEmpty ?? "Memoh workspace").font(.headline).foregroundStyle(.primary)
+                                Text(team.text("name", "slug").nonEmpty ?? "Memoh workspace".localized).font(.headline).foregroundStyle(.primary)
                                 if let description = team["description"].string.nonEmpty { Text(description).font(.caption).foregroundStyle(.secondary).lineLimit(2) }
                             }
                             Spacer()
@@ -196,9 +196,9 @@ struct OfficialSignInView: View {
                     }.disabled(login.busy)
                 }
                 if login.teams.isEmpty {
-                    Text("Finish creating or joining a workspace on Memoh, then return here.")
+                    Text("Finish creating or joining a workspace on Memoh, then return here.".localized)
                 }
-                Button("Refresh workspaces") { run { try await login.loadWorkspaces() } }.disabled(login.busy)
+                Button("Refresh workspaces".localized) { run { try await login.loadWorkspaces() } }.disabled(login.busy)
             }
         }
     }

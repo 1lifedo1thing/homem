@@ -40,12 +40,12 @@ struct SchemaCatalog {
         let type = schema["type"].string
         switch (type, value) {
         case ("boolean", .bool), ("string", .string), ("number", .number), ("integer", .number), ("object", .object), ("array", .array), ("", _): break
-        default: throw ClientError.message("\(name.fieldLabel) must be a valid \(type).")
+        default: throw ClientError.message(AppLocalization.format("Check the value for %@.", name.fieldLabel.localized))
         }
-        if type == "integer", value.number != value.number.rounded() { throw ClientError.message("\(name.fieldLabel) must be a whole number.") }
-        if let minimum = schema.object["minimum"], value.number < minimum.number { throw ClientError.message("\(name.fieldLabel) must be at least \(minimum.scalar).") }
-        if let maximum = schema.object["maximum"], value.number > maximum.number { throw ClientError.message("\(name.fieldLabel) must be at most \(maximum.scalar).") }
-        for key in schema["required"].array.map(\.string) where value[key].isNull || value[key] == .string("") { throw ClientError.message("\(key.fieldLabel) is required.") }
+        if type == "integer", value.number != value.number.rounded() { throw ClientError.message(AppLocalization.format("%@ must be a whole number.", name.fieldLabel.localized)) }
+        if let minimum = schema.object["minimum"], value.number < minimum.number { throw ClientError.message(AppLocalization.format("%@ must be at least %@.", name.fieldLabel.localized, minimum.scalar)) }
+        if let maximum = schema.object["maximum"], value.number > maximum.number { throw ClientError.message(AppLocalization.format("%@ must be at most %@.", name.fieldLabel.localized, maximum.scalar)) }
+        for key in schema["required"].array.map(\.string) where value[key].isNull || value[key] == .string("") { throw ClientError.message(AppLocalization.format("%@ is required.", key.fieldLabel.localized)) }
         for (key, child) in value.object { if !schema["properties"][key].isNull { try validate(child, schema: schema["properties"][key], name: key) } }
         if type == "array" { for child in value.array { try validate(child, schema: schema["items"], name: name) } }
     }

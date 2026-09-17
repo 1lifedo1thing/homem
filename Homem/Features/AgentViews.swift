@@ -11,9 +11,9 @@ struct AgentsView: View {
                 WorkspaceIdentity()
                 if let error = store.error { ErrorBanner(message: error) { Task { await store.reload() } } }
                 HStack {
-                    Eyebrow(text: "\(store.bots.filter { $0.value["is_active"].bool }.count) ACTIVE")
+                    Text(AppLocalization.format("Active · %lld", store.bots.filter { $0.value["is_active"].bool }.count)).font(.caption).foregroundStyle(.secondary)
                     Spacer()
-                    Text("\(store.bots.count) agents").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                    Text(AppLocalization.format("Agents · %lld", store.bots.count)).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
                 }
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 300), spacing: 16)], spacing: 16) {
                     ForEach(store.bots.filter { search.isEmpty || $0.title.localizedCaseInsensitiveContains(search) }) { bot in
@@ -22,7 +22,7 @@ struct AgentsView: View {
                     Button { create = true } label: {
                         HStack(spacing: 12) {
                             Image(systemName: "plus").font(.headline).frame(width: 42, height: 42).background(accent.opacity(0.10), in: RoundedRectangle(cornerRadius: 12))
-                            Text("Create an agent").font(.headline)
+                            Text("Create an agent".localized).font(.headline)
                             Spacer()
                             Image(systemName: "arrow.right").font(.subheadline)
                         }.foregroundStyle(accent).padding(18).modifier(DetailSurface())
@@ -30,9 +30,9 @@ struct AgentsView: View {
                 }
                 if store.isDemo { DemoBadge() }
             }.padding(22).frame(maxWidth: 1100).frame(maxWidth: .infinity)
-        }.background(Theme.canvas).navigationTitle("Agents")
+        }.background(Theme.canvas).navigationTitle("Agents".localized)
             .searchable(text: $search, prompt: "Find an agent")
-            .toolbar { Button { create = true } label: { Image(systemName: "plus") }.accessibilityLabel("Create agent") }
+            .toolbar { Button { create = true } label: { Image(systemName: "plus") }.accessibilityLabel("Create agent".localized) }
             .refreshable { await store.reload() }
             .sheet(isPresented: $create, onDismiss: { Task { await store.reload() } }) {
                 if let op = SchemaCatalog.shared.operation("/bots", "POST") { SchemaEditor(title: "Create an agent", path: "/bots", operation: op) }
@@ -45,7 +45,7 @@ struct AgentCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack(alignment: .center, spacing: 14) {
-                AgentAvatar(name: bot.title, avatarURL: bot.value["avatar_url"].string, size: 52)
+                AgentAvatar(name: bot.title, avatarURL: bot.value.avatarURL, size: 52)
                 VStack(alignment: .leading, spacing: 6) {
                     Text(bot.title).font(.title2.weight(.bold))
                     StatusIndicator(text: bot.value["is_active"].bool ? "Active" : "Paused", color: bot.value["is_active"].bool ? .green : .secondary)
@@ -57,7 +57,7 @@ struct AgentCard: View {
             }
             Divider()
             HStack {
-                Label("Workspace & tools", systemImage: "shippingbox")
+                Label("Workspace & tools".localized, systemImage: "shippingbox")
                 Spacer()
                 Image(systemName: "arrow.up.right").fontWeight(.semibold)
             }.font(.caption).foregroundStyle(.secondary)
@@ -73,55 +73,67 @@ struct AgentDetailView: View {
     @State private var edit = false
     @State private var delete = false
     @State private var error: String?
+    @State private var selectedTool: WorkspaceTool?
     private var current: Record { store.bots.first { $0.id == bot.id } ?? bot }
     private var base: String { "/bots/\(bot.id.pathComponent)" }
     private var manage: Bool { current.value["current_user_permissions"].array.contains("manage") || store.canAdmin }
     var body: some View {
         List {
             Section {
-                VStack(alignment: .leading, spacing: 15) {
-                    HStack { AgentAvatar(name: current.title, avatarURL: current.value["avatar_url"].string, size: 72); Spacer(); StatusIndicator(text: current.value["is_active"].bool ? "Active" : "Paused", color: current.value["is_active"].bool ? .green : .secondary) }
-                    Text(current.title).font(.largeTitle.weight(.bold))
-                    Text(current.value["metadata"]["description"].string.nonEmpty ?? "A dedicated workspace, tools, and memories. All yours.").foregroundStyle(.secondary)
-                }.padding(.vertical, 8)
+                VStack(alignment: .leading, spacing: 16) {
+                    HStack(spacing: 14) {
+                        AgentAvatar(name: current.title, avatarURL: current.value.avatarURL, size: 56)
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text(current.title).font(.title2.bold())
+                            StatusIndicator(text: current.value["is_active"].bool ? "Active" : "Paused", color: current.value["is_active"].bool ? .green : .secondary)
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    if let description = current.value["metadata"]["description"].string.nonEmpty {
+                        Text(description).font(.subheadline).foregroundStyle(.secondary)
+                    }
+                    Divider()
+                    WorkspaceShortcuts(selection: $selectedTool)
+                }.padding(.vertical, 4)
             }
-            Section("Workspace") {
-                NavigationLink { WorkspaceView(botID: bot.id, name: current.title) } label: { Label("Files, terminal & desktop", systemImage: "desktopcomputer") }
+            Section {
                 ResourceLink(title: "Conversations", icon: "bubble.left.and.bubble.right", spec: .bot(bot.id, "sessions", title: "Conversations", detail: "/bots/{bot_id}/sessions/{session_id}"))
                 ResourceLink(title: "Memories", icon: "brain", spec: .memory(bot.id))
                 ResourceLink(title: "Schedules", icon: "clock", spec: .schedules(bot.id))
             }
             if manage {
-                Section("Configuration") {
-                    NavigationLink { SettingsDocumentView(title: "Agent settings", path: base + "/settings", template: "/bots/{bot_id}/settings") } label: { Label("Model & behavior", systemImage: "slider.horizontal.3") }
-                    ResourceLink(title: "Agent runtimes", icon: "cpu", spec: .bot(bot.id, "agents", title: "Agent runtimes"))
-                    NavigationLink { ChannelsView(botID: bot.id) } label: { Label("Channels", systemImage: "antenna.radiowaves.left.and.right") }
-                    ResourceLink(title: "MCP connections", icon: "point.3.connected.trianglepath.dotted", spec: .mcp(bot.id))
+                Section("Settings".localized) {
+                    NavigationLink { SettingsDocumentView(title: "Agent settings", path: base + "/settings", template: "/bots/{bot_id}/settings") } label: { Label("Model & behavior".localized, systemImage: "slider.horizontal.3") }
+                    ResourceLink(title: "Agents", icon: "cpu", spec: .bot(bot.id, "agents", title: "Agent runtimes"))
+                    NavigationLink { ChannelsView(botID: bot.id) } label: { Label("Channels".localized, systemImage: "antenna.radiowaves.left.and.right") }
+                    ResourceLink(title: "Connected tools", icon: "point.3.connected.trianglepath.dotted", spec: .mcp(bot.id))
                     ResourceLink(title: "Skills", icon: "sparkles", spec: .skills(bot.id))
                     ResourceLink(title: "Apps", icon: "square.stack.3d.up", spec: .apps(bot.id))
-                    ResourceLink(title: "Email bindings", icon: "envelope", spec: .bot(bot.id, "email-bindings", title: "Email bindings"))
+                    ResourceLink(title: "Email accounts", icon: "envelope", spec: .bot(bot.id, "email-bindings", title: "Email bindings"))
                     ResourceLink(title: "Workspace access", icon: "person.2", spec: .bot(bot.id, "user-access", title: "Workspace access", detail: "/bots/{bot_id}/user-access/{grant_id}"))
                 }
             }
-            Section("Insights") {
-                NavigationLink("Health checks", systemImage: "heart.text.clipboard") { ReadOnlyDocumentView(title: "Health checks", path: base + "/checks") }
-                NavigationLink("Token usage", systemImage: "chart.bar") { ReadOnlyDocumentView(title: "Token usage", path: base + "/token-usage") }
-                NavigationLink("Schedule history", systemImage: "clock.arrow.circlepath") { ReadOnlyDocumentView(title: "Schedule history", path: base + "/schedule/logs") }
-                NavigationLink("Compaction history", systemImage: "archivebox") { ReadOnlyDocumentView(title: "Compaction history", path: base + "/compaction/logs") }
+            Section("Insights".localized) {
+                NavigationLink("Health checks".localized, systemImage: "heart.text.clipboard") { ReadOnlyDocumentView(title: "Health checks", path: base + "/checks") }
+                NavigationLink("Token usage".localized, systemImage: "chart.bar") { ReadOnlyDocumentView(title: "Token usage", path: base + "/token-usage") }
+                NavigationLink("Schedule history".localized, systemImage: "clock.arrow.circlepath") { ReadOnlyDocumentView(title: "Schedule history", path: base + "/schedule/logs") }
+                NavigationLink("Compaction history".localized, systemImage: "archivebox") { ReadOnlyDocumentView(title: "Compaction history", path: base + "/compaction/logs") }
             }
             if manage {
                 Section {
-                    NavigationLink("Backups", systemImage: "externaldrive") { BackupView(botID: bot.id) }
-                    NavigationLink("Advanced controls", systemImage: "wrench.and.screwdriver") { OperationBrowser(prefix: "/bots/{bot_id}", substitutions: ["bot_id": bot.id, "id": bot.id]) }
-                    Button(current.value["is_active"].bool ? "Pause agent" : "Resume agent") { Task { await toggle() } }
-                    Button("Delete agent", role: .destructive) { delete = true }
+                    NavigationLink("Backups".localized, systemImage: "externaldrive") { BackupView(botID: bot.id) }
+                    NavigationLink { WorkspaceView(botID: bot.id, name: current.title) } label: { Label("Workspace settings".localized, systemImage: "shippingbox") }
+                    NavigationLink("Advanced controls".localized, systemImage: "wrench.and.screwdriver") { OperationBrowser(prefix: "/bots/{bot_id}", substitutions: ["bot_id": bot.id, "id": bot.id]) }
+                    Button(current.value["is_active"].bool ? "Pause agent".localized : "Resume agent".localized) { Task { await toggle() } }
+                    Button("Delete agent".localized, role: .destructive) { delete = true }
                 }
             }
             if let error { ErrorBanner(message: error) }
         }.navigationTitle(current.title).navigationBarTitleDisplayMode(.inline)
-            .toolbar { if manage { Button("Edit") { edit = true } } }
+            .navigationDestination(item: $selectedTool) { tool in WorkspaceToolDestination(tool: tool, botID: bot.id) }
+            .toolbar { if manage { Button("Edit".localized) { edit = true } } }
             .sheet(isPresented: $edit, onDismiss: { Task { await store.reload() } }) { if let op = SchemaCatalog.shared.operation("/bots/{id}", "PUT") { SchemaEditor(title: "Edit agent", path: base, operation: op, initial: current.value) } }
-            .confirmationDialog("Delete \(current.title)?", isPresented: $delete, titleVisibility: .visible) { Button("Delete agent", role: .destructive) { Task { do { _ = try await store.api?.call(base, method: "DELETE"); await store.reload(); dismiss() } catch { self.error = error.localizedDescription } } } } message: { Text("This permanently removes the agent and its associated data. Export a backup first if needed.") }
+            .alert(AppLocalization.format("Delete %@?", current.title), isPresented: $delete) { Button("Delete agent".localized, role: .destructive) { Task { do { _ = try await store.api?.call(base, method: "DELETE"); await store.reload(); dismiss() } catch { self.error = error.localizedDescription } } } } message: { Text("This permanently removes the agent and its associated data. Export a backup first if needed.".localized) }
     }
     func toggle() async { do { _ = try await store.api?.call(base, method: "PUT", body: ["is_active": .bool(!current.value["is_active"].bool)]); await store.reload() } catch { self.error = error.localizedDescription } }
 }
@@ -136,8 +148,8 @@ struct SettingsDocumentView: View {
     @State private var edit = false
     var body: some View {
         List { if !value.isNull { JSONDetails(value: value) }; if let error { ErrorBanner(message: error) { Task { await load() } } } }
-            .navigationTitle(title).navigationBarTitleDisplayMode(.inline)
-            .toolbar { Button("Edit") { edit = true }.disabled(value.isNull) }
+            .navigationTitle(title.localized).navigationBarTitleDisplayMode(.inline)
+            .toolbar { Button("Edit".localized) { edit = true }.disabled(value.isNull) }
             .task { await load() }.refreshable { await load() }
             .sheet(isPresented: $edit, onDismiss: { Task { await load() } }) {
                 if let op = SchemaCatalog.shared.operation(template, "PUT") { SchemaEditor(title: title, path: path, operation: op, initial: value) }
@@ -153,13 +165,13 @@ struct ChannelsView: View {
     @State private var error: String?
     var body: some View {
         List {
-            Section { Text("Connect your agent to the places you already talk. Configuration fields are defined by each channel adapter.").foregroundStyle(.secondary).font(.subheadline) }
+            Section { Text("Connect your agent to the places you already talk. Configuration fields are defined by each channel adapter.".localized).foregroundStyle(.secondary).font(.subheadline) }
             ForEach(channels) { channel in
                 let platform = channel.value.text("type", "platform", "id")
                 NavigationLink(channel.title) { ChannelDetailView(botID: botID, platform: platform, metadata: channel.value) }
             }
             if let error { ErrorBanner(message: error) }
-        }.navigationTitle("Channels").task { do { channels = try await store.api?.call("/channels").items.map(Record.init) ?? [] } catch { self.error = error.localizedDescription } }
+        }.navigationTitle("Channels".localized).task { do { channels = try await store.api?.call("/channels").items.map(Record.init) ?? [] } catch { self.error = error.localizedDescription } }
     }
 }
 
@@ -174,10 +186,10 @@ struct ChannelDetailView: View {
     var path: String { "/bots/\(botID.pathComponent)/channel/\(platform.pathComponent)" }
     var body: some View {
         List {
-            Section("Channel") { JSONDetails(value: metadata) }
-            if !config.object.isEmpty { Section("Configuration") { JSONDetails(value: config) } }
+            Section("Channel".localized) { JSONDetails(value: metadata) }
+            if !config.object.isEmpty { Section("Configuration".localized) { JSONDetails(value: config) } }
             if let error { ErrorBanner(message: error) }
-            Section { Button("Configure channel") { edit = true }; OperationButton(title: "Enable or disable", path: path + "/status", template: "/bots/{id}/channel/{platform}/status", method: "PATCH") }
+            Section { Button("Configure channel".localized) { edit = true }; OperationButton(title: "Enable or disable", path: path + "/status", template: "/bots/{id}/channel/{platform}/status", method: "PATCH") }
         }.navigationTitle(platform.fieldLabel).task { await load() }
             .sheet(isPresented: $edit, onDismiss: { Task { await load() } }) { ChannelConfigEditor(path: path, platform: platform, metadata: metadata, initial: config) }
     }
@@ -199,13 +211,13 @@ struct ChannelConfigEditor: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section { Toggle("Enabled", isOn: Binding(get: { !disabled }, set: { disabled = !$0 })) }
-                Section("Connection") {
+                Section { Toggle("Enabled".localized, isOn: Binding(get: { !disabled }, set: { disabled = !$0 })) }
+                Section("Connection".localized) {
                     if fields.isEmpty { JSONInput(value: $credentials) }
                     ForEach(fields, id: \.self) { key in
                         let field = metadata["config_schema"]["fields"][key]
                         if field["type"] == "secret" {
-                            SecureField(field["title"].string.nonEmpty ?? key.fieldLabel, text: Binding(get: { credentials[key].string }, set: { credentials[key] = .string($0) })).textInputAutocapitalization(.never).autocorrectionDisabled()
+                            SecureField(field["title"].string.nonEmpty ?? key.fieldLabel.localized, text: Binding(get: { credentials[key].string }, set: { credentials[key] = .string($0) })).textInputAutocapitalization(.never).autocorrectionDisabled()
                         } else {
                             SchemaField(name: key, schema: converted(field), required: field["required"].bool, value: Binding(get: { credentials[key] }, set: { credentials[key] = $0 }))
                         }
@@ -213,7 +225,7 @@ struct ChannelConfigEditor: View {
                 }
                 if let error { ErrorBanner(message: error) }
             }.navigationTitle(platform.fieldLabel).navigationBarTitleDisplayMode(.inline)
-                .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }; ToolbarItem(placement: .confirmationAction) { Button("Save") { Task { await save() } }.disabled(busy) } }
+                .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel".localized) { dismiss() } }; ToolbarItem(placement: .confirmationAction) { Button("Save".localized) { Task { await save() } }.disabled(busy) } }
                 .onAppear { credentials = initial["credentials"].isNull ? [:] : initial["credentials"]; disabled = initial["disabled"].bool }
         }
     }
@@ -223,7 +235,7 @@ struct ChannelConfigEditor: View {
         do {
             for key in fields {
                 let field = metadata["config_schema"]["fields"][key]
-                if field["required"].bool && (credentials[key].isNull || credentials[key] == "") { throw ClientError.message("\(key.fieldLabel) is required.") }
+                if field["required"].bool && (credentials[key].isNull || credentials[key] == "") { throw ClientError.message(AppLocalization.format("%@ is required.", key.fieldLabel.localized)) }
                 if field["type"] != "secret" { try SchemaCatalog.shared.validate(credentials[key], schema: converted(field), name: key) }
             }
             _ = try await store.api?.call(path, method: "PUT", body: ["credentials": credentials, "disabled": .bool(disabled)])

@@ -56,7 +56,7 @@ Screenshots from the passing UI run:
 ## Bot and workspace identities — 17 September 2026
 
 - Bot avatars now use the server's `avatar_url` throughout chat, agent details, library, and the toolbar dropdown. The official workspace picker and signed-in workspace identity use the team's `avatar_url`; user profile images are also displayed.
-- Images load without API credentials, are size-limited, downsampled off the main actor, and cached in memory. Absolute HTTP(S), server-relative, and base64 raster image URLs are supported. Missing or invalid images fall back to initials or a workspace symbol.
+- Public images load without API credentials. Private images use credentials only on the exact server origin, with redirects blocked. Image reads are size-limited; raster images are downsampled off the main actor and cached in memory. HTTP(S), server-relative, and data URLs are supported, including SVG artwork rendered with scripts and network access disabled. Missing or invalid images fall back to initials or a workspace symbol.
 - Reworked the main screens around identity, compact metadata, stronger typography, and quieter surfaces, using Flighty's information hierarchy as a visual reference. Removed the promotional headings and name-based fake avatars. The user's appearance and accent settings still apply.
 - iPhone 17 Pro / iOS 26.5: **23 tests passed**, zero failures (`Test-Homem-2026.09.17_19-53-06-+0900.xcresult`), covering image decoding, URL resolution, official sign-in, dropdown selection, first-message sending, deletion cancellation, workspace files, and Dark/Rose persistence. Screenshots of both anchored dropdowns, chat setup, the chat list, agents, and dark mode were exported and inspected.
 - iPad (A16): the new-chat/dropdown/keyboard flow and 16 core/sign-in checks passed in `Test-Homem-2026.09.17_19-55-52-+0900.xcresult`. The iPad floating-tab accessibility selector was corrected for the theme test; the final theme and valid/invalid image checks both passed in `Test-Homem-2026.09.17_19-57-33-+0900.xcresult`.
@@ -68,6 +68,14 @@ Screenshots from the passing UI run:
 - All three final iPad flows (chat/workspace files, new chat/dropdowns/keyboard, and Dark/Rose persistence) passed in `Test-Homem-2026.09.17_20-08-14-+0900.xcresult`. Workspace-tool and keyboard-visible dark screenshots were inspected.
 - Updated chat, agent, composer, and dropdown screenshots were exported and visually inspected, including Dark/Rose. Demo screenshots show the neutral fallback identities; server-configured images are used when present.
 
+## Compact activity, workspace access, and localization — 17 September 2026
+
+- Agent details place the name beside the avatar and expose Files, Terminal, and Desktop directly. Consecutive tool calls collapse into a single compact activity row; approvals remain visible. Private same-origin and SVG avatars are supported with scoped credentials and isolated rendering.
+- L10n-swift 5.10.3 powers app-owned copy in Simplified Chinese, Spanish, and Japanese. The catalog check validates 431 strings across app and permission catalogs, including format placeholders. All three locale flows, compact activity, and Dark/Rose appearance were visually inspected on iPhone and iPad.
+- All 11 iPhone UI tests passed in `Test-Homem-2026.09.17_21-24-14-+0900.xcresult`; its three wire integration tests also passed. A localization assertion was corrected to distinguish a translated UI label from a user-authored agent name.
+- Final iPad run `Test-Homem-2026.09.17_21-28-34-+0900.xcresult`: **32 tests passed, zero failures** (27 core/network/sign-in/presentation/desktop checks and five UI flows). The standalone HTTP/SSE and WebSocket wire smoke checks and Cloud preflight passed.
+- Desktop startup now prepares legacy hosted workspaces, polls actual readiness, allows cold-start negotiation, cleans up old sessions, and provides recovery for connection or first-frame timeouts. A real local WebRTC peer verifies native offer/answer negotiation, receipt of a remote video track, input mapping, and session cleanup. The authenticated official web desktop rendered successfully during inspection. Physical-device native video rendering against the hosted server remains unverified; the local peer test does not generate video frames.
+
 ## Reproduce
 
 Run `bash scripts/test.sh` from the project root, setting `HOMEM_TEST_DESTINATION` to an installed iOS simulator if needed. This starts the loopback fixture and runs the XCTest targets. Result bundles are local build artifacts and are excluded from source control.
@@ -76,7 +84,7 @@ For a simulator-independent transport check on the Mac, start `python3 scripts/f
 
 ## Verification limits
 
-- No authenticated Memoh account, model provider, container runtime credentials, or OAuth registration was supplied. The official public login and deployed client were inspected. Local fixture results establish client transport behavior, not end-to-end compatibility with every deployment.
+- Native production account, model provider, container runtime credentials, and OAuth registration were not supplied to the app tests. The official public login, deployed client, and signed-in browser desktop were inspected. Local fixture results establish client transport behavior, not end-to-end compatibility with every deployment.
 - An intermediate expanded simulator run became unresponsive during UI automation and was stopped. Its wire tests had skipped after a two-second fixture startup timeout. The subsequent final core run used a longer allowance and passed both wire tests without skips. The additional onboarding screenshot test subsequently passed in Xcode Cloud Build 1.
 - iPad (A16) / iOS 26.5: new-chat/run-location/keyboard and delete-confirmation tests passed in `Test-Homem-2026.09.17_17-15-00-+0900.xcresult`; screenshots were inspected. Other iPad feature screens remain outside this focused visual check.
 - Xcode Cloud signing and internal TestFlight distribution are verified. Physical-device installation, public App Store release, accessibility audit, and the oldest supported OS remain release checks.

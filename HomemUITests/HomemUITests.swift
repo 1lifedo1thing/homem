@@ -29,7 +29,7 @@ final class HomemUITests: XCTestCase {
     }
     @MainActor func testOnboardingAndScreenshots() throws {
         let app = XCUIApplication(); app.launchArguments = ["--ui-onboarding"]; app.launch()
-        XCTAssertTrue(app.staticTexts["Your agents.\nRight at home."].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["Memoh, on your iPhone."].waitForExistence(timeout: 10))
         capture(app, "Onboarding")
         let demo = app.buttons["exploreDemo"]
         if !demo.isHittable { app.swipeUp() }
@@ -113,6 +113,49 @@ final class HomemUITests: XCTestCase {
         app.buttons["appearancePicker"].tap(); app.buttons["System"].tap()
         app.buttons["accentPicker"].tap(); app.buttons["System"].tap()
     }
+    @MainActor func testChineseLocalization() throws { try localizedFlow("zh-Hans", tabs: ["聊天", "智能体", "资料库", "设置"], files: "文件", desktop: "桌面", newChat: "新聊天", signIn: "登录 Memoh", email: "邮箱地址") }
+    @MainActor func testSpanishLocalization() throws { try localizedFlow("es", tabs: ["Chats", "Agentes", "Biblioteca", "Ajustes"], files: "Archivos", desktop: "Escritorio", newChat: "Nuevo chat", signIn: "Iniciar sesión en Memoh", email: "Correo electrónico") }
+    @MainActor func testJapaneseLocalization() throws { try localizedFlow("ja", tabs: ["チャット", "エージェント", "ライブラリ", "設定"], files: "ファイル", desktop: "デスクトップ", newChat: "新しいチャット", signIn: "Memohにログイン", email: "メールアドレス") }
+    @MainActor private func localizedFlow(_ language: String, tabs: [String], files: String, desktop: String, newChat: String, signIn: String, email: String) throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["--demo", "-AppleLanguages", "(\(language))", "-AppleLocale", language]
+        app.launch()
+        XCTAssertTrue(app.staticTexts["A place for your next idea"].waitForExistence(timeout: 10))
+        selectTab(tabs[1], in: app)
+        app.staticTexts["Atlas"].firstMatch.tap()
+        XCTAssertTrue(app.buttons["workspaceTool_files"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.buttons["workspaceTool_files"].label, files)
+        XCTAssertEqual(app.buttons["workspaceTool_desktop"].label, desktop)
+        capture(app, "\(language) agent details")
+        app.buttons["workspaceTool_desktop"].tap()
+        XCTAssertTrue(app.navigationBars[desktop].waitForExistence(timeout: 5))
+        selectTab(tabs[0], in: app)
+        app.buttons["newConversation"].tap()
+        XCTAssertTrue(app.navigationBars[newChat].waitForExistence(timeout: 5))
+        capture(app, "\(language) new chat")
+        app.terminate()
+        app.launchArguments = ["--ui-onboarding", "-AppleLanguages", "(\(language))", "-AppleLocale", language]
+        app.launch()
+        let login = app.buttons["officialSignIn"]
+        XCTAssertTrue(login.waitForExistence(timeout: 10))
+        XCTAssertEqual(login.label, signIn)
+        login.tap()
+        XCTAssertTrue(app.textFields["officialEmail"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.textFields["officialEmail"].placeholderValue, email)
+        capture(app, "\(language) email sign-in")
+    }
+    @MainActor func testCompactToolActivity() throws {
+        let app = XCUIApplication(); app.launchArguments = ["--demo", "--ui-tool-activity", "-AppleLanguages", "(en)"]; app.launch()
+        app.staticTexts["A place for your next idea"].tap()
+        let activity = app.buttons["toolActivity"]
+        XCTAssertTrue(activity.waitForExistence(timeout: 5))
+        XCTAssertTrue(activity.label.contains("3 actions"))
+        XCTAssertFalse(app.staticTexts["update_schedule"].exists)
+        capture(app, "Compact activity summary")
+        activity.tap()
+        XCTAssertTrue(app.staticTexts["Schedule"].waitForExistence(timeout: 5))
+        capture(app, "Expanded activity")
+    }
     @MainActor private func selectTab(_ name: String, in app: XCUIApplication) {
         let compactTab = app.tabBars.buttons[name]
         if compactTab.exists { compactTab.tap() }
@@ -134,7 +177,7 @@ final class HomemUITests: XCTestCase {
         XCTAssertTrue(app.buttons["createAgent"].waitForExistence(timeout: 5))
         let agents = XCTAttachment(screenshot: app.screenshot()); agents.name = "Agents"; agents.lifetime = .keepAlways; add(agents)
         app.staticTexts["Atlas"].firstMatch.tap()
-        app.buttons["Files, terminal & desktop"].tap()
+        XCTAssertFalse(app.staticTexts["A dedicated workspace, tools, and memories. All yours."].exists)
         capture(app, "Workspace tools")
         app.buttons["Files"].tap()
         XCTAssertTrue(app.staticTexts["AGENTS.md"].waitForExistence(timeout: 5))

@@ -27,3 +27,7 @@ Keep the platform's behavior. The agent selector is a toolbar-anchored popover w
 | Selection | User's accent, checkmark, and accessibility value |
 
 Use these patterns across future screens. Verify light and dark appearance, long names, keyboard-visible composition, and iPhone/iPad layouts with actual screen captures before release.
+
+Agent detail places the name beside its configured avatar and Files, Terminal, and Desktop directly beneath it. Show an agent description only when the server provides one. Consecutive tool calls share one compact activity disclosure; use plain-language action labels and reveal technical arguments only under Details. Pending approvals and questions remain visible when activity is collapsed.
+
+App-owned copy is localized through L10n-swift; keep names and user content intact. See [localization guidance](LOCALIZATION.md).

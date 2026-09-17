@@ -137,7 +137,7 @@ struct RuntimeState {
         }
     }
     private func write(_ value: JSONValue) async throws {
-        guard let socket else { throw ClientError.message("The chat connection is not ready.") }
+        guard let socket else { throw ClientError.message("The chat connection is not ready.".localized) }
         try await socket.send(.string(String(data: try value.encoded, encoding: .utf8)!))
     }
     func reliableSend(_ value: JSONValue) async throws {

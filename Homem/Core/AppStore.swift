@@ -6,7 +6,7 @@ import Observation
     var bots: [Record] = []
     var profile: JSONValue = .null
     var workspace: JSONValue = .null
-    var workspaceName: String { workspace.text("name", "slug").nonEmpty ?? (isDemo ? "Demo workspace" : api?.isOfficial == true ? "Memoh workspace" : api?.baseURL.host ?? "Workspace") }
+    var workspaceName: String { workspace.text("name", "slug").nonEmpty ?? (isDemo ? "Demo workspace".localized : api?.isOfficial == true ? "Memoh workspace".localized : api?.baseURL.host ?? "Workspace".localized) }
     var error: String?
     var loading = false
     var selectedBotID: String = ""
@@ -26,6 +26,14 @@ import Observation
     func enterDemo() {
         workspace = .null
         api = APIClient(baseURL: URL(string: "https://demo.invalid/api")!, isDemo: true)
+        if ProcessInfo.processInfo.arguments.contains("--ui-tool-activity") {
+            api!.demo.collections["messages/welcome"] = [["turn_id": "tools", "role": "assistant", "messages": [
+                ["id": 1, "type": "tool", "name": "read_file", "input": ["path": "/data/notes.txt"], "output": "Read notes."],
+                ["id": 2, "type": "tool", "name": "web_search", "input": ["query": "weather"], "output": "Found results."],
+                ["id": 3, "type": "tool", "name": "update_schedule", "input": ["name": "Morning"], "output": "Schedule updated."],
+                ["id": 4, "type": "text", "content": "Your schedule is up to date."]
+            ]]]
+        }
         bots = api!.demo.collections["/bots", default: []].map(Record.init)
         profile = api!.demo.documents["/users/me"] ?? .null
         selectedBotID = bots.first?.id ?? ""
@@ -68,7 +76,7 @@ import Observation
         let user = try await client.call("/users/me")
         let botValue = try await client.call("/bots")
         let saved = OfficialSession(cookies: client.session.configuration.httpCookieStorage?.cookies ?? [], teamID: teamID)
-        guard !saved.validCookies.isEmpty else { throw ClientError.message("Sign in to Memoh again to continue.") }
+        guard !saved.validCookies.isEmpty else { throw ClientError.message("Sign in to Memoh again to continue.".localized) }
         try Task.checkCancellation()
         try saved.save()
         client.unauthorized = false

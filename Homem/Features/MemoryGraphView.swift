@@ -12,8 +12,8 @@ struct MemoryGraphView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                Text("Connected ideas").font(.title2.bold())
-                Text("\(nodes.count) topics · \(graph["edges"].array.count) relationships").font(.subheadline).foregroundStyle(.secondary)
+                Text("Connected ideas".localized).font(.title2.bold())
+                Text(AppLocalization.format("%lld topics · %lld relationships", nodes.count, graph["edges"].array.count)).font(.subheadline).foregroundStyle(.secondary)
                 if let error { ErrorBanner(message: error) }
                 if !nodes.isEmpty {
                     GeometryReader { geometry in
@@ -37,9 +37,9 @@ struct MemoryGraphView: View {
                     Button { selected = node } label: { HStack { Image(systemName: "circle.hexagongrid").foregroundStyle(accent); VStack(alignment: .leading) { Text(node.text("label", "subject", "topic", "id")).font(.headline); Text(node["memory"].string).font(.caption).foregroundStyle(.secondary).lineLimit(2) }; Spacer(); Text(node["count"].scalar).font(.caption).foregroundStyle(.secondary) }.padding() }.buttonStyle(.plain)
                 }
             }.padding(22)
-        }.background(Color(.systemGroupedBackground)).navigationTitle("Memory graph").navigationBarTitleDisplayMode(.inline).searchable(text: $search)
+        }.background(Color(.systemGroupedBackground)).navigationTitle("Memory graph".localized).navigationBarTitleDisplayMode(.inline).searchable(text: $search)
             .task { do { graph = try await store.api?.call(path) ?? .null } catch { self.error = error.localizedDescription } }
-            .sheet(isPresented: Binding(get: { selected != nil }, set: { if !$0 { selected = nil } })) { NavigationStack { List { if let selected { JSONDetails(value: selected) } }.navigationTitle("Memory topic").toolbar { Button("Done") { selected = nil } } } }
+            .sheet(isPresented: Binding(get: { selected != nil }, set: { if !$0 { selected = nil } })) { NavigationStack { List { if let selected { JSONDetails(value: selected) } }.navigationTitle("Memory topic".localized).toolbar { Button("Done".localized) { selected = nil } } } }
     }
     func position(_ index: Int, size: CGSize) -> CGPoint {
         let count = min(nodes.count, 60)

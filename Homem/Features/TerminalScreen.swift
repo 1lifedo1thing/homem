@@ -9,9 +9,9 @@ struct TerminalScreen: View {
     var body: some View {
         Group {
             if let api = store.api, !api.isDemo { NativeTerminal(api: api, botID: botID).id(connectionID) }
-            else { EmptyState(title: "A real terminal. Anywhere.", symbol: "terminal", detail: "Connect your Memoh server to open an interactive workspace shell.") }
-        }.navigationTitle("Terminal").navigationBarTitleDisplayMode(.inline)
-            .toolbar { Button { connectionID = UUID() } label: { Image(systemName: "arrow.clockwise") }.accessibilityLabel("Reconnect terminal") }
+            else { EmptyState(title: "Terminal unavailable", symbol: "terminal", detail: "Connect your Memoh server to open an interactive workspace shell.") }
+        }.navigationTitle("Terminal".localized).navigationBarTitleDisplayMode(.inline)
+            .toolbar { Button { connectionID = UUID() } label: { Image(systemName: "arrow.clockwise") }.accessibilityLabel("Reconnect terminal".localized) }
             .onChange(of: scenePhase) { _, phase in if phase == .active { connectionID = UUID() } }
     }
 }
@@ -28,7 +28,7 @@ struct NativeTerminal: UIViewRepresentable {
         terminal.terminalDelegate = context.coordinator
         context.coordinator.terminal = terminal
         context.coordinator.connect()
-        terminal.accessibilityLabel = "Interactive workspace terminal"
+        terminal.accessibilityLabel = "Interactive workspace terminal".localized
         return terminal
     }
     func updateUIView(_ view: TerminalView, context: Context) {}

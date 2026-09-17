@@ -25,6 +25,8 @@ for usage_key in NSCameraUsageDescription NSMicrophoneUsageDescription; do
 done
 echo 'Privacy purpose string preflight passed.'
 
+python3 "$repo_dir/scripts/check-localizations.py"
+
 # SwiftTerm's pinned build tool plugin generates version metadata. Cloud workers
 # cannot display Xcode's interactive plugin approval dialog. This preference is
 # scoped to Apple's disposable worker; never change the local developer machine.

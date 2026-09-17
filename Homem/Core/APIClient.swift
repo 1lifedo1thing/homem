@@ -6,9 +6,9 @@ enum ClientError: LocalizedError {
     case invalidURL, http(Int, String), invalidResponse, message(String)
     var errorDescription: String? {
         switch self {
-        case .invalidURL: return "Enter a complete http:// or https:// API address without credentials, query, or fragment."
+        case .invalidURL: return "Enter a complete http:// or https:// API address without credentials, query, or fragment.".localized
         case .http(let status, let message): return "\(message) (HTTP \(status))"
-        case .invalidResponse: return "The server returned an unexpected response. Check the API base address."
+        case .invalidResponse: return "The server returned an unexpected response. Check the API base address.".localized
         case .message(let s): return s
         }
     }
@@ -101,6 +101,16 @@ final class SafeRedirectDelegate: NSObject, URLSessionTaskDelegate, @unchecked S
         if let body { r.httpBody = try body.encoded; r.setValue("application/json", forHTTPHeaderField: "Content-Type") }
         return r
     }
+    /// Private avatars need the same sign-in as the API. Never send it to another origin.
+    func avatarRequest(_ url: URL) throws -> URLRequest? {
+        let origin = isOfficial ? OfficialServer.origin : baseURL
+        guard url.scheme == origin.scheme, url.host == origin.host, url.port == origin.port,
+              url.user == nil, url.password == nil else { return nil }
+        var request = try self.request("/users/me")
+        request.url = url
+        request.setValue("image/*", forHTTPHeaderField: "Accept")
+        return request
+    }
     func platformCall(_ path: String, method: String = "GET", body: JSONValue? = nil) async throws -> JSONValue {
         guard isOfficial else { throw ClientError.invalidURL }
         let data = try await perform(request(at: OfficialServer.platformURL, path: path, method: method, query: [:], body: body, includeTeam: path == "/ws-tickets"), retry: false)
@@ -108,7 +118,7 @@ final class SafeRedirectDelegate: NSObject, URLSessionTaskDelegate, @unchecked S
         return try JSONDecoder().decode(JSONValue.self, from: data)
     }
     func call(_ path: String, method: String = "GET", query: [String: String] = [:], body: JSONValue? = nil) async throws -> JSONValue {
-        guard !signedOut else { throw ClientError.message("This session has signed out.") }
+        guard !signedOut else { throw ClientError.message("This session has signed out.".localized) }
         if isDemo { return try demo.call(path, method: method, query: query, body: body) }
         let data = try await perform(request(path, method: method, query: query, body: body))
         if data.isEmpty { return .object([:]) }
@@ -116,9 +126,9 @@ final class SafeRedirectDelegate: NSObject, URLSessionTaskDelegate, @unchecked S
         return value
     }
     func perform(_ request: URLRequest, retry: Bool = true) async throws -> Data {
-        guard !signedOut else { throw ClientError.message("This session has signed out.") }
+        guard !signedOut else { throw ClientError.message("This session has signed out.".localized) }
         let (data, response) = try await session.data(for: request)
-        guard !signedOut else { throw ClientError.message("This session has signed out.") }
+        guard !signedOut else { throw ClientError.message("This session has signed out.".localized) }
         guard let http = response as? HTTPURLResponse else { throw ClientError.invalidResponse }
         if isOfficial, let url = http.url, url.host == OfficialServer.origin.host, url.scheme == "https" {
             let headers = http.allHeaderFields.reduce(into: [String: String]()) { result, entry in
@@ -143,7 +153,7 @@ final class SafeRedirectDelegate: NSObject, URLSessionTaskDelegate, @unchecked S
                     }
                 }
                 let next = try await refreshTask!.value; refreshTask = nil
-                guard !signedOut else { throw ClientError.message("This session has signed out.") }
+                guard !signedOut else { throw ClientError.message("This session has signed out.".localized) }
                 try Keychain.save(next, account: baseURL.absoluteString); token = next
                 var renewed = request; renewed.setValue("Bearer \(next)", forHTTPHeaderField: "Authorization")
                 return try await perform(renewed, retry: false)
@@ -175,16 +185,16 @@ final class SafeRedirectDelegate: NSObject, URLSessionTaskDelegate, @unchecked S
         let socket = session.webSocketTask(with: r); socket.resume(); return socket
     }
     func streamOperation(_ path: String, method: String, query: [String: String] = [:], body: JSONValue?, onEvent: (JSONValue) -> Void) async throws -> JSONValue {
-        if isDemo { throw ClientError.message("This operation requires a connected Memoh server.") }
+        if isDemo { throw ClientError.message("This operation requires a connected Memoh server.".localized) }
         var request = try request(path, method: method, query: query, body: body)
         request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
         request.timeoutInterval = 1200
-        let config = URLSessionConfiguration.ephemeral
+        let config = session.configuration
         config.timeoutIntervalForRequest = 1200; config.timeoutIntervalForResource = 1800
         let streamingSession = URLSession(configuration: config, delegate: SafeRedirectDelegate(), delegateQueue: nil)
         defer { streamingSession.invalidateAndCancel() }
         let (bytes, response) = try await streamingSession.bytes(for: request)
-        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else { throw ClientError.message("The server rejected the operation. Check your connection and permissions.") }
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else { throw ClientError.message("The server rejected the operation. Check your connection and permissions.".localized) }
         var parser = SSEParser()
         var last: JSONValue = .null
         var completed = false
@@ -197,14 +207,14 @@ final class SafeRedirectDelegate: NSObject, URLSessionTaskDelegate, @unchecked S
                 if ["done", "completed", "complete"].contains(event["type"].string) { completed = true }
             }
         }
-        guard completed else { throw ClientError.message("The operation stream ended before completion. Refresh its status before retrying.") }
+        guard completed else { throw ClientError.message("The operation stream ended before completion. Refresh its status before retrying.".localized) }
         return last
     }
     func upload(path: String, fileURL: URL, destination: String) async throws -> JSONValue {
-        guard !isDemo else { throw ClientError.message("File uploads require a connected Memoh server.") }
+        guard !isDemo else { throw ClientError.message("File uploads require a connected Memoh server.".localized) }
         let access = fileURL.startAccessingSecurityScopedResource(); defer { if access { fileURL.stopAccessingSecurityScopedResource() } }
         let file = try Data(contentsOf: fileURL)
-        guard file.count <= 50 * 1_024 * 1_024 else { throw ClientError.message("Choose a file smaller than 50 MB.") }
+        guard file.count <= 50 * 1_024 * 1_024 else { throw ClientError.message("Choose a file smaller than 50 MB.".localized) }
         let boundary = "Homem-\(UUID().uuidString)"
         var data = Data("--\(boundary)\r\nContent-Disposition: form-data; name=\"path\"\r\n\r\n\(destination)\r\n--\(boundary)\r\nContent-Disposition: form-data; name=\"file\"; filename=\"\(fileURL.lastPathComponent.replacingOccurrences(of: "\"", with: "_").replacingOccurrences(of: "\r", with: "_").replacingOccurrences(of: "\n", with: "_"))\"\r\nContent-Type: application/octet-stream\r\n\r\n".utf8)
         data.append(file); data.append(Data("\r\n--\(boundary)--\r\n".utf8))

@@ -19,21 +19,21 @@ struct AuthorizationView: View {
                 Label(status["has_token"].bool ? "Account connected" : "Connect an account", systemImage: status["has_token"].bool ? "checkmark.shield" : "lock.shield").font(.headline)
                 if !status.isNull { JSONDetails(value: status) }
             }
-            if isMCP { Section("OAuth client (if required)") { TextField("Client ID", text: $clientID).textInputAutocapitalization(.never).autocorrectionDisabled(); SecureField("Client secret", text: $clientSecret) } }
+            if isMCP { Section("OAuth client (if required)".localized) { TextField("Client ID".localized, text: $clientID).textInputAutocapitalization(.never).autocorrectionDisabled(); SecureField("Client secret".localized, text: $clientSecret) } }
             Section {
-                Button("Authorize account") { Task { await authorize() } }.disabled(busy)
-                if let url = URL(string: authorization.text("auth_url", "authorization_url")), !isMCP { Link("Open sign-in page", destination: url) }
+                Button("Authorize account".localized) { Task { await authorize() } }.disabled(busy)
+                if let url = URL(string: authorization.text("auth_url", "authorization_url")), !isMCP { Link("Open sign-in page".localized, destination: url) }
                 let device = authorization["device"].isNull ? status["device"] : authorization["device"]
                 if !device["user_code"].string.isEmpty {
-                    LabeledContent("Device code") { Text(device["user_code"].string).font(.title3.monospaced().bold()).textSelection(.enabled) }
-                    if let url = URL(string: device["verification_uri"].string) { Link("Enter code in browser", destination: url) }
-                    Button("Check device authorization") { Task { await poll() } }.disabled(busy)
+                    LabeledContent("Device code".localized) { Text(device["user_code"].string).font(.title3.monospaced().bold()).textSelection(.enabled) }
+                    if let url = URL(string: device["verification_uri"].string) { Link("Enter code in browser".localized, destination: url) }
+                    Button("Check device authorization".localized) { Task { await poll() } }.disabled(busy)
                 }
-                Button("Refresh status") { Task { await load() } }
+                Button("Refresh status".localized) { Task { await load() } }
             }
             if busy { ProgressView() }
             if let error { ErrorBanner(message: error) }
-        }.navigationTitle("Account authorization").navigationBarTitleDisplayMode(.inline).task { await load() }
+        }.navigationTitle("Account authorization".localized).navigationBarTitleDisplayMode(.inline).task { await load() }
             .onChange(of: scenePhase) { _, phase in if phase == .active { Task { await load() } } }
     }
     func load() async { do { status = try await store.api?.call(path + "/oauth/status") ?? .null; error = nil } catch { self.error = error.localizedDescription } }
@@ -54,7 +54,7 @@ struct AuthorizationView: View {
                 let callback = try await session.start(url: url)
                 let query = URLComponents(url: callback, resolvingAgainstBaseURL: false)?.queryItems ?? []
                 if let reason = query.first(where: { $0.name == "error" })?.value { throw ClientError.message(reason) }
-                guard let code = query.first(where: { $0.name == "code" })?.value, let state = query.first(where: { $0.name == "state" })?.value else { throw ClientError.message("The authorization callback is missing its code or state.") }
+                guard let code = query.first(where: { $0.name == "code" })?.value, let state = query.first(where: { $0.name == "state" })?.value else { throw ClientError.message("The authorization callback is missing its code or state.".localized) }
                 _ = try await api.call(path + "/oauth/exchange", method: "POST", body: ["code": .string(code), "state": .string(state)])
                 clientSecret = ""; await load()
             } else { authorization = try await api.call(path + "/oauth/authorize") }
@@ -73,7 +73,7 @@ struct AuthorizationView: View {
             }
             session.presentationContextProvider = self
             self.session = session
-            if !session.start() { continuation.resume(throwing: ClientError.message("Could not open the authorization browser.")) }
+            if !session.start() { continuation.resume(throwing: ClientError.message("Could not open the authorization browser.".localized)) }
         }
     }
     func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {

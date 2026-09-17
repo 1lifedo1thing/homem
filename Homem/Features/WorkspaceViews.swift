@@ -9,17 +9,16 @@ struct WorkspaceView: View {
     @State private var status: JSONValue = .null
     @State private var error: String?
     @State private var busy = false
-    private enum Tool: String { case files, terminal, desktop }
-    @State private var selectedTool: Tool?
+    @State private var selectedTool: WorkspaceTool?
     var body: some View {
         List {
             Section {
                 VStack(alignment: .leading, spacing: 18) {
                     WorkspaceIdentity()
                     HStack(spacing: 14) {
-                        AgentAvatar(name: name, size: 52, symbol: "shippingbox")
+                        AgentAvatar(name: name, avatarURL: store.bots.first { $0.id == botID }?.value.avatarURL ?? "", size: 52)
                         VStack(alignment: .leading, spacing: 5) {
-                            Eyebrow(text: "AGENT WORKSPACE")
+                            Eyebrow(text: "Workspace")
                             Text(name).font(.title2.bold())
                         }
                         Spacer()
@@ -35,31 +34,21 @@ struct WorkspaceView: View {
                 }.listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
             }.listRowBackground(Color.clear)
 
-            Section("Manage") {
+            Section("Manage".localized) {
                 ResourceLink(title: "Working directories", icon: "folder.badge.gearshape", spec: .bot(botID, "workdirs", title: "Working directories", detail: "/bots/{bot_id}/workdirs/{workdir_id}"))
                 ResourceLink(title: "Snapshots", icon: "camera", spec: .bot(botID, "container/snapshots", title: "Snapshots"))
-                NavigationLink("Dependencies", systemImage: "shippingbox") { DependenciesView(botID: botID) }
-                NavigationLink("Resource metrics", systemImage: "chart.xyaxis.line") { ReadOnlyDocumentView(title: "Resource metrics", path: base + "/container/metrics") }
+                NavigationLink("Dependencies".localized, systemImage: "shippingbox") { DependenciesView(botID: botID) }
+                NavigationLink("Resource metrics".localized, systemImage: "chart.xyaxis.line") { ReadOnlyDocumentView(title: "Resource metrics", path: base + "/container/metrics") }
                 OperationButton(title: "Create workspace", path: base + "/container", template: "/bots/{bot_id}/container", method: "POST")
-                Button("Start workspace") { Task { await action("start") } }.disabled(busy)
-                Button("Stop workspace") { Task { await action("stop") } }.disabled(busy)
+                Button("Start workspace".localized) { Task { await action("start") } }.disabled(busy)
+                Button("Stop workspace".localized) { Task { await action("stop") } }.disabled(busy)
                 OperationButton(title: "Restore snapshot", path: base + "/container/snapshots/rollback", template: "/bots/{bot_id}/container/snapshots/rollback", method: "POST")
             }
             if let error { ErrorBanner(message: error) }
-        }.scrollContentBackground(.hidden).background(Theme.canvas).navigationTitle(name + "’s workspace").navigationBarTitleDisplayMode(.inline).task { await load() }
-            .navigationDestination(item: $selectedTool) { tool in
-                switch tool {
-                case .files: FileBrowserView(botID: botID, path: "/data")
-                case .terminal: TerminalScreen(botID: botID)
-                case .desktop: DesktopScreen(botID: botID)
-                }
-            }
+        }.scrollContentBackground(.hidden).background(Theme.canvas).navigationTitle(AppLocalization.format("%@’s workspace", name)).navigationBarTitleDisplayMode(.inline).task { await load() }
+            .navigationDestination(item: $selectedTool) { tool in WorkspaceToolDestination(tool: tool, botID: botID) }
     }
-    @ViewBuilder private var workspaceTools: some View {
-        Button { selectedTool = .files } label: { WorkspaceToolLabel(title: "Files", symbol: "folder") }.buttonStyle(.plain)
-        Button { selectedTool = .terminal } label: { WorkspaceToolLabel(title: "Terminal", symbol: "terminal") }.buttonStyle(.plain)
-        Button { selectedTool = .desktop } label: { WorkspaceToolLabel(title: "Desktop", symbol: "desktopcomputer") }.buttonStyle(.plain)
-    }
+    private var workspaceTools: some View { WorkspaceShortcuts(selection: $selectedTool) }
     func load() async { do { status = try await store.api?.call(base + "/container") ?? .null; error = nil } catch { self.error = error.localizedDescription } }
     func action(_ action: String) async {
         busy = true; defer { busy = false }
@@ -67,15 +56,43 @@ struct WorkspaceView: View {
     }
 }
 
-private struct WorkspaceToolLabel: View {
-    let title: String
-    let symbol: String
+enum WorkspaceTool: String, Identifiable {
+    case files, terminal, desktop
+    var id: String { rawValue }
+    var title: String { switch self { case .files: "Files"; case .terminal: "Terminal"; case .desktop: "Desktop" } }
+    var symbol: String { switch self { case .files: "folder"; case .terminal: "terminal"; case .desktop: "desktopcomputer" } }
+}
+
+struct WorkspaceShortcuts: View {
+    @Binding var selection: WorkspaceTool?
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Image(systemName: symbol).font(.title3.weight(.medium)).foregroundStyle(.secondary)
-            Text(title).font(.subheadline.weight(.semibold)).foregroundStyle(.primary).fixedSize()
-        }.frame(maxWidth: .infinity, alignment: .leading).padding(16).modifier(DetailSurface())
-            .accessibilityElement(children: .ignore).accessibilityLabel(title)
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 8) { buttons }
+            VStack(spacing: 8) { buttons }
+        }
+    }
+    private var buttons: some View {
+        ForEach([WorkspaceTool.files, .terminal, .desktop]) { tool in
+            Button { selection = tool } label: {
+                VStack(spacing: 8) {
+                    Image(systemName: tool.symbol).font(.title3)
+                    Text(tool.title.localized).font(.subheadline.weight(.medium)).fixedSize()
+                }.frame(maxWidth: .infinity).padding(.vertical, 12).padding(.horizontal, 8)
+                    .contentShape(Rectangle())
+            }.buttonStyle(.plain).accessibilityIdentifier("workspaceTool_" + tool.rawValue)
+        }
+    }
+}
+
+struct WorkspaceToolDestination: View {
+    let tool: WorkspaceTool
+    let botID: String
+    var body: some View {
+        switch tool {
+        case .files: FileBrowserView(botID: botID, path: "/data")
+        case .terminal: TerminalScreen(botID: botID)
+        case .desktop: DesktopScreen(botID: botID)
+        }
     }
 }
 
@@ -107,24 +124,24 @@ struct FileBrowserView: View {
                         Image(systemName: file.value["isDir"].bool ? "folder.fill" : "doc.text").foregroundStyle(file.value["isDir"].bool ? accent : .secondary)
                         VStack(alignment: .leading, spacing: 4) { Text(file.value["name"].string); if !file.value["isDir"].bool { Text(ByteCountFormatter.string(fromByteCount: Int64(file.value["size"].number), countStyle: .file)).font(.caption).foregroundStyle(.secondary) } }
                     }.padding(.vertical, 4)
-                }.contextMenu { Button("Rename", systemImage: "pencil") { rename = file; name = file.value["name"].string }; Button("Delete", systemImage: "trash", role: .destructive) { delete = file } }
+                }.contextMenu { Button("Rename".localized, systemImage: "pencil") { rename = file; name = file.value["name"].string }; Button("Delete".localized, systemImage: "trash", role: .destructive) { delete = file } }
             }
         }.navigationTitle(path == "/data" ? "Files" : (path as NSString).lastPathComponent).navigationBarTitleDisplayMode(.inline)
-            .overlay { if loading { ProgressView() } else if files.isEmpty && error == nil { EmptyState(title: "A blank canvas", symbol: "folder", detail: "Upload a file or create something new.") } }
+            .overlay { if loading { ProgressView() } else if files.isEmpty && error == nil { EmptyState(title: "No files", symbol: "folder", detail: "Upload a file or create something new.") } }
             .toolbar {
                 Menu {
-                    Button("Upload file", systemImage: "square.and.arrow.up") { importFile = true }
-                    Button("New folder", systemImage: "folder.badge.plus") { name = ""; newFolder = true }
-                    Button("New text file", systemImage: "doc.badge.plus") { name = ""; newFile = true }
-                    NavigationLink("Archive & extract", systemImage: "archivebox") { OperationBrowser(prefix: "/bots/{bot_id}/container/fs", substitutions: ["bot_id": botID, "path": path]) }
-                } label: { Image(systemName: "plus") }.accessibilityLabel("File actions")
+                    Button("Upload file".localized, systemImage: "square.and.arrow.up") { importFile = true }
+                    Button("New folder".localized, systemImage: "folder.badge.plus") { name = ""; newFolder = true }
+                    Button("New text file".localized, systemImage: "doc.badge.plus") { name = ""; newFile = true }
+                    NavigationLink("Archive & extract".localized, systemImage: "archivebox") { OperationBrowser(prefix: "/bots/{bot_id}/container/fs", substitutions: ["bot_id": botID, "path": path]) }
+                } label: { Image(systemName: "plus") }.accessibilityLabel("File actions".localized)
             }
             .task { await load() }.refreshable { await load() }
             .fileImporter(isPresented: $importFile, allowedContentTypes: [.data]) { result in Task { do { let url = try result.get(); _ = try await store.api?.upload(path: base + "/upload", fileURL: url, destination: child(url.lastPathComponent)); await load() } catch { self.error = error.localizedDescription } } }
-            .alert("New folder", isPresented: $newFolder) { TextField("Folder name", text: $name); Button("Create") { Task { await operation("mkdir", body: ["path": .string(child(name))]) } }; Button("Cancel", role: .cancel) {} }
-            .alert("New text file", isPresented: $newFile) { TextField("File name", text: $name); Button("Create") { Task { await operation("write", body: ["path": .string(child(name)), "content": ""]) } }; Button("Cancel", role: .cancel) {} }
-            .alert("Rename", isPresented: Binding(get: { rename != nil }, set: { if !$0 { rename = nil } })) { TextField("Name", text: $name); Button("Save") { if let file = rename { Task { await operation("rename", body: ["oldPath": file.value["path"], "newPath": .string(child(name))]) } } }; Button("Cancel", role: .cancel) { rename = nil } }
-            .confirmationDialog("Delete \(delete?.value["name"].string ?? "file")?", isPresented: Binding(get: { delete != nil }, set: { if !$0 { delete = nil } }), titleVisibility: .visible) { Button("Delete", role: .destructive) { if let file = delete { Task { await operation("delete", body: ["path": file.value["path"], "recursive": file.value["isDir"]]) } } } } message: { Text("Folders are deleted with all their contents.") }
+            .alert("New folder".localized, isPresented: $newFolder) { TextField("Folder name".localized, text: $name); Button("Create".localized) { Task { await operation("mkdir", body: ["path": .string(child(name))]) } }; Button("Cancel".localized, role: .cancel) {} }
+            .alert("New text file".localized, isPresented: $newFile) { TextField("File name".localized, text: $name); Button("Create".localized) { Task { await operation("write", body: ["path": .string(child(name)), "content": ""]) } }; Button("Cancel".localized, role: .cancel) {} }
+            .alert("Rename".localized, isPresented: Binding(get: { rename != nil }, set: { if !$0 { rename = nil } })) { TextField("Name".localized, text: $name); Button("Save".localized) { if let file = rename { Task { await operation("rename", body: ["oldPath": file.value["path"], "newPath": .string(child(name))]) } } }; Button("Cancel".localized, role: .cancel) { rename = nil } }
+            .alert(AppLocalization.format("Delete %@?", delete?.value["name"].string ?? "Files".localized), isPresented: Binding(get: { delete != nil }, set: { if !$0 { delete = nil } })) { Button("Delete".localized, role: .destructive) { if let file = delete { Task { await operation("delete", body: ["path": file.value["path"], "recursive": file.value["isDir"]]) } } } } message: { Text("Folders are deleted with all their contents.".localized) }
     }
     func child(_ name: String) -> String { path + (path.hasSuffix("/") ? "" : "/") + name }
     func load() async {
@@ -133,7 +150,7 @@ struct FileBrowserView: View {
     }
     func operation(_ suffix: String, body: JSONValue) async {
         do {
-            if ["write", "mkdir", "rename"].contains(suffix), name.isEmpty || name.contains("/") || [".", ".."].contains(name) { throw ClientError.message("Enter a file or folder name without slashes.") }
+            if ["write", "mkdir", "rename"].contains(suffix), name.isEmpty || name.contains("/") || [".", ".."].contains(name) { throw ClientError.message("Enter a file or folder name without slashes.".localized) }
             _ = try await store.api?.call(base + "/" + suffix, method: "POST", body: body); rename = nil; delete = nil; await load()
         } catch { self.error = error.localizedDescription }
     }
@@ -159,16 +176,16 @@ struct FileEditorView: View {
             if let error { ErrorBanner(message: error).padding() }
             if preview { ScrollView { MarkdownContent(text: text).padding() } }
             else { TextEditor(text: $text).font(.system(.body, design: .monospaced)).autocorrectionDisabled().textInputAutocapitalization(.never).padding(10).disabled(!loaded) }
-            HStack { Text(text != original ? "Unsaved changes" : loaded ? "Saved" : "Loading…"); Spacer(); Text("\(text.utf8.count) bytes") }.font(.caption).foregroundStyle(.secondary).padding(12).background(.bar)
+            HStack { Text((text != original ? "Unsaved changes" : loaded ? "Saved" : "Loading…").localized); Spacer(); Text(ByteCountFormatter.string(fromByteCount: Int64(text.utf8.count), countStyle: .file)) }.font(.caption).foregroundStyle(.secondary).padding(12).background(.bar)
         }.navigationTitle((path as NSString).lastPathComponent).navigationBarTitleDisplayMode(.inline)
             .navigationBarBackButtonHidden(text != original)
-            .toolbar { if text != original { ToolbarItem(placement: .topBarLeading) { Button { discard = true } label: { Label("Files", systemImage: "chevron.left") } } } }
-            .confirmationDialog("Discard unsaved changes?", isPresented: $discard, titleVisibility: .visible) { Button("Discard changes", role: .destructive) { dismiss() } }
+            .toolbar { if text != original { ToolbarItem(placement: .topBarLeading) { Button { discard = true } label: { Label("Files".localized, systemImage: "chevron.left") } } } }
+            .confirmationDialog("Discard unsaved changes?".localized, isPresented: $discard, titleVisibility: .visible) { Button("Discard changes".localized, role: .destructive) { dismiss() } }
             .toolbar {
                 ToolbarItemGroup(placement: .topBarTrailing) {
-                    if path.hasSuffix(".md") { Button { preview.toggle() } label: { Image(systemName: preview ? "pencil" : "eye") }.accessibilityLabel("Toggle preview") }
-                    if let download { ShareLink(item: download) } else { Button { Task { await export() } } label: { Image(systemName: "square.and.arrow.down") }.accessibilityLabel("Download file") }
-                    Button("Save") { Task { await save() } }.disabled(!loaded || text == original || busy)
+                    if path.hasSuffix(".md") { Button { preview.toggle() } label: { Image(systemName: preview ? "pencil" : "eye") }.accessibilityLabel("Toggle preview".localized) }
+                    if let download { ShareLink(item: download) } else { Button { Task { await export() } } label: { Image(systemName: "square.and.arrow.down") }.accessibilityLabel("Download file".localized) }
+                    Button("Save".localized) { Task { await save() } }.disabled(!loaded || text == original || busy)
                 }
             }.task { await load() }
     }
@@ -184,7 +201,7 @@ struct FileEditorView: View {
             if !result["revision"].string.isEmpty { revision = result["revision"].string }
             else {
                 let updated = try await store.api?.call(base + "/read", query: ["path": path])
-                guard updated?["content"].string == savedText else { throw ClientError.message("The file changed on the server after saving. Reopen it before making further edits.") }
+                guard updated?["content"].string == savedText else { throw ClientError.message("The file changed on the server after saving. Reopen it before making further edits.".localized) }
                 revision = updated?["revision"].string ?? revision
             }
             error = nil
@@ -211,13 +228,13 @@ struct DependenciesView: View {
                 NavigationLink(record.title) {
                     List {
                         JSONDetails(value: record.value)
-                        NavigationLink("Manage dependency") { OperationBrowser(prefix: "/bots/{bot_id}/dependencies/{dep_id}", substitutions: ["bot_id": botID, "dep_id": record.id]) }
+                        NavigationLink("Manage dependency".localized) { OperationBrowser(prefix: "/bots/{bot_id}/dependencies/{dep_id}", substitutions: ["bot_id": botID, "dep_id": record.id]) }
                     }.navigationTitle(record.title)
                 }
             }
             OperationButton(title: "Check for updates", path: "/bots/\(botID.pathComponent)/dependencies/check-updates", template: "/bots/{bot_id}/dependencies/check-updates", method: "POST")
             if let error { ErrorBanner(message: error) }
-        }.navigationTitle("Dependencies").task { do { records = try await store.api?.call("/bots/\(botID.pathComponent)/dependencies").items.map(Record.init) ?? [] } catch { self.error = error.localizedDescription } }
+        }.navigationTitle("Dependencies".localized).task { do { records = try await store.api?.call("/bots/\(botID.pathComponent)/dependencies").items.map(Record.init) ?? [] } catch { self.error = error.localizedDescription } }
     }
 }
 
@@ -232,31 +249,31 @@ struct BackupView: View {
     @State private var imported: JSONValue = .null
     var body: some View {
         Form {
-            Section("Export") {
-                Text("Export the agent and its data as a portable backup. A passphrase encrypts sensitive backup content.").foregroundStyle(.secondary)
-                SecureField("Passphrase (optional)", text: $passphrase)
-                Button("Export backup") { Task { await export() } }.disabled(busy)
+            Section("Export".localized) {
+                Text("Export the agent and its data as a portable backup. A passphrase encrypts sensitive backup content.".localized).foregroundStyle(.secondary)
+                SecureField("Passphrase (optional)".localized, text: $passphrase)
+                Button("Export backup".localized) { Task { await export() } }.disabled(busy)
                 if let exported { ShareLink("Save or share backup", item: exported) }
-                NavigationLink("Backup contents") { ReadOnlyDocumentView(title: "Backup contents", path: "/bots/\(botID.pathComponent)/backup/summary") }
+                NavigationLink("Backup contents".localized) { ReadOnlyDocumentView(title: "Backup contents", path: "/bots/\(botID.pathComponent)/backup/summary") }
             }
-            Section("Import") { Text("Import a backup as a new agent.").foregroundStyle(.secondary); Button("Choose backup ZIP") { importPicker = true }.disabled(busy) }
+            Section("Import".localized) { Text("Import a backup as a new agent.".localized).foregroundStyle(.secondary); Button("Choose backup ZIP".localized) { importPicker = true }.disabled(busy) }
             if busy { ProgressView() }
             if let error { ErrorBanner(message: error) }
-            if !imported.isNull { Section("Import result") { JSONDetails(value: imported) } }
-        }.navigationTitle("Backups")
+            if !imported.isNull { Section("Import result".localized) { JSONDetails(value: imported) } }
+        }.navigationTitle("Backups".localized)
             .fileImporter(isPresented: $importPicker, allowedContentTypes: [.zip]) { result in Task { do { let url = try result.get(); try await importBackup(url) } catch { self.error = error.localizedDescription } } }
     }
     func export() async {
         guard let api = store.api else { return }; busy = true; defer { busy = false }
         do {
-            guard !api.isDemo else { throw ClientError.message("Connect a server to export a real backup.") }
+            guard !api.isDemo else { throw ClientError.message("Connect a server to export a real backup.".localized) }
             let data = try await api.perform(api.request("/bots/\(botID.pathComponent)/backup/export", method: "POST", body: ["passphrase": .string(passphrase)]))
             let url = FileManager.default.temporaryDirectory.appendingPathComponent("memoh-\(botID)-\(UUID().uuidString.prefix(8)).zip")
             try data.write(to: url, options: [.atomic, .completeFileProtection]); exported = url; error = nil
         } catch { self.error = error.localizedDescription }
     }
     func importBackup(_ url: URL) async throws {
-        guard let api = store.api, !api.isDemo else { throw ClientError.message("Connect a server to import a backup.") }
+        guard let api = store.api, !api.isDemo else { throw ClientError.message("Connect a server to import a backup.".localized) }
         busy = true; defer { busy = false }
         let access = url.startAccessingSecurityScopedResource(); defer { if access { url.stopAccessingSecurityScopedResource() } }
         let data = try Data(contentsOf: url)

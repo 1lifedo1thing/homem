@@ -14,7 +14,7 @@ import Observation
             try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetoothHFP]); try session.setActive(true)
             let file = FileManager.default.temporaryDirectory.appendingPathComponent("Voice-\(UUID().uuidString).m4a")
             let recorder = try AVAudioRecorder(url: file, settings: [AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: 44100, AVNumberOfChannelsKey: 1, AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue])
-            guard recorder.record(forDuration: 300) else { throw ClientError.message("Could not start recording.") }
+            guard recorder.record(forDuration: 300) else { throw ClientError.message("Could not start recording.".localized) }
             self.recorder = recorder; url = file; recording = true; error = nil
         } catch { self.error = error.localizedDescription }
     }

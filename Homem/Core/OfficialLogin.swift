@@ -21,8 +21,8 @@ import Observation
     var validCode: Bool { code.count == 6 && code.allSatisfy { $0.isASCII && $0.isNumber } }
 
     func sendCode() async throws {
-        guard validEmail else { throw ClientError.message("Enter a valid email address.") }
-        guard Date() >= resendAfter else { throw ClientError.message("Wait before requesting another code.") }
+        guard validEmail else { throw ClientError.message("Enter a valid email address.".localized) }
+        guard Date() >= resendAfter else { throw ClientError.message("Wait before requesting another code.".localized) }
         email = email.trimmingCharacters(in: .whitespacesAndNewlines)
         let language = Locale.preferredLanguages.first?.lowercased() ?? "en"
         let locale = language.hasPrefix("zh") ? "zh-CN" : language.hasPrefix("ja") ? "ja-JP" : "en-US"
@@ -33,7 +33,7 @@ import Observation
         code = ""; error = nil; step = .code
     }
     func verifyCode() async throws {
-        guard validCode else { throw ClientError.message("Enter the six-digit code.") }
+        guard validCode else { throw ClientError.message("Enter the six-digit code.".localized) }
         let response: JSONValue
         if step == .mfa {
             response = try await client.platformCall("/auth/verify-mfa", method: "POST", body: ["mfa_token": .string(mfaToken), "totp_code": .string(code)])
@@ -59,7 +59,7 @@ import Observation
     }
     func useBrowserCookies(_ cookies: [HTTPCookie]) async throws {
         let session = OfficialSession(cookies: cookies)
-        guard !session.validCookies.isEmpty else { throw ClientError.message("Finish signing in at app.memoh.net, then tap Continue in Homem.") }
+        guard !session.validCookies.isEmpty else { throw ClientError.message("Finish signing in at app.memoh.net, then tap Continue in Homem.".localized) }
         client.session.invalidateAndCancel()
         client = APIClient(baseURL: OfficialServer.apiURL, officialSession: session)
         try await loadWorkspaces()

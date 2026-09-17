@@ -37,7 +37,7 @@ struct ResourceLink: View {
     var title: String
     var icon: String
     var spec: ResourceSpec
-    var body: some View { NavigationLink { ResourceListView(spec: spec) } label: { Label(title, systemImage: icon) } }
+    var body: some View { NavigationLink { ResourceListView(spec: spec) } label: { Label(title.localized, systemImage: icon) } }
 }
 
 struct ResourceListView: View {
@@ -66,31 +66,31 @@ struct ResourceListView: View {
                         Spacer(minLength: 0)
                         if !record.value["enabled"].isNull { Image(systemName: record.value["enabled"].bool ? "checkmark.circle.fill" : "pause.circle").foregroundStyle(record.value["enabled"].bool ? .green : .secondary) }
                     }.padding(.vertical, 5)
-                }.swipeActions { if spec.deleteOperation != nil { Button("Delete", role: .destructive) { deletion = record } } }
+                }.swipeActions { if spec.deleteOperation != nil { Button("Delete".localized, role: .destructive) { deletion = record } } }
             }
         }
-        .overlay { if loading && records.isEmpty { ProgressView() } else if records.isEmpty && error == nil { EmptyState(title: "No \(spec.title.lowercased()) yet", symbol: spec.icon, detail: spec.createOperation == nil ? "Pull to refresh your workspace." : "Use the + button to add your first one.") } }
-        .searchable(text: $search, prompt: "Search \(spec.title.lowercased())")
-        .navigationTitle(spec.title)
-        .toolbar { if spec.createOperation != nil { Button { create = true } label: { Image(systemName: "plus") }.accessibilityLabel("Add \(spec.title)") } }
+        .overlay { if loading && records.isEmpty { ProgressView() } else if records.isEmpty && error == nil { EmptyState(title: "No items", symbol: spec.icon, detail: spec.createOperation == nil ? "Pull to refresh your workspace." : "Use the + button to add your first one.") } }
+        .searchable(text: $search, prompt: AppLocalization.format("Search %@", spec.title.localized))
+        .navigationTitle(spec.title.localized)
+        .toolbar { if spec.createOperation != nil { Button { create = true } label: { Image(systemName: "plus") }.accessibilityLabel(AppLocalization.format("Add %@", spec.title.localized)) } }
         .toolbar {
             Menu {
                 if spec.template.hasSuffix("/memory") {
-                    NavigationLink("Memory graph", systemImage: "point.3.filled.connected.trianglepath.dotted") { MemoryGraphView(path: spec.path + "/graph") }
-                    if let op = SchemaCatalog.shared.operation(spec.template + "/search", "POST") { NavigationLink("Semantic search") { OperationView(operation: op, suppliedPath: spec.path + "/search") } }
-                    if let op = SchemaCatalog.shared.operation(spec.template + "/compact", "POST") { NavigationLink("Compact memories") { OperationView(operation: op, suppliedPath: spec.path + "/compact") } }
-                    NavigationLink("Memory usage") { ReadOnlyDocumentView(title: "Memory usage", path: spec.path + "/usage") }
+                    NavigationLink("Memory graph".localized, systemImage: "point.3.filled.connected.trianglepath.dotted") { MemoryGraphView(path: spec.path + "/graph") }
+                    if let op = SchemaCatalog.shared.operation(spec.template + "/search", "POST") { NavigationLink("Semantic search".localized) { OperationView(operation: op, suppliedPath: spec.path + "/search") } }
+                    if let op = SchemaCatalog.shared.operation(spec.template + "/compact", "POST") { NavigationLink("Compact memories".localized) { OperationView(operation: op, suppliedPath: spec.path + "/compact") } }
+                    NavigationLink("Memory usage".localized) { ReadOnlyDocumentView(title: "Memory usage", path: spec.path + "/usage") }
                 }
-                NavigationLink("More actions") { OperationBrowser(prefix: spec.template, substitutions: spec.substitutions) }
-            } label: { Image(systemName: "ellipsis.circle") }.accessibilityLabel("More resource actions")
+                NavigationLink("More actions".localized) { OperationBrowser(prefix: spec.template, substitutions: spec.substitutions) }
+            } label: { Image(systemName: "ellipsis.circle") }.accessibilityLabel("More resource actions".localized)
         }
         .task { await load() }.refreshable { await load() }
         .sheet(isPresented: $create, onDismiss: { Task { await load() } }) {
-            if let operation = spec.createOperation { SchemaEditor(title: "Add \(spec.title)", path: spec.path, operation: operation) }
+            if let operation = spec.createOperation { SchemaEditor(title: AppLocalization.format("Add %@", spec.title.localized), path: spec.path, operation: operation) }
         }
-        .confirmationDialog("Delete \(deletion?.title ?? "item")?", isPresented: Binding(get: { deletion != nil }, set: { if !$0 { deletion = nil } }), titleVisibility: .visible) {
-            Button("Delete", role: .destructive) { if let deletion { Task { await remove(deletion) } } }
-        } message: { Text("This removes the item from your Memoh server.") }
+        .alert(AppLocalization.format("Delete %@?", deletion?.title ?? "Untitled".localized), isPresented: Binding(get: { deletion != nil }, set: { if !$0 { deletion = nil } })) {
+            Button("Delete".localized, role: .destructive) { if let deletion { Task { await remove(deletion) } } }
+        } message: { Text("This removes the item from your Memoh server.".localized) }
     }
     private func load() async {
         guard let api = store.api else { return }; loading = true; defer { loading = false }
@@ -112,7 +112,7 @@ struct ResourceDetailView: View {
         List {
             JSONDetails(value: value.isNull ? record.value : value)
             if spec.template.hasSuffix("/schedule") {
-                Section { NavigationLink("Execution history") { ReadOnlyDocumentView(title: "Execution history", path: spec.path + "/\(record.id.pathComponent)/logs") } }
+                Section { NavigationLink("Execution history".localized) { ReadOnlyDocumentView(title: "Execution history", path: spec.path + "/\(record.id.pathComponent)/logs") } }
             }
             if spec.template.hasSuffix("/mcp") || spec.template == "/providers" || spec.template == "/models" {
                 Section {
@@ -121,12 +121,12 @@ struct ResourceDetailView: View {
                 }
             }
             if spec.template.hasSuffix("/mcp") || spec.template == "/providers" || spec.template == "/email-providers" {
-                Section { NavigationLink("Connect account", systemImage: "lock.shield") { AuthorizationView(path: spec.path + "/" + record.id.pathComponent, isMCP: spec.template.hasSuffix("/mcp")) } }
+                Section { NavigationLink("Connect account".localized, systemImage: "lock.shield") { AuthorizationView(path: spec.path + "/" + record.id.pathComponent, isMCP: spec.template.hasSuffix("/mcp")) } }
             }
-            Section { NavigationLink("More actions", systemImage: "slider.horizontal.3") { OperationBrowser(prefix: spec.resolvedDetailTemplate, substitutions: substitutions) } }
+            Section { NavigationLink("More actions".localized, systemImage: "slider.horizontal.3") { OperationBrowser(prefix: spec.resolvedDetailTemplate, substitutions: substitutions) } }
         }.navigationTitle(record.title).navigationBarTitleDisplayMode(.inline)
-            .toolbar { if spec.editOperation != nil { Button("Edit") { edit = true } } }
-            .sheet(isPresented: $edit, onDismiss: { Task { await load() } }) { if let op = spec.editOperation { SchemaEditor(title: "Edit \(record.title)", path: spec.path + "/" + record.id.pathComponent, operation: op, initial: value.isNull ? record.value : value) } }
+            .toolbar { if spec.editOperation != nil { Button("Edit".localized) { edit = true } } }
+            .sheet(isPresented: $edit, onDismiss: { Task { await load() } }) { if let op = spec.editOperation { SchemaEditor(title: AppLocalization.format("Edit %@", record.title), path: spec.path + "/" + record.id.pathComponent, operation: op, initial: value.isNull ? record.value : value) } }
             .task { await load() }
     }
     var substitutions: [String: String] {
@@ -148,19 +148,19 @@ struct JSONDetails: View {
             ForEach(value.object.keys.sorted(), id: \.self) { key in
                 let item = value[key]
                 if !item.isNull {
-                    if case .object = item { Section(key.fieldLabel) { JSONDetails(value: item) } }
+                    if case .object = item { Section(key.fieldLabel.localized) { JSONDetails(value: item) } }
                     else if case .array = item {
-                        Section(key.fieldLabel) {
+                        Section(key.fieldLabel.localized) {
                             ForEach(Array(item.array.enumerated()), id: \.offset) { _, v in
                                 if v.object.isEmpty { Text(v.scalar).textSelection(.enabled) }
-                                else { DisclosureGroup(v.displayTitle.nonEmpty ?? "Details") { JSONDetails(value: v) } }
+                                else { DisclosureGroup(v.displayTitle.nonEmpty ?? "Details".localized) { JSONDetails(value: v) } }
                             }
                         }
                     }
-                    else if key.lowercased().contains("secret") || key.lowercased().contains("token") && !key.contains("tokens") || key.lowercased().contains("api_key") || key.lowercased().contains("password") { LabeledContent(key.fieldLabel, value: "••••••••") }
-                    else if let url = URL(string: item.string), ["https", "http"].contains(url.scheme ?? "") { Link(key.fieldLabel, destination: url) }
-                    else if item.scalar.count > 90 { VStack(alignment: .leading, spacing: 8) { Text(key.fieldLabel).font(.caption).foregroundStyle(.secondary); Text(item.scalar).textSelection(.enabled) } }
-                    else { LabeledContent(key.fieldLabel) { Text(item.scalar).textSelection(.enabled) } }
+                    else if key.lowercased().contains("secret") || key.lowercased().contains("token") && !key.contains("tokens") || key.lowercased().contains("api_key") || key.lowercased().contains("password") { LabeledContent(key.fieldLabel.localized, value: "••••••••") }
+                    else if let url = URL(string: item.string), ["https", "http"].contains(url.scheme ?? "") { Link(key.fieldLabel.localized, destination: url) }
+                    else if item.scalar.count > 90 { VStack(alignment: .leading, spacing: 8) { Text(key.fieldLabel.localized).font(.caption).foregroundStyle(.secondary); Text(item.scalar).textSelection(.enabled) } }
+                    else { LabeledContent(key.fieldLabel.localized) { Text(item.scalar).textSelection(.enabled) } }
                 }
             }
         } else { Text(value.pretty).font(.system(.footnote, design: .monospaced)).textSelection(.enabled) }
@@ -177,7 +177,7 @@ struct ReadOnlyDocumentView: View {
     var body: some View {
         List { if let error { ErrorBanner(message: error) { Task { await load() } } }; if !value.isNull { JSONDetails(value: value) } }
             .overlay { if value.isNull && error == nil { ProgressView() } }
-            .navigationTitle(title).navigationBarTitleDisplayMode(.inline).task { await load() }.refreshable { await load() }
+            .navigationTitle(title.localized).navigationBarTitleDisplayMode(.inline).task { await load() }.refreshable { await load() }
     }
     func load() async { do { value = try await store.api?.call(path, query: query) ?? .null; error = nil } catch { self.error = error.localizedDescription } }
 }

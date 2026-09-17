@@ -5,16 +5,16 @@ struct HomeShell: View {
     @Environment(\.scenePhase) private var scenePhase
     var body: some View {
         TabView {
-            ConversationsView().tabItem { Label("Chats", systemImage: "bubble.left.and.bubble.right") }
-            NavigationStack { AgentsView() }.tabItem { Label("Agents", systemImage: "square.grid.2x2") }
-            NavigationStack { LibraryView() }.tabItem { Label("Library", systemImage: "books.vertical") }
-            NavigationStack { SettingsView() }.tabItem { Label("Settings", systemImage: "slider.horizontal.3") }
+            ConversationsView().tabItem { Label("Chats".localized, systemImage: "bubble.left.and.bubble.right") }
+            NavigationStack { AgentsView() }.tabItem { Label("Agents".localized, systemImage: "square.grid.2x2") }
+            NavigationStack { LibraryView() }.tabItem { Label("Library".localized, systemImage: "books.vertical") }
+            NavigationStack { SettingsView() }.tabItem { Label("Settings".localized, systemImage: "slider.horizontal.3") }
         }
         .task { await store.reload() }
         .onChange(of: scenePhase) { _, value in if value == .active { Task { await store.reload() } } }
-        .alert("Sign in again", isPresented: Binding(get: { store.api?.unauthorized == true }, set: { _ in })) {
-            Button("Sign in") { store.signOut() }
-        } message: { Text("Your Memoh session has expired. Sign in to reconnect to your server.") }
+        .alert("Sign in again".localized, isPresented: Binding(get: { store.api?.unauthorized == true }, set: { _ in })) {
+            Button("Sign in".localized) { store.signOut() }
+        } message: { Text("Your Memoh session has expired. Sign in to reconnect to your server.".localized) }
     }
 }
 
@@ -25,10 +25,10 @@ struct LibraryView: View {
         List {
             Section {
                 HStack(spacing: 14) {
-                    AgentAvatar(name: store.selectedBot?.title ?? "Library", avatarURL: store.selectedBot?.value["avatar_url"].string ?? "", size: 36)
+                    AgentAvatar(name: store.selectedBot?.title ?? "Library", avatarURL: store.selectedBot?.value.avatarURL ?? "", size: 36)
                     VStack(alignment: .leading, spacing: 5) {
-                        Eyebrow(text: "AGENT")
-                        Text(store.selectedBot?.title ?? "Library").font(.title2.bold())
+                        Eyebrow(text: "Agent")
+                        Text(store.selectedBot?.title ?? "Library".localized).font(.title2.bold())
                     }
                     Spacer()
                 }.padding(.vertical, 8)
@@ -46,11 +46,11 @@ struct LibraryView: View {
                     }
                 }
             }
-            Section("Discover") {
-                NavigationLink { MarketplaceView() } label: { Label("Supermarket", systemImage: "storefront") }
+            Section("Discover".localized) {
+                NavigationLink { MarketplaceView() } label: { Label("Supermarket".localized, systemImage: "storefront") }
             }
             if store.isDemo { Section { DemoBadge() } }
-        }.scrollContentBackground(.hidden).background(Theme.canvas).navigationTitle("Library")
+        }.scrollContentBackground(.hidden).background(Theme.canvas).navigationTitle("Library".localized)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     AgentPickerMenu(selection: Binding(get: { store.selectedBot?.id ?? "" }, set: { store.selectedBotID = $0 }))
@@ -63,9 +63,9 @@ struct BotPicker: View {
     @Environment(AppStore.self) private var store
     var body: some View {
         HStack {
-            Text("Agent")
+            Text("Agent".localized)
             Spacer()
-            Text(store.selectedBot?.title ?? "Choose an agent").foregroundStyle(.secondary)
+            Text(store.selectedBot?.title ?? "Choose an agent".localized).foregroundStyle(.secondary)
             AgentPickerMenu(selection: Binding(get: { store.selectedBot?.id ?? "" }, set: { store.selectedBotID = $0 }))
         }
     }
@@ -82,17 +82,17 @@ struct AgentPickerMenu: View {
     var body: some View {
         Button { presented.toggle() } label: {
             HStack(spacing: 5) {
-                AgentAvatar(name: selected?.title ?? "Agent", avatarURL: selected?.value["avatar_url"].string ?? "", size: 28)
+                AgentAvatar(name: selected?.title ?? "Agent", avatarURL: selected?.value.avatarURL ?? "", size: 28)
                 Image(systemName: "chevron.down").font(.system(size: 9, weight: .bold)).foregroundStyle(.secondary)
             }.frame(minWidth: 44, minHeight: 44)
         }
         .disabled(store.bots.isEmpty)
-        .accessibilityLabel("Choose agent")
+        .accessibilityLabel("Choose agent".localized)
         .accessibilityValue(selected?.title ?? "No agent selected")
         .accessibilityIdentifier("agentPickerMenu")
         .popover(isPresented: $presented, attachmentAnchor: .rect(.bounds), arrowEdge: .top) {
             VStack(alignment: .leading, spacing: 0) {
-                HStack { Eyebrow(text: "AGENTS"); Spacer(); Text("\(store.bots.count)").font(.caption.monospacedDigit()).foregroundStyle(.secondary) }
+                HStack { Eyebrow(text: "Agents"); Spacer(); Text("\(store.bots.count)").font(.caption.monospacedDigit()).foregroundStyle(.secondary) }
                     .padding(.horizontal, 18).padding(.vertical, 16)
                 Divider()
                 ScrollView {
@@ -103,10 +103,10 @@ struct AgentPickerMenu: View {
                                 presented = false
                             } label: {
                                 HStack(spacing: 12) {
-                                    AgentAvatar(name: bot.title, avatarURL: bot.value["avatar_url"].string, size: 40)
+                                    AgentAvatar(name: bot.title, avatarURL: bot.value.avatarURL, size: 40)
                                     VStack(alignment: .leading, spacing: 4) {
                                         Text(bot.title).font(.headline).foregroundStyle(.primary).lineLimit(2)
-                                        Text(bot.value["is_active"].bool ? "Active" : "Paused").font(.caption).foregroundStyle(.secondary)
+                                        Text(bot.value["is_active"].bool ? "Active".localized : "Paused".localized).font(.caption).foregroundStyle(.secondary)
                                     }
                                     Spacer(minLength: 8)
                                     if bot.id == selection { Image(systemName: "checkmark").font(.subheadline.bold()).foregroundStyle(accent) }

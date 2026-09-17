@@ -51,6 +51,7 @@ enum JSONValue: Codable, Hashable, Sendable {
         return []
     }
     func text(_ keys: String...) -> String { keys.map { self[$0].string }.first { !$0.isEmpty } ?? "" }
+    var avatarURL: String { text("avatar_url", "icon_url", "image_url").nonEmpty ?? self["metadata"].text("avatar_url", "icon_url") }
     var displayTitle: String { text("display_name", "title", "name", "memory", "content", "message", "model_id", "id") }
     var stableID: String { text("id", "turn_id", "item_id", "path", "name", "key", "dep_id", "slug", "type") }
 }

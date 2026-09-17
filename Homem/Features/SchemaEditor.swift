@@ -21,22 +21,22 @@ struct SchemaEditor: View {
             Form {
                 if !operation.definition["description"].string.isEmpty { Section { Text(operation.definition["description"].string).font(.subheadline).foregroundStyle(.secondary) } }
                 if fields.isEmpty && !operation.bodySchema.isNull {
-                    Section("Configuration") { JSONInput(value: $draft) }
+                    Section("Configuration".localized) { JSONInput(value: $draft) }
                 } else {
                     Section {
                         ForEach(Array(fields.prefix(10)), id: \.self) { key in field(key) }
                     }
                     if fields.count > 10 {
-                        Section { DisclosureGroup("Advanced options", isExpanded: $advanced) { ForEach(Array(fields.dropFirst(10)), id: \.self) { key in field(key) } } }
+                        Section { DisclosureGroup("Advanced options".localized, isExpanded: $advanced) { ForEach(Array(fields.dropFirst(10)), id: \.self) { key in field(key) } } }
                     }
                 }
                 if let error { Section { ErrorBanner(message: error) } }
-                if !progress.isEmpty { Section("Progress") { Text(progress).font(.caption.monospaced()) } }
+                if !progress.isEmpty { Section("Progress".localized) { Text(progress).font(.caption.monospaced()) } }
                 if store.isDemo { Section { DemoBadge() } }
-            }.navigationTitle(title).navigationBarTitleDisplayMode(.inline)
+            }.navigationTitle(title.localized).navigationBarTitleDisplayMode(.inline)
                 .toolbar {
-                    ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(busy) }
-                    ToolbarItem(placement: .confirmationAction) { Button { Task { await save() } } label: { if busy { ProgressView() } else { Text(operation.method == "DELETE" ? "Delete" : "Save").fontWeight(.semibold) } }.disabled(busy) }
+                    ToolbarItem(placement: .cancellationAction) { Button("Cancel".localized) { dismiss() }.disabled(busy) }
+                    ToolbarItem(placement: .confirmationAction) { Button { Task { await save() } } label: { if busy { ProgressView() } else { Text(operation.method == "DELETE" ? "Delete".localized : "Save".localized).fontWeight(.semibold) } }.disabled(busy) }
                 }
                 .onAppear {
                     let allowed = Set(fields)
@@ -56,7 +56,7 @@ struct SchemaEditor: View {
         busy = true; error = nil; defer { busy = false }
         do {
             for required in schema["required"].array.map(\.string) {
-                if draft[required].isNull || draft[required] == .string("") { throw ClientError.message("\(required.fieldLabel) is required.") }
+                if draft[required].isNull || draft[required] == .string("") { throw ClientError.message(AppLocalization.format("%@ is required.", required.fieldLabel.localized)) }
             }
             // Optional empty fields are omitted; explicitly entered false and zero remain intact.
             let body = JSONValue.object(draft.object.filter { !$0.value.isNull })
@@ -79,20 +79,20 @@ struct SchemaField: View {
     let schema: JSONValue
     var required: Bool
     @Binding var value: JSONValue
-    private var label: String { name.fieldLabel + (required ? " *" : "") }
+    private var label: String { name.fieldLabel.localized + (required ? " *" : "") }
     private var stringBinding: Binding<String> { Binding(get: { value.isNull ? "" : value.scalar }, set: { value = $0.isEmpty ? .null : .string($0) }) }
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             if !schema["enum"].array.isEmpty {
                 Picker(label, selection: stringBinding) {
-                    Text("Default").tag("")
+                    Text("Default".localized).tag("")
                     ForEach(schema["enum"].array, id: \.self) { v in Text(v.scalar).tag(v.scalar) }
                 }
             } else if schema["type"].string == "boolean" {
                 Toggle(label, isOn: Binding(get: { value.bool }, set: { value = .bool($0) }))
             } else if ["integer", "number"].contains(schema["type"].string) {
                 LabeledContent(label) {
-                    TextField("Default", text: Binding(get: { value.isNull ? "" : value.scalar }, set: { value = $0.isEmpty ? .null : Double($0).map(JSONValue.number) ?? .string($0) }))
+                    TextField("Default".localized, text: Binding(get: { value.isNull ? "" : value.scalar }, set: { value = $0.isEmpty ? .null : Double($0).map(JSONValue.number) ?? .string($0) }))
                         .keyboardType(.numbersAndPunctuation).multilineTextAlignment(.trailing)
                 }
             } else if ["object", "array"].contains(schema["type"].string) || !schema["properties"].object.isEmpty || schema.object.isEmpty {
@@ -118,7 +118,7 @@ struct JSONInput: View {
                 if let parsed = try? JSONValue.parse(v) { value = parsed; invalid = false }
                 else { value = .string(v); invalid = true }
             }
-        if invalid { Text("Enter valid JSON before saving.").font(.caption).foregroundStyle(.red) }
+        if invalid { Text("Enter valid JSON before saving.".localized).font(.caption).foregroundStyle(.red) }
     }
 }
 
@@ -130,7 +130,7 @@ struct OperationButton: View {
     @State private var show = false
     var body: some View {
         if let op = SchemaCatalog.shared.operation(template, method) {
-            Button(title) { show = true }.sheet(isPresented: $show) { OperationView(operation: op, suppliedPath: path) }
+            Button(title.localized) { show = true }.sheet(isPresented: $show) { OperationView(operation: op, suppliedPath: path) }
         }
     }
 }
@@ -142,7 +142,7 @@ struct OperationBrowser: View {
     private var operations: [APIOperation] { SchemaCatalog.shared.operations.filter { $0.path.hasPrefix(prefix) && (search.isEmpty || ($0.title + $0.path).localizedCaseInsensitiveContains(search)) } }
     var body: some View {
         List {
-            Section { Text("Advanced server controls. Forms follow the API version bundled with Homem. Your server enforces permissions and feature availability.").font(.caption).foregroundStyle(.secondary) }
+            Section { Text("Advanced server controls. Forms follow the API version bundled with Homem. Your server enforces permissions and feature availability.".localized).font(.caption).foregroundStyle(.secondary) }
             ForEach(operations) { op in
                 NavigationLink { OperationView(operation: op, substitutions: substitutions) } label: {
                     VStack(alignment: .leading, spacing: 5) {
@@ -151,7 +151,7 @@ struct OperationBrowser: View {
                     }
                 }
             }
-        }.navigationTitle("Advanced controls").searchable(text: $search)
+        }.navigationTitle("Advanced controls".localized).searchable(text: $search)
     }
 }
 
@@ -175,14 +175,14 @@ struct OperationView: View {
     var body: some View {
         Form {
             Section { Text(operation.definition["description"].string.nonEmpty ?? operation.title).font(.subheadline).foregroundStyle(.secondary) }
-            if !parameters.isEmpty { Section("Parameters") { ForEach(parameters, id: \.self) { p in
+            if !parameters.isEmpty { Section("Parameters".localized) { ForEach(parameters, id: \.self) { p in
                 TextField(p["name"].string.fieldLabel + (p["required"].bool ? " *" : ""), text: Binding(get: { values[p["name"].string] ?? "" }, set: { values[p["name"].string] = $0 })).textInputAutocapitalization(.never).autocorrectionDisabled()
             } } }
             Section {
                 if operation.parameters.contains(where: { $0["type"].string == "file" }) || operation.path.hasSuffix("/ws") || operation.method == "GET" && operation.definition["produces"].array.contains("text/event-stream") {
-                    Text("Use the dedicated workspace, chat, or backup screen for this streaming or file operation.").foregroundStyle(.secondary)
+                    Text("Use the dedicated workspace, chat, or backup screen for this streaming or file operation.".localized).foregroundStyle(.secondary)
                 } else {
-                    Button(operation.method == "GET" ? "Load" : operation.bodySchema.isNull ? "Run action" : "Configure action", role: operation.method == "DELETE" ? .destructive : nil) {
+                    Button(operation.method == "GET" ? "Load".localized : operation.bodySchema.isNull ? "Run action".localized : "Configure action".localized, role: operation.method == "DELETE" ? .destructive : nil) {
                         if operation.method == "DELETE" { confirm = true }
                         else if !operation.bodySchema.isNull { edit = true }
                         else { Task { await run() } }
@@ -191,11 +191,11 @@ struct OperationView: View {
                 if busy { ProgressView() }
             }
             if let error { ErrorBanner(message: error) }
-            if !result.isNull { Section("Result") { JSONDetails(value: result) } }
+            if !result.isNull { Section("Result".localized) { JSONDetails(value: result) } }
         }.navigationTitle(operation.title).navigationBarTitleDisplayMode(.inline)
             .onAppear { values = substitutions }
             .sheet(isPresented: $edit) { SchemaEditor(title: operation.title, path: path, operation: operation, query: query, onSaved: { result = $0 }) }
-            .confirmationDialog("\(operation.title)?", isPresented: $confirm, titleVisibility: .visible) { Button("Delete", role: .destructive) { Task { await run() } } } message: { Text("This action changes data on your server and may not be reversible.") }
+            .confirmationDialog("\(operation.title)?", isPresented: $confirm, titleVisibility: .visible) { Button("Delete".localized, role: .destructive) { Task { await run() } } } message: { Text("This action changes data on your server and may not be reversible.".localized) }
     }
     func run() async {
         busy = true; defer { busy = false }

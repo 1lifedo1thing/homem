@@ -1,5 +1,6 @@
 import SwiftUI
 import ImageIO
+import WebKit
 
 enum Theme {
     static let canvas = Color(uiColor: .systemBackground)
@@ -23,7 +24,7 @@ enum Theme {
 }
 
 /// Server-provided identities are shared by toolbar, dropdown, and content views.
-/// Remote images use a separate, credential-free session, never the API session.
+/// Public images are credential-free; private images receive credentials only on the server origin.
 enum AvatarSource {
     static func url(_ value: String, baseURL: URL?) -> URL? {
         let value = value.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -41,8 +42,8 @@ enum AvatarSource {
 }
 
 enum AvatarImages {
-    static let cache: NSCache<NSURL, UIImage> = {
-        let cache = NSCache<NSURL, UIImage>()
+    static let cache: NSCache<NSString, UIImage> = {
+        let cache = NSCache<NSString, UIImage>()
         cache.totalCostLimit = 12 * 1024 * 1024
         return cache
     }()
@@ -55,27 +56,35 @@ enum AvatarImages {
         return URLSession(configuration: config)
     }()
     static func load(_ url: URL) async throws -> UIImage? {
-        if let cached = cache.object(forKey: url as NSURL) { return cached }
+        decode(try await data(url))
+    }
+    static func data(_ url: URL, request: URLRequest? = nil, session authenticatedSession: URLSession? = nil) async throws -> Data {
+
         let limit = 5 * 1024 * 1024
         let data: Data
         if url.scheme == "data" {
             let source = url.absoluteString
-            guard source.utf8.count < limit * 2, let comma = source.firstIndex(of: ","),
-                  source[..<comma].hasPrefix("data:image/"), source[..<comma].hasSuffix(";base64"),
-                  let decoded = Data(base64Encoded: String(source[source.index(after: comma)...])), decoded.count <= limit else { return nil }
+            guard source.utf8.count < limit * 3, let comma = source.firstIndex(of: ","),
+                  source[..<comma].hasPrefix("data:image/") else { throw ClientError.invalidResponse }
+            let payload = String(source[source.index(after: comma)...])
+            let decoded = source[..<comma].hasSuffix(";base64") ? Data(base64Encoded: payload) : payload.removingPercentEncoding.map { Data($0.utf8) }
+            guard let decoded, decoded.count <= limit else { throw ClientError.invalidResponse }
             data = decoded
         } else {
-            let (bytes, response) = try await session.bytes(from: url)
+            let (bytes, response) = try await (authenticatedSession ?? session).bytes(for: request ?? URLRequest(url: url))
             guard let response = response as? HTTPURLResponse, (200..<300).contains(response.statusCode),
-                  response.expectedContentLength <= limit else { return nil }
+                  response.expectedContentLength <= limit else { throw ClientError.invalidResponse }
             var buffer = Data()
             for try await byte in bytes {
                 try Task.checkCancellation()
-                guard buffer.count < limit else { return nil }
+                guard buffer.count < limit else { throw ClientError.invalidResponse }
                 buffer.append(byte)
             }
             data = buffer
         }
+        return data
+    }
+    static func decode(_ data: Data) -> UIImage? {
         guard let source = CGImageSourceCreateWithData(data as CFData, nil),
               let thumbnail = CGImageSourceCreateThumbnailAtIndex(source, 0, [
                 kCGImageSourceCreateThumbnailFromImageAlways: true,
@@ -83,7 +92,6 @@ enum AvatarImages {
                 kCGImageSourceThumbnailMaxPixelSize: 240
               ] as CFDictionary) else { return nil }
         let image = UIImage(cgImage: thumbnail)
-        cache.setObject(image, forKey: url as NSURL, cost: thumbnail.bytesPerRow * thumbnail.height)
         return image
     }
 }
@@ -98,12 +106,15 @@ struct AgentAvatar: View {
     var baseURL: URL? = nil
     @State private var loaded: UIImage?
     @State private var loadedURL: URL?
+    @State private var svg: String?
     private var url: URL? { AvatarSource.url(avatarURL, baseURL: baseURL ?? store.api?.baseURL) }
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: size * 0.25, style: .continuous).fill(Color(.tertiarySystemFill))
             if let loaded, loadedURL == url {
                 Image(uiImage: loaded).resizable().scaledToFill()
+            } else if let svg, loadedURL == url {
+                AvatarSVG(source: svg)
             } else if let symbol {
                 Image(systemName: symbol).font(.system(size: size * 0.42, weight: .medium)).foregroundStyle(.secondary)
             } else {
@@ -116,17 +127,49 @@ struct AgentAvatar: View {
         .overlay(RoundedRectangle(cornerRadius: size * 0.25, style: .continuous).strokeBorder(.primary.opacity(0.06), lineWidth: 0.5))
         .accessibilityHidden(true)
         .task(id: url) {
-            loaded = nil; loadedURL = nil
+            loaded = nil; loadedURL = nil; svg = nil
             guard let url else { return }
-            if let image = try? await AvatarImages.load(url), !Task.isCancelled { loaded = image; loadedURL = url }
+            let request = try? store.api?.avatarRequest(url)
+            let imageSession = request == nil ? nil : store.api?.session
+            let cacheKey = ((request == nil ? "public" : String(describing: ObjectIdentifier(store.api!))) + "|" + url.absoluteString) as NSString
+            if let cached = AvatarImages.cache.object(forKey: cacheKey) { loaded = cached; loadedURL = url; return }
+            guard let data = try? await AvatarImages.data(url, request: request, session: imageSession), !Task.isCancelled else { return }
+            if let source = String(data: data, encoding: .utf8), source.contains("<svg") {
+                svg = source
+            } else {
+                loaded = await Task.detached(priority: .utility) { AvatarImages.decode(data) }.value
+                if let loaded { AvatarImages.cache.setObject(loaded, forKey: cacheKey, cost: data.count) }
+            }
+            loadedURL = url
         }
     }
+}
+
+/// SVG team icons are common on Memoh. Render artwork with scripts and network access disabled.
+private struct AvatarSVG: UIViewRepresentable {
+    let source: String
+    func makeUIView(context: Context) -> WKWebView {
+        let config = WKWebViewConfiguration()
+        config.defaultWebpagePreferences.allowsContentJavaScript = false
+        config.websiteDataStore = .nonPersistent()
+        let view = WKWebView(frame: .zero, configuration: config)
+        view.isOpaque = false; view.backgroundColor = .clear
+        view.scrollView.isScrollEnabled = false; view.isUserInteractionEnabled = false
+        return view
+    }
+    func updateUIView(_ view: WKWebView, context: Context) {
+        guard context.coordinator.source != source else { return }
+        context.coordinator.source = source
+        view.loadHTMLString("<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'unsafe-inline'; img-src data:;\"><style>html,body{margin:0;width:100%;height:100%;overflow:hidden}svg{width:100%;height:100%}</style>" + source, baseURL: nil)
+    }
+    func makeCoordinator() -> Coordinator { Coordinator() }
+    final class Coordinator { var source = "" }
 }
 
 struct Eyebrow: View {
     let text: String
     var body: some View {
-        Text(text.uppercased()).font(.system(.caption2, design: .monospaced, weight: .semibold))
+        Text(text.localized.uppercased()).font(.system(.caption2, design: .monospaced, weight: .semibold))
             .tracking(1.4).foregroundStyle(.secondary)
     }
 }
@@ -135,7 +178,7 @@ struct WorkspaceIdentity: View {
     @Environment(AppStore.self) private var store
     var body: some View {
         HStack(spacing: 8) {
-            AgentAvatar(name: store.workspaceName, avatarURL: store.workspace["avatar_url"].string, size: 22, symbol: "square.stack.3d.up")
+            AgentAvatar(name: store.workspaceName, avatarURL: store.workspace.avatarURL, size: 22, symbol: "square.stack.3d.up")
             Text(store.workspaceName).font(.subheadline.weight(.medium)).foregroundStyle(.secondary).lineLimit(1)
         }.accessibilityElement(children: .combine)
     }
@@ -147,7 +190,7 @@ struct StatusIndicator: View {
     var body: some View {
         HStack(spacing: 5) {
             Circle().fill(color).frame(width: 5, height: 5)
-            Text(text).font(.caption.weight(.medium))
+            Text(text.localized).font(.caption.weight(.medium))
         }.foregroundStyle(color).fixedSize(horizontal: false, vertical: true)
     }
 }
@@ -163,7 +206,7 @@ struct StatusPill: View {
     var text: String
     var color: Color = .green
     var body: some View {
-        HStack(spacing: 5) { Circle().fill(color).frame(width: 5, height: 5); Text(text).font(.caption2.weight(.medium)) }
+        HStack(spacing: 5) { Circle().fill(color).frame(width: 5, height: 5); Text(text.localized).font(.caption2.weight(.medium)) }
             .foregroundStyle(color).padding(.horizontal, 9).padding(.vertical, 5).background(color.opacity(0.09), in: Capsule())
     }
 }
@@ -174,9 +217,9 @@ struct ErrorBanner: View {
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: "exclamationmark.circle.fill").foregroundStyle(.orange)
-            Text(message).font(.subheadline)
+            Text(message.localized).font(.subheadline)
             Spacer(minLength: 0)
-            if let retry { Button("Retry", action: retry).font(.subheadline.weight(.semibold)) }
+            if let retry { Button("Retry".localized, action: retry).font(.subheadline.weight(.semibold)) }
         }.padding().background(Color.orange.opacity(0.09), in: RoundedRectangle(cornerRadius: 14)).accessibilityElement(children: .combine)
     }
 }
@@ -185,16 +228,16 @@ struct EmptyState: View {
     let title: String
     let symbol: String
     let detail: String
-    var body: some View { ContentUnavailableView(title, systemImage: symbol, description: Text(detail)) }
+    var body: some View { ContentUnavailableView(title.localized, systemImage: symbol, description: Text(detail.localized)) }
 }
 
 struct DemoBadge: View {
-    var body: some View { Label("Demo workspace", systemImage: "sparkles").font(.caption.weight(.medium)).foregroundStyle(.secondary) }
+    var body: some View { Label("Demo workspace".localized, systemImage: "sparkles").font(.caption.weight(.medium)).foregroundStyle(.secondary) }
 }
 
 extension NavigationLink where Label == SwiftUI.Label<Text, Image> {
     init(_ title: String, systemImage: String, @ViewBuilder destination: () -> Destination) {
-        self.init(destination: destination, label: { SwiftUI.Label(title, systemImage: systemImage) })
+        self.init(destination: destination, label: { SwiftUI.Label(title.localized, systemImage: systemImage) })
     }
 }
 
