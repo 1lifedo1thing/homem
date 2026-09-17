@@ -6,9 +6,9 @@ Audited against `apps/desktop`, the shared `apps/web` routes/components, and `sp
 
 | Desktop area | Native implementation | Additional controls |
 |---|---|---|
-| Server connection and login | Official Memoh first: native email-code/MFA, isolated browser sign-in, workspace selection, cookie sessions and WebSocket tickets. Custom API-base URL, username/password or token, Keychain, bearer refresh, expired-session recovery | Official platform paths are based on the deployed app.memoh.net client; OAuth providers may reject embedded browsers. Native email remains available. |
+| Server connection and login | Official Memoh first: native email-code/MFA, isolated browser sign-in, workspace selection, cookie sessions and WebSocket tickets. Custom API-base URL, username/password or token, Keychain, bearer refresh, expired-session recovery | Official platform paths are based on the deployed app.memoh.net client; OAuth providers may reject embedded browsers. Native email remains available, with code autofill/automatic verification and automatic entry for a single workspace. |
 | Agent management | List/create/edit/pause/resume/delete, health, usage, settings, access | Ownership, ACL rules, hooks, connectors and workspace target policies use advanced forms |
-| Chat sessions | List/page/create/rename/delete, Markdown/code, history, attachments, reasoning/model choices | ACP session configuration and runtime commands use session controls |
+| Chat sessions | Message-first creation with attachments and named run locations; list/page/rename/delete, Markdown/code, history, reasoning/model choices | ACP session configuration and runtime commands use session controls |
 | Live chat | WebSocket admission, stable invocation IDs, snapshot/delta sequencing, reconnect, resend, abort | Foreground sockets reconnect after app suspension; server work continues independently |
 | Interactive decisions | Tool approval options, agent questions, single/multiple choices and free text | Server permissions govern whether the user can respond |
 | Message operations | Retry, edit, fork when server marks the turn forkable, queue follow-up/steer | Queue inspect/edit/reorder/delete and goals use session controls |
@@ -26,7 +26,7 @@ Audited against `apps/desktop`, the shared `apps/web` routes/components, and `sp
 | Email/voice/video/search/memory services | Provider/model configuration and bindings | Browser OAuth callback handling depends on provider/server configuration |
 | People and profile | Admin-only people entry, user access, profile/password | Backend remains the permission authority |
 | Backups | Export/share ZIP with optional passphrase; import ZIP as a new agent | Selective overwrite/merge import is not exposed as a dedicated flow |
-| Appearance and navigation | iPhone navigation, iPad conversation split view, adaptive agent grid, system/light/dark colors, Dynamic Type and SF Symbols | Desktop window docking, tray, OS-specific hotkeys, updater and CLI installation do not apply to iOS |
+| Appearance and navigation | iPhone navigation, iPad conversation split view, adaptive agent grid, system/light/dark appearance, persisted System/Memoh/Ocean/Forest/Rose/Amber accent choices, Dynamic Type and SF Symbols | Web themes are browser-local; choose the matching scheme in Homem Settings. Desktop window docking, tray and OS hotkeys do not apply to iOS |
 
 ## Deliberate limits and release checks
 

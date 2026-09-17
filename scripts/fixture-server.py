@@ -126,7 +126,7 @@ class Handler(BaseHTTPRequestHandler):
                     self.ws_send({"type": "runtime_snapshot", "session_id": session, "epoch": "fixture-epoch", "seq": seq, "snapshot": {"epoch": "fixture-epoch", "seq": seq, "current_run_view": run}})
                 elif event["type"] == "message":
                     turn_id = event["invocation_id"]
-                    user = {"turn_id": turn_id, "role": "user", "text": event.get("text", ""), "timestamp": "2026-09-17T00:00:00Z"}
+                    user = {"turn_id": turn_id, "role": "user", "text": event.get("text", ""), "timestamp": "2026-09-17T00:00:00Z", "attachments": event.get("attachments", []), "workspace_target_id": event.get("workspace_target_id", "")}
                     run = {"run_id": "fixture-run", "turn_id": turn_id, "status": "running", "request_user_turn": user, "messages": [{"id": 1, "type": "text", "content": "Verified "}]}
                     self.ws_send({"type": "run_accepted", "session_id": session, "run_id": "fixture-run", "turn_id": turn_id, "invocation_id": turn_id})
                     seq += 1

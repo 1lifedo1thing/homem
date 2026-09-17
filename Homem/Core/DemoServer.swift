@@ -27,6 +27,7 @@ import Foundation
             collections[base + "/agents"] = [["id": "native", "name": "Memoh", "type": "native", "enabled": true]]
             collections[base + "/container/skills"] = [["name": "research", "description": "Turn open questions into useful findings."]]
             for suffix in ["apps", "dependencies", "connectors", "workdirs", "container/snapshots", "email-bindings", "email-outbox", "user-access", "schedule/logs", "compaction/logs", "hooks/events"] { collections[base + "/" + suffix] = [] }
+            documents[base + "/workspace-targets"] = ["targets": [["target_id": "native", "kind": "native", "primary": true], ["target_id": "demo-mac", "kind": "remote", "name": "Studio Mac", "online": true, "status": "online"], ["target_id": "offline-mac", "kind": "remote", "name": "Travel Mac", "online": false, "status": "offline"]]]
             documents[base + "/settings"] = ["chat_model_id": "demo-model", "language": "en", "max_context_tokens": 32000]
             documents[base + "/container"] = ["status": "running", "runtime": "docker", "image": "memoh/workspace", "id": .string("workspace-\(bot)")]
             documents[base + "/token-usage"] = ["total_tokens": 28450, "input_tokens": 21340, "output_tokens": 7110]

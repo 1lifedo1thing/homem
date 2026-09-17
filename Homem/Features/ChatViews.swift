@@ -1,9 +1,10 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-struct ChatDestination: Hashable { var botID: String; var sessionID: String; var title: String; var botName: String }
+struct ChatDestination: Hashable { var botID: String; var sessionID: String; var title: String; var botName: String; var firstMessage: NewChatDraft? = nil }
 
 struct ConversationsView: View {
+    @Environment(\.appAccent) private var accent
     @Environment(AppStore.self) private var store
     @State private var sessions: [Record] = []
     @State private var search = ""
@@ -20,7 +21,7 @@ struct ConversationsView: View {
             List {
                 Section {
                     VStack(alignment: .leading, spacing: 8) {
-                        HStack { Text("A little space to think.").font(.title2.weight(.semibold)); Spacer(); Image(systemName: "sparkle").foregroundStyle(Theme.accent) }
+                        HStack { Text("A little space to think.").font(.title2.weight(.semibold)); Spacer(); Image(systemName: "sparkle").foregroundStyle(accent) }
                         Text("Pick up a conversation. Start something new.").font(.subheadline).foregroundStyle(.secondary)
                         if store.isDemo { DemoBadge().padding(.top, 4) }
                     }.padding(.vertical, 10)
@@ -40,7 +41,7 @@ struct ConversationsView: View {
                             }.padding(.vertical, 7)
                         }
                         .contextMenu { Button("Rename", systemImage: "pencil") { rename = session; newTitle = session.title }; Button("Delete", systemImage: "trash", role: .destructive) { deletion = session } }
-                        .swipeActions { Button("Delete", role: .destructive) { deletion = session } }
+                        .swipeActions(allowsFullSwipe: false) { Button("Delete") { deletion = session }.tint(.red) }
                     }
                     if !cursor.isEmpty { Button("Load more conversations") { Task { await load(more: true) } } }
                     if sessions.isEmpty && !loading && error == nil { Text("Your next conversation starts here.").foregroundStyle(.secondary).padding(.vertical) }
@@ -55,10 +56,9 @@ struct ConversationsView: View {
                 .task(id: store.selectedBot?.id) { await load() }
                 .overlay { if loading && sessions.isEmpty { ProgressView() } }
                 .sheet(isPresented: $newChat, onDismiss: { Task { await load() } }) {
-                    if let bot = store.selectedBot, let op = SchemaCatalog.shared.operation("/bots/{bot_id}/sessions", "POST") {
-                        SchemaEditor(title: "New conversation", path: "/bots/\(bot.id.pathComponent)/sessions", operation: op, initial: ["title": "New conversation", "channel_type": "local", "type": "chat"], onSaved: { value in
-                            selection = ChatDestination(botID: bot.id, sessionID: value["id"].string, title: value["title"].string, botName: bot.title)
-                        })
+                    NewConversationView(botID: store.selectedBot?.id ?? "") { route in
+                        store.selectedBotID = route.botID
+                        selection = route
                     }
                 }
                 .alert("Rename conversation", isPresented: Binding(get: { rename != nil }, set: { if !$0 { rename = nil } })) {
@@ -66,8 +66,12 @@ struct ConversationsView: View {
                     Button("Save") { if let record = rename { Task { await update(record, method: "PATCH", body: ["title": .string(newTitle)]) } } }
                     Button("Cancel", role: .cancel) { rename = nil }
                 }
-                .confirmationDialog("Delete conversation?", isPresented: Binding(get: { deletion != nil }, set: { if !$0 { deletion = nil } }), titleVisibility: .visible) {
-                    Button("Delete", role: .destructive) { if let record = deletion { Task { await update(record, method: "DELETE") } } }
+                .alert("Delete conversation?", isPresented: Binding(get: { deletion != nil }, set: { if !$0 { deletion = nil } }), presenting: deletion) {
+                    record in
+                    Button("Delete", role: .destructive) { Task { await update(record, method: "DELETE") } }
+                    Button("Cancel", role: .cancel) { deletion = nil }
+                } message: { record in
+                    Text("“\(record.title)” will be permanently deleted.")
                 }
         } detail: { EmptyState(title: "Room for your next idea", symbol: "bubble.left.and.bubble.right", detail: "Choose a conversation or start a new one.") }
     }
@@ -86,8 +90,8 @@ struct ConversationsView: View {
         } catch { self.error = error.localizedDescription }
     }
     func update(_ record: Record, method: String, body: JSONValue? = nil) async {
-        guard let bot = store.selectedBot else { return }
-        do { _ = try await store.api?.call("/bots/\(bot.id.pathComponent)/sessions/\(record.id.pathComponent)", method: method, body: body); await load() }
+        guard let botID = record.value["bot_id"].string.nonEmpty ?? store.selectedBot?.id else { return }
+        do { _ = try await store.api?.call("/bots/\(botID.pathComponent)/sessions/\(record.id.pathComponent)", method: method, body: body); await load() }
         catch { self.error = error.localizedDescription }
         rename = nil; deletion = nil
     }
@@ -102,6 +106,7 @@ struct ChatScreen: View {
 }
 
 struct ChatContent: View {
+    @Environment(\.appAccent) private var accent
     @State var model: ChatModel
     let destination: ChatDestination
     @Environment(\.scenePhase) private var scenePhase
@@ -112,6 +117,7 @@ struct ChatContent: View {
     @State private var forked: ChatDestination?
     @FocusState private var composerFocused: Bool
     @State private var voice = VoiceRecorder()
+    @State private var sentFirstMessage = false
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
@@ -143,16 +149,22 @@ struct ChatContent: View {
         }
         .navigationTitle(destination.title).navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItemGroup(placement: .keyboard) { Spacer(); Button("Done") { composerFocused = false } }
-        }
-        .toolbar {
             Menu {
                 NavigationLink("Workspace", systemImage: "folder") { WorkspaceView(botID: destination.botID, name: destination.botName) }
                 NavigationLink("Session controls", systemImage: "slider.horizontal.3") { OperationBrowser(prefix: "/bots/{bot_id}/sessions/{session_id}", substitutions: ["bot_id": destination.botID, "session_id": destination.sessionID]) }
                 Button("Refresh history", systemImage: "arrow.clockwise") { Task { await model.loadHistory() } }
             } label: { Image(systemName: "ellipsis.circle") }
         }
-        .task { await model.start() }.onDisappear { model.stop(); voice.cancel() }
+        .task {
+            if !sentFirstMessage, let first = destination.firstMessage {
+                sentFirstMessage = true
+                model.workspaceTargetID = first.targetID
+                model.draft = first.text
+                // Queue before connecting, so navigation or reconnects cannot send twice.
+                _ = await model.send(attachments: first.attachments)
+            }
+            await model.start()
+        }.onDisappear { model.stop(); voice.cancel() }
         .task(id: model.draft) { do { try await Task.sleep(for: .milliseconds(600)); model.saveDraft() } catch {} }
         .onChange(of: scenePhase) { _, phase in if phase == .background { model.stop() }; if phase == .active { Task { await model.start() } } }
         .fileImporter(isPresented: $filePicker, allowedContentTypes: [.data], allowsMultipleSelection: true) { result in
@@ -189,7 +201,7 @@ struct ChatContent: View {
                         }
                     } label: { Image(systemName: "stop.circle.fill").font(.title).frame(width: 42, height: 42) }.accessibilityLabel("Response controls")
                 } else {
-                    Button { Task { if await model.send(attachments: attachments) { attachments = []; composerFocused = false } } } label: { Image(systemName: "arrow.up").font(.body.weight(.semibold)).foregroundStyle(.white).frame(width: 40, height: 40).background(Theme.accent, in: Circle()) }
+                    Button { Task { if await model.send(attachments: attachments) { attachments = []; composerFocused = false } } } label: { Image(systemName: "arrow.up").font(.body.weight(.semibold)).foregroundStyle(.white).frame(width: 40, height: 40).background(accent, in: Circle()) }
                         .disabled(model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && attachments.isEmpty).accessibilityLabel("Send message").accessibilityIdentifier("sendMessage")
                 }
             }.padding(.horizontal, 10).padding(.vertical, 5).background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 24)).overlay(RoundedRectangle(cornerRadius: 24).stroke(.quaternary))
@@ -199,20 +211,18 @@ struct ChatContent: View {
                     Picker("Reasoning", selection: $model.effort) { ForEach(["", "none", "minimal", "low", "medium", "high", "xhigh", "max"], id: \.self) { Text($0.isEmpty ? "Default reasoning" : $0.capitalized).tag($0) } }
                 } label: { Label(model.models.first { $0.id == model.modelID }?.title ?? "Agent default", systemImage: "sparkle").font(.caption) }
                 Spacer()
-                Text(model.effort.isEmpty ? "A little thought goes a long way." : "\(model.effort.capitalized) reasoning").font(.caption2).foregroundStyle(.tertiary)
+                if !model.effort.isEmpty { Text("\(model.effort.capitalized) reasoning").font(.caption).foregroundStyle(.secondary) }
+                if composerFocused {
+                    Button { composerFocused = false } label: { Image(systemName: "keyboard.chevron.compact.down").frame(width: 44, height: 32) }
+                        .accessibilityLabel("Hide keyboard").accessibilityIdentifier("hideChatKeyboard")
+                }
             }.padding(.horizontal, 6)
         }.padding(.horizontal, 16).padding(.vertical, 10).frame(maxWidth: 840).frame(maxWidth: .infinity).background(.bar)
     }
     func attach(_ url: URL) throws {
-        let scoped = url.startAccessingSecurityScopedResource(); defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-        let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
-        guard size <= 10 * 1024 * 1024, attachments.count < 5 else { throw ClientError.message("Attach up to five files, each smaller than 10 MB.") }
-        let data = try Data(contentsOf: url)
-        let type = UTType(filenameExtension: url.pathExtension)
-        let mime = type?.preferredMIMEType ?? "application/octet-stream"
-        let kind = type?.conforms(to: .image) == true ? "image" : type?.conforms(to: .audio) == true ? "audio" : type?.conforms(to: .movie) == true ? "video" : "file"
-        attachments.append(["type": .string(kind), "name": .string(url.lastPathComponent), "mime": .string(mime), "base64": .string("data:\(mime);base64,\(data.base64EncodedString())")])
+        attachments.append(try ChatAttachment.read(url, existingCount: attachments.count))
     }
+
     func queue(_ kind: String) async {
         do { _ = try await model.api.call(model.sessionPath + "/" + kind, method: "POST", body: ["text": .string(model.draft), "invocation_id": .string(UUID().uuidString.lowercased())]); model.draft = "" } catch { model.error = error.localizedDescription }
     }
@@ -222,13 +232,14 @@ struct ChatContent: View {
 }
 
 struct TurnView: View {
+    @Environment(\.appAccent) private var accent
     let turn: JSONValue
     let agentName: String
     let model: ChatModel
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(turn["role"] == "user" ? "YOU" : turn["role"] == "system" ? "WORKSPACE" : agentName.uppercased()).font(.caption2.weight(.bold)).tracking(1.5).foregroundStyle(.secondary)
-            if turn["role"] == "user" { Text(turn["text"].string).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading).padding(16).background(Theme.accent.opacity(0.07), in: RoundedRectangle(cornerRadius: 18)) }
+            if turn["role"] == "user" { Text(turn["text"].string).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading).padding(16).background(accent.opacity(0.07), in: RoundedRectangle(cornerRadius: 18)) }
             ForEach(Array(turn["attachments"].array.enumerated()), id: \.offset) { _, item in AttachmentView(item: item, model: model) }
             ForEach(Array(turn["messages"].array.enumerated()), id: \.offset) { _, message in MessageBlockView(message: message, model: model) }
         }.frame(maxWidth: .infinity, alignment: .leading)

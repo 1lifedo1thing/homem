@@ -45,6 +45,66 @@ final class HomemUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Morning perspective"].waitForExistence(timeout: 5))
         capture(app, "Schedules")
     }
+    @MainActor func testNewChatComposerAndKeyboardDismissal() throws {
+        let app = XCUIApplication(); app.launchArguments = ["--demo"]; app.launch()
+        XCTAssertTrue(app.buttons["New conversation"].waitForExistence(timeout: 10))
+        app.buttons["New conversation"].tap()
+        let message = app.textFields["newChatMessage"]
+        XCTAssertTrue(message.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["startConversation"].isEnabled)
+        XCTAssertFalse(app.textFields["Acp Runtime Id"].exists)
+        XCTAssertTrue(app.buttons["Attach"].exists)
+        app.buttons["newChatRunLocation"].tap()
+        XCTAssertTrue(app.buttons["Studio Mac"].waitForExistence(timeout: 3))
+        app.buttons["Studio Mac"].tap()
+        capture(app, "Simple new chat")
+        message.tap(); message.typeText("Plan a calm afternoon")
+        app.buttons["startConversation"].tap()
+        let composer = app.textFields["messageComposer"]
+        XCTAssertTrue(composer.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["Plan a calm afternoon"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "This is a local demo reply.")).firstMatch.waitForExistence(timeout: 5))
+        composer.tap(); composer.typeText("A follow-up")
+        XCTAssertTrue(app.buttons["hideChatKeyboard"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["Done"].exists)
+        capture(app, "Keyboard composer")
+        app.buttons["hideChatKeyboard"].tap()
+        XCTAssertFalse(app.keyboards.firstMatch.exists)
+    }
+    @MainActor func testDeleteAlertNamesConversationAndCancelPreservesIt() throws {
+        let app = XCUIApplication(); app.launchArguments = ["--demo"]; app.launch()
+        let conversation = app.staticTexts["A weekend in Kyoto"]
+        XCTAssertTrue(conversation.waitForExistence(timeout: 10))
+        conversation.swipeLeft()
+        app.buttons["Delete"].firstMatch.tap()
+        let alert = app.alerts["Delete conversation?"]
+        XCTAssertTrue(alert.waitForExistence(timeout: 5))
+        XCTAssertTrue(alert.staticTexts["“A weekend in Kyoto” will be permanently deleted."].exists)
+        capture(app, "Centered delete confirmation")
+        alert.buttons["Cancel"].tap()
+        XCTAssertTrue(conversation.exists)
+    }
+    @MainActor func testThemePreferencesPersist() throws {
+        let app = XCUIApplication(); app.launchArguments = ["--demo"]; app.launch()
+        app.tabBars.buttons["Settings"].tap()
+        app.swipeUp()
+        let appearance = app.buttons["appearancePicker"]
+        XCTAssertTrue(appearance.waitForExistence(timeout: 5))
+        appearance.tap(); app.buttons["Dark"].tap()
+        app.buttons["accentPicker"].tap(); app.buttons["Rose"].tap()
+        app.terminate(); app.launch()
+        app.tabBars.buttons["Settings"].tap(); app.swipeUp()
+        XCTAssertTrue(app.buttons["appearancePicker"].label.contains("Dark"))
+        XCTAssertTrue(app.buttons["accentPicker"].label.contains("Rose"))
+        app.tabBars.buttons["Chats"].tap(); app.buttons["New conversation"].tap()
+        XCTAssertTrue(app.textFields["newChatMessage"].waitForExistence(timeout: 5))
+        app.textFields["newChatMessage"].tap(); app.textFields["newChatMessage"].typeText("A little color")
+        capture(app, "Dark Rose new chat")
+        app.buttons["Cancel"].tap()
+        app.tabBars.buttons["Settings"].tap()
+        app.buttons["appearancePicker"].tap(); app.buttons["System"].tap()
+        app.buttons["accentPicker"].tap(); app.buttons["System"].tap()
+    }
     @MainActor private func capture(_ app: XCUIApplication, _ name: String) {
         let attachment = XCTAttachment(screenshot: app.screenshot()); attachment.name = name; attachment.lifetime = .keepAlways; add(attachment)
     }

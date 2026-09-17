@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct ConnectionView: View {
+    @Environment(\.appAccent) private var accent
     @Environment(AppStore.self) private var store
     @State private var address: String = {
         let saved = UserDefaults.standard.string(forKey: "serverURL") ?? ""
@@ -17,24 +18,17 @@ struct ConnectionView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 28) {
-                    HStack { Image(systemName: "house.and.flag.fill").font(.title2).foregroundStyle(Theme.accent); Text("homem").font(.title2.weight(.bold)); Spacer(); Text("FOR MEMOH").font(.caption2.weight(.semibold)).tracking(2).foregroundStyle(.secondary) }
-                        .padding(.top, 30)
-                    ZStack {
-                        Circle().fill(Theme.accent.opacity(0.06)).frame(width: 210, height: 210)
-                        Circle().stroke(Theme.accent.opacity(0.12), style: StrokeStyle(lineWidth: 1, dash: [4, 6])).frame(width: 180, height: 180)
-                        AgentAvatar(name: "Atlas", size: 82).rotationEffect(.degrees(-9)).offset(x: -50, y: 10)
-                        AgentAvatar(name: "Mika", size: 66).rotationEffect(.degrees(12)).offset(x: 48, y: -38)
-                        AgentAvatar(name: "Sage", size: 48).rotationEffect(.degrees(-5)).offset(x: 52, y: 52)
-                    }.frame(maxWidth: .infinity).accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 24) {
+                    HStack { Image(systemName: "house.and.flag.fill").font(.title2).foregroundStyle(accent); Text("homem").font(.title2.weight(.bold)); Spacer(); Text("FOR MEMOH").font(.caption2.weight(.semibold)).tracking(2).foregroundStyle(.secondary) }
+                        .padding(.top, 16)
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Your agents.\nRight at home.").font(.system(.largeTitle, design: .rounded, weight: .bold))
-                        Text("A little closer to everything you’re building. Connect Memoh and bring your workspace with you.").foregroundStyle(.secondary).lineSpacing(3)
+                        Text("Your conversations, files, and agents. Ready when you are.").foregroundStyle(.secondary).lineSpacing(3)
                     }
                     VStack(alignment: .leading, spacing: 15) {
-                        Label("OFFICIAL MEMOH", systemImage: "checkmark.seal.fill").font(.caption.weight(.semibold)).foregroundStyle(Theme.accent)
-                        Text("Your Memoh account, at home here.").font(.headline)
-                        Text("Sign in at app.memoh.net with an email code or through the official website.").font(.subheadline).foregroundStyle(.secondary)
+                        Label("OFFICIAL MEMOH", systemImage: "checkmark.seal.fill").font(.caption.weight(.semibold)).foregroundStyle(accent)
+                        Text("Continue with your Memoh account.").font(.headline)
+                        Text("Use your email — no password needed.").font(.subheadline).foregroundStyle(.secondary)
                         Button { showOfficialSignIn = true } label: {
                             HStack { Spacer(); Text("Sign in to Memoh").fontWeight(.semibold); Image(systemName: "arrow.right"); Spacer() }.padding(.vertical, 8)
                         }.buttonStyle(.borderedProminent).controlSize(.large).accessibilityIdentifier("officialSignIn")
@@ -62,9 +56,9 @@ struct ConnectionView: View {
                     }
                     Button { store.enterDemo() } label: { HStack { Spacer(); Text("Explore the demo"); Image(systemName: "arrow.up.right"); Spacer() } }.accessibilityIdentifier("exploreDemo")
                     Text("Native on iPhone and iPad · Credentials stay in Keychain").font(.caption2).foregroundStyle(.tertiary).frame(maxWidth: .infinity)
-                }.padding(28).frame(maxWidth: 520)
+                }.padding(24).frame(maxWidth: 520)
                     .frame(maxWidth: .infinity)
-            }.background(Color(.systemGroupedBackground)).navigationBarHidden(true)
+            }.scrollDismissesKeyboard(.interactively).background(Color(.systemGroupedBackground)).navigationBarHidden(true)
                 .sheet(isPresented: $showOfficialSignIn) { OfficialSignInView() }
         }
     }

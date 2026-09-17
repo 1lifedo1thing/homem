@@ -41,6 +41,7 @@ struct ResourceLink: View {
 }
 
 struct ResourceListView: View {
+    @Environment(\.appAccent) private var accent
     @Environment(AppStore.self) private var store
     let spec: ResourceSpec
     @State private var records: [Record] = []
@@ -56,7 +57,7 @@ struct ResourceListView: View {
             ForEach(filtered) { record in
                 NavigationLink { ResourceDetailView(spec: spec, record: record) } label: {
                     HStack(alignment: .top, spacing: 12) {
-                        Image(systemName: spec.icon).foregroundStyle(Theme.accent).frame(width: 28).padding(.top, 3)
+                        Image(systemName: spec.icon).foregroundStyle(accent).frame(width: 28).padding(.top, 3)
                         VStack(alignment: .leading, spacing: 5) {
                             Text(record.title).font(.body.weight(.medium)).lineLimit(4)
                             if !record.subtitle.isEmpty { Text(record.subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(2) }

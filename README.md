@@ -35,6 +35,12 @@ Expand **Use another server** and enter the complete **API base URL**, including
 
 Use your Memoh username/password or an existing access token. JWTs and conversation drafts are kept in the device Keychain. Passwords are not persisted. Signing out removes the saved session/token and drafts for that server. Plain HTTP is supported for self-hosted networks; the connection screen explicitly identifies it.
 
+### Chat and appearance
+
+Start a new chat by writing a message, optionally attaching files, and choosing an agent and **Run on** location. Sessions are created when you send; titles come from the first message. Available computers are loaded from that agent’s workspace targets. If a server does not expose targets, **Agent default** remains available.
+
+In **Settings**, choose **Appearance** (System, Light, Dark) and **Color scheme** (System, Memoh, Ocean, Forest, Rose, Amber). Homem remembers these on the device. Memoh’s web theme is stored in that browser, so choose the corresponding scheme here to match it.
+
 ## Features
 
 - **Conversations:** session creation, history pagination, rename/delete, native Markdown and code blocks, live runtime snapshots/deltas, reconnect and replay recovery, model/reasoning choices, attachments, voice recordings, local read-aloud, retry/edit/fork, abort, approval decisions, agent questions, follow-up and steer queues.

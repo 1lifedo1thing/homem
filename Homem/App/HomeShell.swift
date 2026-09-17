@@ -19,12 +19,13 @@ struct HomeShell: View {
 }
 
 struct LibraryView: View {
+    @Environment(\.appAccent) private var accent
     @Environment(AppStore.self) private var store
     var body: some View {
         List {
             Section {
                 VStack(alignment: .leading, spacing: 10) {
-                    Image(systemName: "square.stack.3d.up.fill").font(.largeTitle).foregroundStyle(Theme.accent)
+                    Image(systemName: "square.stack.3d.up.fill").font(.largeTitle).foregroundStyle(accent)
                     Text("More possibility.\nLess busywork.").font(.title2.weight(.bold))
                     Text("Memories, recurring work, and tools that make your agents yours.").font(.subheadline).foregroundStyle(.secondary)
                 }.padding(.vertical, 12)

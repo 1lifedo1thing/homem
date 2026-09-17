@@ -1,14 +1,16 @@
 import SwiftUI
 
 struct SettingsView: View {
+    @Environment(\.appAccent) private var accent
     @Environment(AppStore.self) private var store
     @AppStorage("appearance") private var appearance = "system"
+    @AppStorage("color-scheme") private var colorScheme = "system"
     @State private var signOut = false
     var body: some View {
         List {
             Section {
                 HStack(spacing: 14) {
-                    Image(systemName: "person.crop.circle.fill").font(.system(size: 44)).foregroundStyle(Theme.accent)
+                    Image(systemName: "person.crop.circle.fill").font(.system(size: 44)).foregroundStyle(accent)
                     VStack(alignment: .leading, spacing: 4) { Text(store.profile.text("display_name", "username").nonEmpty ?? "Your account").font(.headline); Text(store.isDemo ? "Demo workspace" : store.api?.baseURL.host ?? "Connected server").font(.caption).foregroundStyle(.secondary) }
                 }.padding(.vertical, 8)
                 NavigationLink("Profile", systemImage: "person") { SettingsDocumentView(title: "Profile", path: "/users/me", template: "/users/me") }
@@ -30,7 +32,8 @@ struct SettingsView: View {
                 if store.canAdmin { ResourceLink(title: "People", icon: "person.2", spec: .global("/users", title: "People")) }
             }
             Section("Make yourself at home") {
-                Picker("Appearance", selection: $appearance) { Text("System").tag("system"); Text("Light").tag("light"); Text("Dark").tag("dark") }
+                Picker("Appearance", selection: $appearance) { Text("System").tag("system"); Text("Light").tag("light"); Text("Dark").tag("dark") }.accessibilityIdentifier("appearancePicker")
+                Picker("Color scheme", selection: $colorScheme) { ForEach(Theme.schemes, id: \.self) { Text($0 == "memoh" ? "Memoh" : $0.capitalized).tag($0) } }.accessibilityIdentifier("accentPicker")
                 NavigationLink("Advanced server controls", systemImage: "wrench.and.screwdriver") { OperationBrowser() }
                 NavigationLink("About Homem", systemImage: "info.circle") { AboutView() }
             }
@@ -38,15 +41,16 @@ struct SettingsView: View {
                 Button(store.isDemo ? "Connect your server" : "Sign out", role: store.isDemo ? nil : .destructive) { if store.isDemo { store.signOut() } else { signOut = true } }
             } footer: { Text("Homem 1.0 · Native Swift client for Memoh") }
         }.navigationTitle("Settings")
-            .confirmationDialog("Sign out of Memoh?", isPresented: $signOut, titleVisibility: .visible) { Button("Sign out", role: .destructive) { store.signOut() } }
+            .alert("Sign out of Memoh?", isPresented: $signOut) { Button("Sign out", role: .destructive) { store.signOut() } }
     }
 }
 
 struct AboutView: View {
+    @Environment(\.appAccent) private var accent
     var body: some View {
         List {
             Section {
-                VStack(alignment: .leading, spacing: 14) { Image(systemName: "house.and.flag.fill").font(.largeTitle).foregroundStyle(Theme.accent); Text("Homem").font(.largeTitle.bold()); Text("An independent native companion for Memoh. Built for the small screen, with room for big ideas.").foregroundStyle(.secondary) }.padding(.vertical)
+                VStack(alignment: .leading, spacing: 14) { Image(systemName: "house.and.flag.fill").font(.largeTitle).foregroundStyle(accent); Text("Homem").font(.largeTitle.bold()); Text("An independent native companion for Memoh. Built for the small screen, with room for big ideas.").foregroundStyle(.secondary) }.padding(.vertical)
                 LabeledContent("Version", value: "1.0 (1)")
                 LabeledContent("Bundle ID", value: "ad.neko.homem")
             }

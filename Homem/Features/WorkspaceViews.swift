@@ -44,6 +44,7 @@ struct WorkspaceView: View {
 }
 
 struct FileBrowserView: View {
+    @Environment(\.appAccent) private var accent
     @Environment(AppStore.self) private var store
     var botID: String
     var path: String
@@ -67,7 +68,7 @@ struct FileBrowserView: View {
                     else { FileEditorView(botID: botID, path: file.value["path"].string) }
                 } label: {
                     HStack(spacing: 12) {
-                        Image(systemName: file.value["isDir"].bool ? "folder.fill" : "doc.text").foregroundStyle(file.value["isDir"].bool ? Theme.accent : .secondary)
+                        Image(systemName: file.value["isDir"].bool ? "folder.fill" : "doc.text").foregroundStyle(file.value["isDir"].bool ? accent : .secondary)
                         VStack(alignment: .leading, spacing: 4) { Text(file.value["name"].string); if !file.value["isDir"].bool { Text(ByteCountFormatter.string(fromByteCount: Int64(file.value["size"].number), countStyle: .file)).font(.caption).foregroundStyle(.secondary) } }
                     }.padding(.vertical, 4)
                 }.contextMenu { Button("Rename", systemImage: "pencil") { rename = file; name = file.value["name"].string }; Button("Delete", systemImage: "trash", role: .destructive) { delete = file } }

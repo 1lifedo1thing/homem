@@ -32,6 +32,17 @@ Screenshots from the passing UI run:
 |---|---|
 | ![Official email](screenshots/official-email.png) | ![Custom server](screenshots/custom-server.png) |
 
+## Chat and login polish — 17 September 2026
+
+- Replaced the generated session form with a message composer, attachments, agent selector, and named workspace targets. The first message is queued with its target before the socket starts; a real WebSocket fixture verifies delivery exactly once with attachment data and the selected target intact.
+- Replaced the list-level delete popover with a centered, named alert and explicit Cancel. Swipe actions no longer optimistically remove a row before confirmation.
+- Removed the floating keyboard Done toolbar. Dismissal lives in the chat composer, and new-chat actions remain above the keyboard.
+- Replaced hard-coded teal with a persisted accent preference shared throughout the app. System/light/dark appearance remains independent. Memoh web themes are browser-local, so native choices are configured in Settings.
+- Shortened onboarding, focused email entry, added automatic six-digit verification and single-workspace entry, and added browser loading/error recovery.
+- Full simulator run `Test-Homem-2026.09.17_17-07-08-+0900.xcresult`: **26 tests passed**, zero failures/skips. Final targeted run `Test-Homem-2026.09.17_17-10-27-+0900.xcresult`: **three UI tests passed**, including run-location selection, deletion cancellation, keyboard dismissal, and persistence of Dark/Rose across relaunch. This adds a 27th distinct test to the suite.
+- After pinning new-chat actions above the keyboard, both composer and theme tests passed again in `Test-Homem-2026.09.17_17-12-33-+0900.xcresult`.
+- New chat, delete confirmation, keyboard composer, official email login, and dark appearance screenshots were exported and visually inspected. No production email or model request was sent during these checks.
+
 ## Reproduce
 
 Run `bash scripts/test.sh` from the project root, setting `HOMEM_TEST_DESTINATION` to an installed iOS simulator if needed. This starts the loopback fixture and runs the XCTest targets. Result bundles are local build artifacts and are excluded from source control.

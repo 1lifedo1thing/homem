@@ -16,6 +16,23 @@ import XCTest
         api.token = response["access_token"].string
         return api
     }
+    func testFirstMessageQueuedBeforeConnectionKeepsLocationAndAttachments() async throws {
+        let api = try await connectedClient()
+        let model = ChatModel(api: api, botID: "fixture-bot", sessionID: "fixture-session")
+        let prompt = "New conversation \(UUID().uuidString)"
+        let attachment: JSONValue = ["name": "note.txt", "type": "file", "mime": "text/plain", "base64": "data:text/plain;base64,aGk="]
+        model.draft = prompt; model.workspaceTargetID = "studio-mac"
+        let queued = await model.send(attachments: [attachment])
+        XCTAssertTrue(queued); XCTAssertNil(model.error)
+        await model.start(); defer { model.stop() }
+        let deadline = Date().addingTimeInterval(20)
+        while (!model.history.contains { $0["text"].string == prompt } || model.active), Date() < deadline { try await Task.sleep(for: .milliseconds(100)) }
+        let turns = model.history.filter { $0["text"].string == prompt }
+        XCTAssertEqual(turns.count, 1)
+        XCTAssertEqual(turns.first?["workspace_target_id"], "studio-mac")
+        XCTAssertEqual(turns.first?["attachments"].array, [attachment])
+        XCTAssertTrue(model.pending.isEmpty)
+    }
     func testRealHTTPAndStreamOperation() async throws {
         let api = try await connectedClient()
         let bots = try await api.call("/bots")

@@ -1,7 +1,17 @@
 import SwiftUI
 
 enum Theme {
-    static let accent = Color(red: 0.12, green: 0.43, blue: 0.39)
+    static let schemes = ["system", "memoh", "ocean", "forest", "rose", "amber"]
+    static func accent(for scheme: String) -> Color {
+        switch scheme {
+        case "memoh": return .purple
+        case "ocean": return .blue
+        case "forest": return .green
+        case "rose": return .pink
+        case "amber": return .orange
+        default: return Color(uiColor: .systemBlue)
+        }
+    }
     static let palette: [Color] = [.teal, .indigo, .orange, .pink, .blue]
     static func color(_ id: String) -> Color { palette[id.utf8.reduce(0) { ($0 + Int($1)) % palette.count }] }
 }
@@ -54,5 +64,15 @@ struct DemoBadge: View {
 extension NavigationLink where Label == SwiftUI.Label<Text, Image> {
     init(_ title: String, systemImage: String, @ViewBuilder destination: () -> Destination) {
         self.init(destination: destination, label: { SwiftUI.Label(title, systemImage: systemImage) })
+    }
+}
+
+private struct AppAccentKey: EnvironmentKey {
+    static let defaultValue = Theme.accent(for: "system")
+}
+extension EnvironmentValues {
+    var appAccent: Color {
+        get { self[AppAccentKey.self] }
+        set { self[AppAccentKey.self] = newValue }
     }
 }

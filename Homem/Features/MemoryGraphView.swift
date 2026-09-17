@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct MemoryGraphView: View {
+    @Environment(\.appAccent) private var accent
     @Environment(AppStore.self) private var store
     var path: String
     @State private var graph: JSONValue = .null
@@ -21,7 +22,7 @@ struct MemoryGraphView: View {
                                 for edge in graph["edges"].array {
                                     guard let a = nodes.firstIndex(where: { $0["id"] == edge["source"] }), let b = nodes.firstIndex(where: { $0["id"] == edge["target"] }) else { continue }
                                     var line = Path(); line.move(to: position(a, size: size)); line.addLine(to: position(b, size: size))
-                                    context.stroke(line, with: .color(Theme.accent.opacity(0.25)), lineWidth: min(4, max(1, edge["weight"].number)))
+                                    context.stroke(line, with: .color(accent.opacity(0.25)), lineWidth: min(4, max(1, edge["weight"].number)))
                                 }
                             }.accessibilityHidden(true)
                             ForEach(Array(nodes.prefix(60).enumerated()), id: \.offset) { i, node in
@@ -33,7 +34,7 @@ struct MemoryGraphView: View {
                     }.frame(height: 380).background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 22))
                 } else if error == nil { EmptyState(title: "Connections grow over time", symbol: "brain", detail: "Your agent’s memory relationships will appear here.") }
                 ForEach(nodes.filter { search.isEmpty || $0.pretty.localizedCaseInsensitiveContains(search) }, id: \.self) { node in
-                    Button { selected = node } label: { HStack { Image(systemName: "circle.hexagongrid").foregroundStyle(Theme.accent); VStack(alignment: .leading) { Text(node.text("label", "subject", "topic", "id")).font(.headline); Text(node["memory"].string).font(.caption).foregroundStyle(.secondary).lineLimit(2) }; Spacer(); Text(node["count"].scalar).font(.caption).foregroundStyle(.secondary) }.padding() }.buttonStyle(.plain)
+                    Button { selected = node } label: { HStack { Image(systemName: "circle.hexagongrid").foregroundStyle(accent); VStack(alignment: .leading) { Text(node.text("label", "subject", "topic", "id")).font(.headline); Text(node["memory"].string).font(.caption).foregroundStyle(.secondary).lineLimit(2) }; Spacer(); Text(node["count"].scalar).font(.caption).foregroundStyle(.secondary) }.padding() }.buttonStyle(.plain)
                 }
             }.padding(22)
         }.background(Color(.systemGroupedBackground)).navigationTitle("Memory graph").navigationBarTitleDisplayMode(.inline).searchable(text: $search)

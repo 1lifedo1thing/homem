@@ -71,6 +71,7 @@ struct RuntimeState {
     var models: [Record] = []
     var modelID = ""
     var effort = ""
+    var workspaceTargetID = ""
     var draft = ""
     private var socket: URLSessionWebSocketTask?
     private var receiveTask: Task<Void, Never>?
@@ -172,9 +173,14 @@ struct RuntimeState {
             api.demo.collections["messages/" + sessionID] = history; draft = ""; return true
         }
         var request: JSONValue = ["type": "message", "invocation_id": .string(invocation), "session_id": .string(sessionID), "text": .string(text), "attachments": .array(attachments)]
+        if !workspaceTargetID.isEmpty { request["workspace_target_id"] = .string(workspaceTargetID) }
         if !modelID.isEmpty { request["model_id"] = .string(modelID) }
         if !effort.isEmpty { request["reasoning_effort"] = .string(effort) }
         pending.append(turn); draft = ""
+        if socket == nil {
+            reliable[invocation] = request
+            return true
+        }
         do { try await reliableSend(request); return true }
         catch { self.error = "Connection interrupted. Your message is queued for reconnection."; return true }
     }

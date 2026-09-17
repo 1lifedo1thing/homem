@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct AgentsView: View {
+    @Environment(\.appAccent) private var accent
     @Environment(AppStore.self) private var store
     @State private var create = false
     @State private var search = ""
@@ -23,7 +24,7 @@ struct AgentsView: View {
                     }
                     Button { create = true } label: {
                         VStack(spacing: 12) { Image(systemName: "plus.circle").font(.largeTitle); Text("Make room for someone new").font(.subheadline.weight(.medium)); Text("Create an agent").font(.caption).foregroundStyle(.secondary) }
-                            .foregroundStyle(Theme.accent).frame(maxWidth: .infinity, minHeight: 155).background(Theme.accent.opacity(0.035), in: RoundedRectangle(cornerRadius: 22)).overlay(RoundedRectangle(cornerRadius: 22).stroke(Theme.accent.opacity(0.22), style: StrokeStyle(lineWidth: 1, dash: [5, 5])))
+                            .foregroundStyle(accent).frame(maxWidth: .infinity, minHeight: 155).background(accent.opacity(0.035), in: RoundedRectangle(cornerRadius: 22)).overlay(RoundedRectangle(cornerRadius: 22).stroke(accent.opacity(0.22), style: StrokeStyle(lineWidth: 1, dash: [5, 5])))
                     }.accessibilityIdentifier("createAgent")
                 }
                 if store.isDemo { DemoBadge() }
