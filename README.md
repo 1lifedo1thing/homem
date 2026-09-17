@@ -8,22 +8,32 @@ A native Swift / SwiftUI iPhone and iPad client for [Memoh](https://github.com/f
 
 **API baseline:** Memoh commit `51bb2073d8d99c961ce9f23555e8fb3bdd2aadc4`
 
-Homem connects to an existing Memoh backend. It does not run an agent or a container on the phone. The interface uses SwiftUI and UIKit, SwiftTerm for the interactive terminal, and native WebRTC for the remote desktop. There is no web-app wrapper.
+Homem connects to an existing Memoh backend. It does not run an agent or a container on the phone. The interface uses SwiftUI and UIKit, SwiftTerm for the interactive terminal, and native WebRTC for the remote desktop. The workspace remains native; an optional embedded browser is used for official account sign-in and account/workspace setup.
 
 ## Run
 
 1. Open `Homem.xcodeproj` in Xcode. Swift Package Manager resolves the pinned SwiftTerm and WebRTC packages.
 2. Select the **Homem** scheme and an iPhone or iPad simulator, then Run.
 3. Signing is configured for Kitta Ltd (`7P8CLHDH5G`). For another organization, choose its Apple signing team under Signing & Capabilities and update `project.yml`.
-4. Connect a server, or choose **Explore the demo**. Demo changes are local to the current app session and never contact a server.
+4. Choose **Sign in to Memoh** for the official service, **Use another server** for a custom deployment, or **Explore the demo**. Demo changes are local to the current app session and never contact a server.
 
-Enter the complete **API base URL**, including any reverse-proxy prefix:
+### Official Memoh
+
+The primary sign-in option connects to [app.memoh.net](https://app.memoh.net). Enter your email, receive a six-digit sign-in code, and verify it in native screens. Resend cooldowns and authenticator-based two-factor challenges are supported. Then select a workspace to open the native app.
+
+**Continue in browser** opens the official website in an isolated, temporary browser, including its GitHub/Google options and account/workspace setup. After signing in, tap **Continue in Homem** and select a workspace. Identity providers may reject embedded browsers; native email sign-in remains available without changing browser identity or bypassing provider restrictions.
+
+Only HTTPS cookies scoped to `app.memoh.net` or its parent domain are transferred to the native session. Identity-provider cookies are discarded. The selected workspace and session are saved in Keychain only after its native API succeeds. Official requests use `/api/v1` for platform authentication/workspace selection and `/api/memoh` for workspace operations, with workspace headers and short-lived WebSocket tickets. Custom servers use separate bearer credentials and receive no official cookies.
+
+### Custom servers
+
+Expand **Use another server** and enter the complete **API base URL**, including any reverse-proxy prefix:
 
 - Web/reverse proxy: `https://memoh.example.com/api`
 - Direct backend: `http://192.168.1.20:8080`
 - Simulator with a backend on the Mac: `http://127.0.0.1:8080`
 
-Use your Memoh username/password or an existing access token. JWTs and conversation drafts are kept in the device Keychain. Passwords are not persisted. Signing out removes the token and drafts for that server. Plain HTTP is supported for self-hosted networks; the connection screen explicitly identifies it.
+Use your Memoh username/password or an existing access token. JWTs and conversation drafts are kept in the device Keychain. Passwords are not persisted. Signing out removes the saved session/token and drafts for that server. Plain HTTP is supported for self-hosted networks; the connection screen explicitly identifies it.
 
 ## Features
 

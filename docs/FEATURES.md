@@ -6,7 +6,7 @@ Audited against `apps/desktop`, the shared `apps/web` routes/components, and `sp
 
 | Desktop area | Native implementation | Additional controls |
 |---|---|---|
-| Server connection and login | API-base URL, username/password or token, Keychain, refresh, expired-session recovery | Cloud-specific login extensions are not included in the OSS contract |
+| Server connection and login | Official Memoh first: native email-code/MFA, isolated browser sign-in, workspace selection, cookie sessions and WebSocket tickets. Custom API-base URL, username/password or token, Keychain, bearer refresh, expired-session recovery | Official platform paths are based on the deployed app.memoh.net client; OAuth providers may reject embedded browsers. Native email remains available. |
 | Agent management | List/create/edit/pause/resume/delete, health, usage, settings, access | Ownership, ACL rules, hooks, connectors and workspace target policies use advanced forms |
 | Chat sessions | List/page/create/rename/delete, Markdown/code, history, attachments, reasoning/model choices | ACP session configuration and runtime commands use session controls |
 | Live chat | WebSocket admission, stable invocation IDs, snapshot/delta sequencing, reconnect, resend, abort | Foreground sockets reconnect after app suspension; server work continues independently |
@@ -34,5 +34,5 @@ Audited against `apps/desktop`, the shared `apps/web` routes/components, and `sp
 - Rich Markdown text and fenced code render natively. Mermaid diagrams, KaTeX equations, interactive HTML artifacts, and desktop-style patch editors are not rendered as their desktop widgets. Diffs are readable as text.
 - Attachments are limited to five files of 10 MB each in the composer. Workspace uploads are limited to 50 MB. Downloads/backups currently buffer the response in memory; very large workspaces should use server-side backup tooling.
 - Demo mode is clearly labeled, has in-memory sample data, and explicitly rejects unavailable remote actions. It never silently substitutes sample data after a server error.
-- Provider-specific Cloud authentication, OAuth registrations, QR logins, actual model responses, external channel delivery, container lifecycle, terminal sessions, WebRTC connectivity and backup round trips still require testing against the intended server. No server credentials were supplied during implementation.
+- Live official email delivery, authenticated workspace access, social-provider browser completion, OAuth registrations, QR logins, actual model responses, external channel delivery, container lifecycle, terminal sessions, WebRTC connectivity and backup round trips still require testing against the intended server. No server credentials were supplied during implementation.
 - Full desktop parity is therefore **not certified**. The API coverage is broad, but the specialized desktop renderers and workflows listed above remain limits. Review these before treating this as an App Store release.

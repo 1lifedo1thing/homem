@@ -106,7 +106,7 @@ struct RuntimeState {
                 do {
                     self.connection = backoff == 1 ? "Connecting" : "Reconnecting"
                     if backoff > 1 { _ = try await self.api.call("/users/me") }
-                    let ws = try self.api.socket(self.prefix + "/web/ws")
+                    let ws = try await self.api.socket(self.prefix + "/web/ws")
                     self.socket = ws
                     try await self.write(["type": "runtime_subscribe", "session_id": .string(self.sessionID)])
                     for item in self.reliable.values { try await self.write(item) }

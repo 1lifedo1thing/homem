@@ -12,7 +12,7 @@ struct SettingsView: View {
                     VStack(alignment: .leading, spacing: 4) { Text(store.profile.text("display_name", "username").nonEmpty ?? "Your account").font(.headline); Text(store.isDemo ? "Demo workspace" : store.api?.baseURL.host ?? "Connected server").font(.caption).foregroundStyle(.secondary) }
                 }.padding(.vertical, 8)
                 NavigationLink("Profile", systemImage: "person") { SettingsDocumentView(title: "Profile", path: "/users/me", template: "/users/me") }
-                OperationButton(title: "Change password", path: "/users/me/password", template: "/users/me/password", method: "PUT")
+                if store.api?.isOfficial != true { OperationButton(title: "Change password", path: "/users/me/password", template: "/users/me/password", method: "PUT") }
             }
             Section("Intelligence") {
                 ResourceLink(title: "Providers", icon: "network", spec: .global("/providers", title: "Providers"))

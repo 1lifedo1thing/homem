@@ -20,6 +20,18 @@ Screenshots from the passing UI run:
 |---|---|---|
 | ![Agents](screenshots/agents.png) | ![Chat](screenshots/native-chat.png) | ![Memory](screenshots/created-memory.png) |
 
+## Official sign-in update — 17 September 2026
+
+- Inspected the public app.memoh.net login page and deployed client. Its platform endpoints are `/api/v1/auth/email-code/send`, `/api/v1/auth/email-code/verify`, `/api/v1/auth/verify-mfa`, `/api/v1/users/me`, `/api/v1/teams`, and `/api/v1/ws-tickets`; native workspace requests use `/api/memoh`. The live unauthenticated config confirms email login and GitHub/Google providers.
+- Simulator build succeeded. `build/Logs/Test/Test-Homem-2026.09.17_14-06-39-+0900.xcresult`: **23 tests passed, zero failures, zero skips** on iPhone 17 Pro / iOS 26.5 (19 core/network/integration tests and four UI tests).
+- New protocol tests verify email-code payloads, server resend cooldown, cookies set on verification, MFA challenges and rejection, nested workspace membership responses, official cookie isolation/expiry/serialization, one-time WebSocket tickets, and expired-session handling without the third-party bearer refresh endpoint.
+- The simulator verifies that official sign-in is primary, invalid email cannot request a code, valid email enables the action, cancellation works, and custom server credentials remain reachable. Screenshots from the passing run were inspected.
+- No email was sent to a production address, and no live account or social-provider authentication was completed. Real email delivery, workspace operations after live login, and provider acceptance of the embedded browser remain unverified. Email sign-in does not rely on an embedded OAuth flow.
+
+| Official email sign-in | Custom server sign-in |
+|---|---|
+| ![Official email](screenshots/official-email.png) | ![Custom server](screenshots/custom-server.png) |
+
 ## Reproduce
 
 Run `bash scripts/test.sh` from the project root, setting `HOMEM_TEST_DESTINATION` to an installed iOS simulator if needed. This starts the loopback fixture and runs the XCTest targets. Result bundles are local build artifacts and are excluded from source control.
@@ -28,7 +40,7 @@ For a simulator-independent transport check on the Mac, start `python3 scripts/f
 
 ## Verification limits
 
-- No real Memoh server, account, model provider, container, or OAuth registration was supplied. Local fixture results establish client transport behavior, not end-to-end compatibility with every deployment.
+- No authenticated Memoh account, model provider, container runtime credentials, or OAuth registration was supplied. The official public login and deployed client were inspected. Local fixture results establish client transport behavior, not end-to-end compatibility with every deployment.
 - An intermediate expanded simulator run became unresponsive during UI automation and was stopped. Its wire tests had skipped after a two-second fixture startup timeout. The subsequent final core run used a longer allowance and passed both wire tests without skips. The additional onboarding screenshot test subsequently passed in Xcode Cloud Build 1.
 - iPad uses adaptive layouts and is included in the target. A separate iPad simulator launch could not be completed reliably on this host; its layout is not claimed as visually verified.
 - Physical-device signing, device installation, TestFlight/App Store submission, accessibility audit, and testing on the oldest supported OS remain release checks.

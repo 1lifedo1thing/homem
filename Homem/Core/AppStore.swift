@@ -14,8 +14,11 @@ import Observation
     init() {
         if ProcessInfo.processInfo.arguments.contains("--ui-onboarding") { return }
         if ProcessInfo.processInfo.arguments.contains("--demo") { enterDemo() }
-        else if let base = UserDefaults.standard.string(forKey: "serverURL"), let url = try? APIClient.normalizedURL(base), let token = Keychain.read(base) {
-            api = APIClient(baseURL: url, token: token)
+        else if let base = UserDefaults.standard.string(forKey: "serverURL"), let url = try? APIClient.normalizedURL(base) {
+            if url == OfficialServer.apiURL, let session = OfficialSession.restore() {
+                api = APIClient(baseURL: url, officialSession: session)
+                api?.persistOfficialSession = true
+            } else if let token = Keychain.read(base) { api = APIClient(baseURL: url, token: token) }
         }
     }
     func enterDemo() {
@@ -50,9 +53,28 @@ import Observation
             error = nil
         } catch { self.error = error.localizedDescription }
     }
+    func connectOfficial(client: APIClient, teamID: String) async throws {
+        guard client.isOfficial, !teamID.isEmpty else { throw ClientError.invalidResponse }
+        client.officialSession?.teamID = teamID
+        // Verify the workspace API before replacing any existing connection.
+        let user = try await client.call("/users/me")
+        let botValue = try await client.call("/bots")
+        let saved = OfficialSession(cookies: client.session.configuration.httpCookieStorage?.cookies ?? [], teamID: teamID)
+        guard !saved.validCookies.isEmpty else { throw ClientError.message("Sign in to Memoh again to continue.") }
+        try Task.checkCancellation()
+        try saved.save()
+        client.unauthorized = false
+        client.persistOfficialSession = true
+        UserDefaults.standard.set(OfficialServer.apiURL.absoluteString, forKey: "serverURL")
+        profile = user; bots = botValue.items.map(Record.init); selectedBotID = bots.first?.id ?? ""; api = client
+    }
     func signOut() {
         api?.signedOut = true
         if let api, !api.isDemo { try? Keychain.save(nil, account: api.baseURL.absoluteString); Keychain.removeDrafts(server: api.baseURL.absoluteString) }
+        if api?.isOfficial == true {
+            try? Keychain.save(nil, account: OfficialServer.keychainAccount)
+            for cookie in api?.session.configuration.httpCookieStorage?.cookies ?? [] { api?.session.configuration.httpCookieStorage?.deleteCookie(cookie) }
+        }
         api?.session.invalidateAndCancel(); api = nil; bots = []; profile = .null; error = nil
     }
 }

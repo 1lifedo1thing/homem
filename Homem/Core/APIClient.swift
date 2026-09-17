@@ -54,16 +54,23 @@ final class SafeRedirectDelegate: NSObject, URLSessionTaskDelegate, @unchecked S
     var isDemo: Bool
     var unauthorized = false
     var signedOut = false
+    var officialSession: OfficialSession?
+    var isOfficial: Bool { officialSession != nil }
+    var persistOfficialSession = false
     let session: URLSession
     let demo = DemoServer()
     private var refreshTask: Task<String, Error>?
 
-    init(baseURL: URL, token: String = "", isDemo: Bool = false, session: URLSession? = nil) {
+    init(baseURL: URL, token: String = "", isDemo: Bool = false, session: URLSession? = nil, officialSession: OfficialSession? = nil) {
         self.baseURL = baseURL; self.token = token; self.isDemo = isDemo
+        self.officialSession = officialSession
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = 45
         config.timeoutIntervalForResource = 120
         self.session = session ?? URLSession(configuration: config, delegate: SafeRedirectDelegate(), delegateQueue: nil)
+        if let officialSession {
+            for cookie in officialSession.validCookies { self.session.configuration.httpCookieStorage?.setCookie(cookie) }
+        }
     }
     static func normalizedURL(_ input: String) throws -> URL {
         guard var c = URLComponents(string: input.trimmingCharacters(in: .whitespacesAndNewlines)),
@@ -74,16 +81,31 @@ final class SafeRedirectDelegate: NSObject, URLSessionTaskDelegate, @unchecked S
         guard let url = c.url else { throw ClientError.invalidURL }; return url
     }
     func request(_ path: String, method: String = "GET", query: [String: String] = [:], body: JSONValue? = nil) throws -> URLRequest {
+        try request(at: baseURL, path: path, method: method, query: query, body: body)
+    }
+    private func request(at base: URL, path: String, method: String, query: [String: String], body: JSONValue?, includeTeam: Bool = true) throws -> URLRequest {
+        if isOfficial, base != OfficialServer.apiURL && base != OfficialServer.platformURL { throw ClientError.invalidURL }
         guard path.hasPrefix("/"), !path.contains("://"), !path.contains("?"), !path.contains("#"), !path.split(separator: "/").contains(".."),
-              var c = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else { throw ClientError.invalidURL }
+              var c = URLComponents(url: base, resolvingAgainstBaseURL: false) else { throw ClientError.invalidURL }
         c.percentEncodedPath = c.percentEncodedPath.trimmingCharacters(in: CharacterSet(charactersIn: "/")).isEmpty ? path : c.percentEncodedPath + path
         if !query.isEmpty { c.queryItems = query.sorted { $0.key < $1.key }.map { URLQueryItem(name: $0.key, value: $0.value) } }
         guard let url = c.url else { throw ClientError.invalidURL }
         var r = URLRequest(url: url); r.httpMethod = method
         r.setValue("application/json", forHTTPHeaderField: "Accept")
-        if !token.isEmpty { r.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
+        if let officialSession {
+            r.setValue(OfficialServer.origin.absoluteString, forHTTPHeaderField: "Origin")
+            if includeTeam, !officialSession.teamID.isEmpty { r.setValue(officialSession.teamID, forHTTPHeaderField: "X-Team-ID") }
+            let cookies = session.configuration.httpCookieStorage?.cookies(for: url)?.filter(OfficialServer.accepts) ?? []
+            for (key, value) in HTTPCookie.requestHeaderFields(with: cookies) { r.setValue(value, forHTTPHeaderField: key) }
+        } else if !token.isEmpty { r.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
         if let body { r.httpBody = try body.encoded; r.setValue("application/json", forHTTPHeaderField: "Content-Type") }
         return r
+    }
+    func platformCall(_ path: String, method: String = "GET", body: JSONValue? = nil) async throws -> JSONValue {
+        guard isOfficial else { throw ClientError.invalidURL }
+        let data = try await perform(request(at: OfficialServer.platformURL, path: path, method: method, query: [:], body: body, includeTeam: path == "/ws-tickets"), retry: false)
+        if data.isEmpty { return [:] }
+        return try JSONDecoder().decode(JSONValue.self, from: data)
     }
     func call(_ path: String, method: String = "GET", query: [String: String] = [:], body: JSONValue? = nil) async throws -> JSONValue {
         guard !signedOut else { throw ClientError.message("This session has signed out.") }
@@ -94,9 +116,23 @@ final class SafeRedirectDelegate: NSObject, URLSessionTaskDelegate, @unchecked S
         return value
     }
     func perform(_ request: URLRequest, retry: Bool = true) async throws -> Data {
+        guard !signedOut else { throw ClientError.message("This session has signed out.") }
         let (data, response) = try await session.data(for: request)
+        guard !signedOut else { throw ClientError.message("This session has signed out.") }
         guard let http = response as? HTTPURLResponse else { throw ClientError.invalidResponse }
-        if http.statusCode == 401, retry, !token.isEmpty, !request.url!.path.hasSuffix("/auth/refresh") {
+        if isOfficial, let url = http.url, url.host == OfficialServer.origin.host, url.scheme == "https" {
+            let headers = http.allHeaderFields.reduce(into: [String: String]()) { result, entry in
+                if let key = entry.key as? String, let value = entry.value as? String { result[key] = value }
+            }
+            for cookie in HTTPCookie.cookies(withResponseHeaderFields: headers, for: url) {
+                if cookie.expiresDate.map({ $0 <= Date() }) == true { session.configuration.httpCookieStorage?.deleteCookie(cookie) }
+                else if OfficialServer.accepts(cookie) { session.configuration.httpCookieStorage?.setCookie(cookie) }
+            }
+        }
+        if let officialSession, persistOfficialSession {
+            try OfficialSession(cookies: session.configuration.httpCookieStorage?.cookies ?? [], teamID: officialSession.teamID).save()
+        }
+        if http.statusCode == 401, retry, !isOfficial, !token.isEmpty, !request.url!.path.hasSuffix("/auth/refresh") {
             do {
                 if refreshTask == nil {
                     refreshTask = Task { [self] in
@@ -121,10 +157,21 @@ final class SafeRedirectDelegate: NSObject, URLSessionTaskDelegate, @unchecked S
         }
         return data
     }
-    func socket(_ path: String, query: [String: String] = [:]) throws -> URLSessionWebSocketTask {
+    func socketRequest(_ path: String, query: [String: String] = [:]) async throws -> URLRequest {
+        var query = query
+        if let officialSession {
+            let ticket = try await platformCall("/ws-tickets", method: "POST")
+            guard !ticket["ticket"].string.isEmpty else { throw ClientError.invalidResponse }
+            query["ticket"] = ticket["ticket"].string
+            query["team_id"] = officialSession.teamID
+        }
         var r = try request(path, query: query)
         var c = URLComponents(url: r.url!, resolvingAgainstBaseURL: false)!
         c.scheme = c.scheme == "https" ? "wss" : "ws"; r.url = c.url
+        return r
+    }
+    func socket(_ path: String, query: [String: String] = [:]) async throws -> URLSessionWebSocketTask {
+        let r = try await socketRequest(path, query: query)
         let socket = session.webSocketTask(with: r); socket.resume(); return socket
     }
     func streamOperation(_ path: String, method: String, query: [String: String] = [:], body: JSONValue?, onEvent: (JSONValue) -> Void) async throws -> JSONValue {

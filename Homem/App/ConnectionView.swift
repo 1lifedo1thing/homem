@@ -2,11 +2,16 @@ import SwiftUI
 
 struct ConnectionView: View {
     @Environment(AppStore.self) private var store
-    @State private var address = UserDefaults.standard.string(forKey: "serverURL") ?? ""
+    @State private var address: String = {
+        let saved = UserDefaults.standard.string(forKey: "serverURL") ?? ""
+        return saved == OfficialServer.apiURL.absoluteString ? "" : saved
+    }()
     @State private var username = ""
     @State private var password = ""
     @State private var token = ""
     @State private var useToken = false
+    @State private var showCustomServer = false
+    @State private var showOfficialSignIn = false
     @State private var busy = false
     @State private var error: String?
     var body: some View {
@@ -27,7 +32,16 @@ struct ConnectionView: View {
                         Text("A little closer to everything you’re building. Connect Memoh and bring your workspace with you.").foregroundStyle(.secondary).lineSpacing(3)
                     }
                     VStack(alignment: .leading, spacing: 15) {
-                        Text("CONNECT YOUR SERVER").font(.caption.weight(.semibold)).tracking(1.5).foregroundStyle(.secondary)
+                        Label("OFFICIAL MEMOH", systemImage: "checkmark.seal.fill").font(.caption.weight(.semibold)).foregroundStyle(Theme.accent)
+                        Text("Your Memoh account, at home here.").font(.headline)
+                        Text("Sign in at app.memoh.net with an email code or through the official website.").font(.subheadline).foregroundStyle(.secondary)
+                        Button { showOfficialSignIn = true } label: {
+                            HStack { Spacer(); Text("Sign in to Memoh").fontWeight(.semibold); Image(systemName: "arrow.right"); Spacer() }.padding(.vertical, 8)
+                        }.buttonStyle(.borderedProminent).controlSize(.large).accessibilityIdentifier("officialSignIn")
+                    }
+                    DisclosureGroup("Use another server", isExpanded: $showCustomServer) {
+                      VStack(alignment: .leading, spacing: 15) {
+                        Text("SELF-HOSTED OR THIRD-PARTY").font(.caption.weight(.semibold)).tracking(1.5).foregroundStyle(.secondary)
                         TextField("https://memoh.example.com/api", text: $address).textContentType(.URL).keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled().accessibilityIdentifier("serverAddress")
                             .padding(14).background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
                         Text("Use /api for the web server, or the direct backend address (usually port 8080).").font(.caption).foregroundStyle(.secondary)
@@ -44,12 +58,14 @@ struct ConnectionView: View {
                             HStack { Spacer(); if busy { ProgressView().tint(.white) }; Text(busy ? "Connecting…" : "Connect to Memoh").fontWeight(.semibold); if !busy { Image(systemName: "arrow.right") }; Spacer() }.padding(.vertical, 8)
                         }.buttonStyle(.borderedProminent).controlSize(.large).disabled(busy || address.isEmpty || (useToken ? token.isEmpty : username.isEmpty || password.isEmpty))
                             .accessibilityIdentifier("connectServer")
+                      }.padding(.top, 16)
                     }
                     Button { store.enterDemo() } label: { HStack { Spacer(); Text("Explore the demo"); Image(systemName: "arrow.up.right"); Spacer() } }.accessibilityIdentifier("exploreDemo")
                     Text("Native on iPhone and iPad · Credentials stay in Keychain").font(.caption2).foregroundStyle(.tertiary).frame(maxWidth: .infinity)
                 }.padding(28).frame(maxWidth: 520)
                     .frame(maxWidth: .infinity)
             }.background(Color(.systemGroupedBackground)).navigationBarHidden(true)
+                .sheet(isPresented: $showOfficialSignIn) { OfficialSignInView() }
         }
     }
     private func connect() async {

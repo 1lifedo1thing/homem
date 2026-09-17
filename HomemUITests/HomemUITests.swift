@@ -1,6 +1,32 @@
 import XCTest
 
 final class HomemUITests: XCTestCase {
+    @MainActor func testOfficialEmailIsPrimaryAndCustomServerRemainsAvailable() throws {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-onboarding"]; app.launch()
+        let official = app.buttons["officialSignIn"]
+        XCTAssertTrue(official.waitForExistence(timeout: 10))
+        if !official.isHittable { app.swipeUp() }
+        official.tap()
+        let email = app.textFields["officialEmail"]
+        XCTAssertTrue(email.waitForExistence(timeout: 5))
+        let send = app.buttons["sendOfficialCode"]
+        XCTAssertFalse(send.isEnabled)
+        email.tap(); email.typeText("not-an-email")
+        XCTAssertFalse(send.isEnabled)
+        // Clear without sending any mail or touching a production account.
+        email.tap(); email.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 12))
+        email.typeText("person@example.com")
+        XCTAssertTrue(send.isEnabled)
+        capture(app, "Official email sign-in")
+        app.buttons["Cancel"].tap()
+        let custom = app.buttons["Use another server"]
+        if !custom.isHittable { app.swipeUp() }
+        custom.tap()
+        app.swipeUp()
+        XCTAssertTrue(app.textFields["serverAddress"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Use an access token"].exists)
+        capture(app, "Third-party server sign-in")
+    }
     @MainActor func testOnboardingAndScreenshots() throws {
         let app = XCUIApplication(); app.launchArguments = ["--ui-onboarding"]; app.launch()
         XCTAssertTrue(app.staticTexts["Your agents.\nRight at home."].waitForExistence(timeout: 10))

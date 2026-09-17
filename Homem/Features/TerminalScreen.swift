@@ -45,7 +45,7 @@ struct NativeTerminal: UIViewRepresentable {
             receiver = Task { [weak self] in
                 guard let self else { return }
                 do {
-                    let socket = try self.api.socket("/bots/\(self.botID.pathComponent)/container/terminal/ws", query: ["cols": "80", "rows": "24"])
+                    let socket = try await self.api.socket("/bots/\(self.botID.pathComponent)/container/terminal/ws", query: ["cols": "80", "rows": "24"])
                     self.socket = socket
                     while !Task.isCancelled {
                         let message = try await socket.receive()
