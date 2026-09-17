@@ -152,3 +152,18 @@ final class UserInputAnswerTests: XCTestCase {
         XCTAssertEqual(draft.answer(for: question), ["question_id": "q1", "option_ids": ["b"]])
     }
 }
+
+final class ChatSplitLayoutTests: XCTestCase {
+    func testPortraitSplitKeepsChatVisibleWithKeyboardAndDividerLimits() {
+        for height: CGFloat in [320, 460, 740] {
+            for fraction in [-1.0, 0.44, 2.0] {
+                let pane = ChatSplitLayout.paneHeight(available: height, fraction: fraction)
+                XCTAssertGreaterThan(pane, 0)
+                XCTAssertGreaterThanOrEqual(height - pane, 170)
+                XCTAssertLessThanOrEqual(pane, height * 0.65)
+            }
+        }
+        XCTAssertEqual(ChatSplitLayout.fraction(-1), 0.25)
+        XCTAssertEqual(ChatSplitLayout.fraction(2), 0.65)
+    }
+}

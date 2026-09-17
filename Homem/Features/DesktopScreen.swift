@@ -6,20 +6,27 @@ struct DesktopScreen: View {
     @Environment(AppStore.self) private var store
     var botID: String
     var body: some View {
-        if let api = store.api, !api.isDemo { DesktopContent(model: DesktopModel(api: api, botID: botID)) }
+        if let api = store.api, !api.isDemo { DesktopContent(model: DesktopModel(api: api, botID: botID)).navigationTitle("Desktop".localized).navigationBarTitleDisplayMode(.inline) }
         else { EmptyState(title: "Desktop unavailable", symbol: "desktopcomputer", detail: "Connect to a server to use this agent’s desktop.").navigationTitle("Desktop".localized) }
     }
 }
 
 struct DesktopContent: View {
     @State var model: DesktopModel
+    var embedded = false
     @State private var keyboard = ""
     @State private var dragging = false
     @State private var pointer = CGPoint.zero
     @Environment(\.scenePhase) private var scenePhase
     var body: some View {
         VStack(spacing: 0) {
-            HStack { StatusIndicator(text: model.status, color: model.status == "Connected" ? .green : .orange); Spacer(); Text("Touch to click · Drag to move".localized).font(.caption).foregroundStyle(.secondary) }.padding(12)
+            if !embedded {
+                HStack {
+                    StatusIndicator(text: model.status, color: model.status == "Connected" ? .green : .orange)
+                    Spacer()
+                    DesktopModeButton(model: model)
+                }.padding(.horizontal, 12)
+            }
             if let error = model.error { ErrorBanner(message: error) { Task { model.disconnect(); await model.connect() } }.padding() }
             GeometryReader { geometry in
                 ZStack {
@@ -28,28 +35,40 @@ struct DesktopContent: View {
                     else if let track = model.track { RemoteVideo(track: track, model: model).overlay { if !model.hasVideo { ProgressView().tint(.white) } } }
                     else { VStack(spacing: 16) { Image(systemName: "desktopcomputer").font(.largeTitle); Text(model.status.localized); if model.error == nil { ProgressView().tint(.white) } }.foregroundStyle(.white.opacity(0.7)) }
                 }
+                .overlay(alignment: .bottomLeading) {
+                    if embedded, model.status != "Connected", model.runtimeImage != nil || model.track != nil {
+                        Text(model.status.localized).font(.caption2).foregroundStyle(.white)
+                            .padding(6).background(.black.opacity(0.65), in: Capsule()).padding(8)
+                            .allowsHitTesting(false)
+                    }
+                }
                 .contentShape(Rectangle())
                 .gesture(DragGesture(minimumDistance: 0).onChanged { value in
-                    guard model.status == "Connected", let point = model.point(value.location, in: geometry.size) else { return }
+                    guard !model.viewOnly, model.status == "Connected", let point = model.point(value.location, in: geometry.size) else { return }
                     dragging = true; pointer = point; model.pointer(point, mask: 1)
                 }.onEnded { _ in if dragging { model.pointer(pointer, mask: 0); dragging = false } })
             }
-            HStack {
-                Button("Esc".localized) { model.key(0xff1b) }
-                Button("Tab".localized) { model.key(0xff09) }
-                Button { model.key(0xff08) } label: { Image(systemName: "delete.left") }.accessibilityLabel("Backspace".localized)
-                Button { model.pointer(pointer, mask: 8); model.pointer(pointer, mask: 0) } label: { Image(systemName: "arrow.up") }.accessibilityLabel("Scroll up".localized)
-                Button { model.pointer(pointer, mask: 16); model.pointer(pointer, mask: 0) } label: { Image(systemName: "arrow.down") }.accessibilityLabel("Scroll down".localized)
-                Spacer()
-                Button("Right click".localized) { model.pointer(pointer, mask: 4); model.pointer(pointer, mask: 0) }
-            }.font(.caption).buttonStyle(.bordered).padding(10)
-            HStack {
-                TextField("Type on remote desktop".localized, text: $keyboard).textInputAutocapitalization(.never).autocorrectionDisabled().textFieldStyle(.roundedBorder).onSubmit { typeText() }
-                Button("Type".localized) { typeText() }.disabled(keyboard.isEmpty)
-                Button { model.key(0xff0d) } label: { Image(systemName: "return") }.accessibilityLabel("Return".localized)
-            }.padding(.horizontal).padding(.bottom, 12)
-        }.navigationTitle("Desktop".localized).navigationBarTitleDisplayMode(.inline)
-            .toolbar { Button { Task { model.disconnect(); await model.connect() } } label: { Image(systemName: "arrow.clockwise") }.accessibilityLabel("Reconnect desktop".localized) }
+            if !model.viewOnly {
+                HStack {
+                    Button("Esc".localized) { model.key(0xff1b) }
+                    Button("Tab".localized) { model.key(0xff09) }
+                    Button { model.key(0xff08) } label: { Image(systemName: "delete.left") }.accessibilityLabel("Backspace".localized)
+                    Button { model.pointer(pointer, mask: 8); model.pointer(pointer, mask: 0) } label: { Image(systemName: "arrow.up") }.accessibilityLabel("Scroll up".localized)
+                    Button { model.pointer(pointer, mask: 16); model.pointer(pointer, mask: 0) } label: { Image(systemName: "arrow.down") }.accessibilityLabel("Scroll down".localized)
+                    Spacer()
+                    Button("Right click".localized) { model.pointer(pointer, mask: 4); model.pointer(pointer, mask: 0) }
+                }.font(.caption).buttonStyle(.bordered).padding(10)
+                HStack {
+                    TextField("Type on remote desktop".localized, text: $keyboard).textInputAutocapitalization(.never).autocorrectionDisabled().textFieldStyle(.roundedBorder).onSubmit { typeText() }
+                    Button("Type".localized) { typeText() }.disabled(keyboard.isEmpty)
+                    Button { model.key(0xff0d) } label: { Image(systemName: "return") }.accessibilityLabel("Return".localized)
+                }.padding(.horizontal).padding(.bottom, 12)
+            }
+        }
+            .toolbar { if !embedded { Button { Task { model.disconnect(); await model.connect() } } label: { Image(systemName: "arrow.clockwise") }.accessibilityLabel("Reconnect desktop".localized) } }
+            .onChange(of: model.viewOnly) { _, viewOnly in
+                if viewOnly { keyboard = ""; dragging = false }
+            }
             .task { await model.connect() }.onDisappear { model.disconnect() }
             .onChange(of: scenePhase) { _, phase in if phase == .background { model.disconnect() }; if phase == .active { Task { await model.connect() } } }
     }
@@ -63,6 +82,9 @@ struct DesktopContent: View {
     var error: String?
     var track: RTCVideoTrack?
     var runtimeImage: UIImage?
+    private(set) var viewOnly = false
+    private var pressedPointer = CGPoint.zero
+    private var pressedButtons = 0
     private var runtime: (any DesktopTransport)?
     typealias RuntimeFactory = @MainActor (APIClient, String) async throws -> any DesktopTransport
     private let runtimeFactory: RuntimeFactory
@@ -196,20 +218,29 @@ struct DesktopContent: View {
         }
     }
     func disconnect() {
+        pressedButtons = 0
         recovery?.cancel(); recovery = nil
         runtimeTask?.cancel(); runtimeTask = nil
         if let runtime { Task { await runtime.close() } }; runtime = nil; runtimeImage = nil
         generation = UUID(); connecting = false; watchdog?.cancel(); watchdog = nil; channel?.close(); channel = nil; peer?.close(); peer = nil; track = nil; hasVideo = false; status = "Disconnected"
         if !displaySessionID.isEmpty { let path = base + "/sessions/" + displaySessionID.pathComponent; displaySessionID = ""; Task { _ = try? await api.call(path, method: "DELETE") } }
     }
+    func setViewOnly(_ enabled: Bool) {
+        // Release a held mouse button before blocking further remote input.
+        if enabled, !viewOnly, pressedButtons != 0 { pointer(pressedPointer, mask: 0) }
+        viewOnly = enabled
+    }
     func input(_ value: JSONValue) {
-        guard channel?.readyState == .open, let data = try? value.encoded else { return }
+        guard !viewOnly, channel?.readyState == .open, let data = try? value.encoded else { return }
         channel?.sendData(RTCDataBuffer(data: data, isBinary: false))
     }
     func pointer(_ point: CGPoint, mask: Int) {
+        guard !viewOnly else { return }
+        pressedPointer = point; pressedButtons = mask
         if let runtime { Task { try? await runtime.send(RFBClient.pointer(x: Int(point.x.rounded()), y: Int(point.y.rounded()), mask: mask)) }; return }
         input(["type": "pointer", "x": .number(point.x.rounded()), "y": .number(point.y.rounded()), "button_mask": .number(Double(mask))]) }
     func key(_ code: UInt32) {
+        guard !viewOnly else { return }
         if let runtime { Task { try? await runtime.send(RFBClient.key(code, down: true)); try? await runtime.send(RFBClient.key(code, down: false)) }; return }
         input(["type": "key", "keysym": .number(Double(code)), "down": true]); input(["type": "key", "keysym": .number(Double(code)), "down": false]) }
     func point(_ touch: CGPoint, in size: CGSize) -> CGPoint? {

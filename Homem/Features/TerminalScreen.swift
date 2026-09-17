@@ -5,14 +5,22 @@ struct TerminalScreen: View {
     @Environment(AppStore.self) private var store
     @Environment(\.scenePhase) private var scenePhase
     var botID: String
+    var embedded = false
     @State private var connectionID = UUID()
     var body: some View {
         Group {
+            if embedded { terminal }
+            else {
+                terminal.navigationTitle("Terminal".localized).navigationBarTitleDisplayMode(.inline)
+                    .toolbar { Button { connectionID = UUID() } label: { Image(systemName: "arrow.clockwise") }.accessibilityLabel("Reconnect terminal".localized) }
+            }
+        }.onChange(of: scenePhase) { _, phase in if phase == .active { connectionID = UUID() } }
+    }
+    private var terminal: some View {
+        Group {
             if let api = store.api, !api.isDemo { NativeTerminal(api: api, botID: botID).id(connectionID) }
             else { EmptyState(title: "Terminal unavailable", symbol: "terminal", detail: "Connect your Memoh server to open an interactive workspace shell.") }
-        }.navigationTitle("Terminal".localized).navigationBarTitleDisplayMode(.inline)
-            .toolbar { Button { connectionID = UUID() } label: { Image(systemName: "arrow.clockwise") }.accessibilityLabel("Reconnect terminal".localized) }
-            .onChange(of: scenePhase) { _, phase in if phase == .active { connectionID = UUID() } }
+        }
     }
 }
 
@@ -32,7 +40,7 @@ struct NativeTerminal: UIViewRepresentable {
         return terminal
     }
     func updateUIView(_ view: TerminalView, context: Context) {}
-    static func dismantleUIView(_ view: TerminalView, coordinator: Coordinator) { coordinator.close() }
+    static func dismantleUIView(_ view: TerminalView, coordinator: Coordinator) { _ = view.resignFirstResponder(); coordinator.close() }
 
     @MainActor final class Coordinator: NSObject, @preconcurrency TerminalViewDelegate {
         let api: APIClient
@@ -46,7 +54,12 @@ struct NativeTerminal: UIViewRepresentable {
                 guard let self else { return }
                 do {
                     let socket = try await self.api.socket("/bots/\(self.botID.pathComponent)/container/terminal/ws", query: ["cols": "80", "rows": "24"])
+                    guard !Task.isCancelled else { socket.cancel(with: .goingAway, reason: nil); return }
                     self.socket = socket
+                    if let terminal = self.terminal {
+                        let size = terminal.getTerminal()
+                        try await socket.send(.string("{\"type\":\"resize\",\"cols\":\(size.cols),\"rows\":\(size.rows)}"))
+                    }
                     while !Task.isCancelled {
                         let message = try await socket.receive()
                         switch message {

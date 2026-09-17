@@ -127,7 +127,80 @@ struct ChatContent: View {
     @FocusState private var composerFocused: Bool
     @State private var voice = VoiceRecorder()
     @State private var sentFirstMessage = false
+    @State private var workspacePane: ChatWorkspaceTool?
+    @State private var workspaceFraction = 0.44
+    @State private var dragStartFraction: Double?
     var body: some View {
+        GeometryReader { geometry in
+            VStack(spacing: 0) {
+                if let workspacePane {
+                    ChatWorkspacePane(api: model.api, botID: destination.botID, tool: workspacePane,
+                                      select: { self.workspacePane = $0 }, close: { self.workspacePane = nil })
+                        .frame(height: ChatSplitLayout.paneHeight(available: geometry.size.height, fraction: workspaceFraction))
+                        .clipped()
+                    splitDivider(available: geometry.size.height)
+                }
+                transcript
+            }
+        }
+        .coordinateSpace(name: "chatSplit")
+        .toolbar(workspacePane == nil ? .visible : .hidden, for: .tabBar)
+        .navigationTitle(destination.title).navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Button("Chat only".localized, systemImage: "bubble.left") { workspacePane = nil }
+                    ForEach(ChatWorkspaceTool.allCases) { tool in
+                        Button(tool.chatTitle.localized, systemImage: tool.symbol) { composerFocused = false; workspacePane = tool }
+                    }
+                } label: { Image(systemName: workspacePane == nil ? "rectangle.split.1x2" : "rectangle.split.1x2.fill") }
+                    .accessibilityLabel("Split view".localized).accessibilityIdentifier("chatSplitView")
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    NavigationLink("Workspace".localized, systemImage: "folder") { WorkspaceView(botID: destination.botID, name: destination.botName) }
+                    NavigationLink("Session controls".localized, systemImage: "slider.horizontal.3") { OperationBrowser(prefix: "/bots/{bot_id}/sessions/{session_id}", substitutions: ["bot_id": destination.botID, "session_id": destination.sessionID]) }
+                    Button("Refresh history".localized, systemImage: "arrow.clockwise") { Task { await model.loadHistory() } }
+                } label: { Image(systemName: "ellipsis.circle") }
+            }
+        }
+        .task {
+            if !sentFirstMessage, let first = destination.firstMessage {
+                sentFirstMessage = true
+                model.workspaceTargetID = first.targetID
+                model.draft = first.text
+                // Queue before connecting, so navigation or reconnects cannot send twice.
+                _ = await model.send(attachments: first.attachments)
+            }
+            await model.start()
+        }.onDisappear { model.stop(); voice.cancel() }
+        .task(id: model.draft) { do { try await Task.sleep(for: .milliseconds(600)); model.saveDraft() } catch {} }
+        .onChange(of: scenePhase) { _, phase in if phase == .background { model.stop() }; if phase == .active { Task { await model.start() } } }
+        .fileImporter(isPresented: $filePicker, allowedContentTypes: [.data], allowsMultipleSelection: true) { result in
+            do { for url in try result.get() { try attach(url) } } catch { model.error = error.localizedDescription }
+        }
+        .alert("Edit message".localized, isPresented: Binding(get: { editTurn != nil }, set: { if !$0 { editTurn = nil } })) {
+            TextField("Message".localized, text: $editText)
+            Button("Send".localized) { if let turn = editTurn { Task { await model.mutateTurn(turn, type: "edit_message", text: editText) } } }
+            Button("Cancel".localized, role: .cancel) { editTurn = nil }
+        }
+        .navigationDestination(item: $forked) { ChatScreen(destination: $0) }
+    }
+    private func splitDivider(available: CGFloat) -> some View {
+        Capsule().fill(.tertiary).frame(width: 32, height: 4)
+            .frame(maxWidth: .infinity).frame(height: 24).background(Theme.surface)
+            .contentShape(Rectangle())
+            .gesture(DragGesture(minimumDistance: 2, coordinateSpace: .named("chatSplit")).onChanged { value in
+                if dragStartFraction == nil { dragStartFraction = workspaceFraction }
+                workspaceFraction = ChatSplitLayout.fraction((dragStartFraction ?? workspaceFraction) + value.translation.height / max(available, 1))
+            }.onEnded { _ in dragStartFraction = nil })
+            .accessibilityElement().accessibilityLabel("Resize split view".localized)
+            .accessibilityValue(Text(workspaceFraction, format: .percent.precision(.fractionLength(0))))
+            .accessibilityAdjustableAction { direction in
+                workspaceFraction = ChatSplitLayout.fraction(workspaceFraction + (direction == .increment ? 0.05 : -0.05))
+            }
+    }
+    private var transcript: some View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 26) {
@@ -154,37 +227,10 @@ struct ChatContent: View {
             .defaultScrollAnchor(.bottom)
             .scrollDismissesKeyboard(.interactively)
             .onChange(of: model.visibleTurns.count) { _, _ in withAnimation { proxy.scrollTo("bottom", anchor: .bottom) } }
+            .onChange(of: workspacePane) { _, _ in proxy.scrollTo("bottom", anchor: .bottom) }
+            .onChange(of: composerFocused) { _, focused in if focused { proxy.scrollTo("bottom", anchor: .bottom) } }
             .safeAreaInset(edge: .bottom) { composer }
         }
-        .navigationTitle(destination.title).navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            Menu {
-                NavigationLink("Workspace".localized, systemImage: "folder") { WorkspaceView(botID: destination.botID, name: destination.botName) }
-                NavigationLink("Session controls".localized, systemImage: "slider.horizontal.3") { OperationBrowser(prefix: "/bots/{bot_id}/sessions/{session_id}", substitutions: ["bot_id": destination.botID, "session_id": destination.sessionID]) }
-                Button("Refresh history".localized, systemImage: "arrow.clockwise") { Task { await model.loadHistory() } }
-            } label: { Image(systemName: "ellipsis.circle") }
-        }
-        .task {
-            if !sentFirstMessage, let first = destination.firstMessage {
-                sentFirstMessage = true
-                model.workspaceTargetID = first.targetID
-                model.draft = first.text
-                // Queue before connecting, so navigation or reconnects cannot send twice.
-                _ = await model.send(attachments: first.attachments)
-            }
-            await model.start()
-        }.onDisappear { model.stop(); voice.cancel() }
-        .task(id: model.draft) { do { try await Task.sleep(for: .milliseconds(600)); model.saveDraft() } catch {} }
-        .onChange(of: scenePhase) { _, phase in if phase == .background { model.stop() }; if phase == .active { Task { await model.start() } } }
-        .fileImporter(isPresented: $filePicker, allowedContentTypes: [.data], allowsMultipleSelection: true) { result in
-            do { for url in try result.get() { try attach(url) } } catch { model.error = error.localizedDescription }
-        }
-        .alert("Edit message".localized, isPresented: Binding(get: { editTurn != nil }, set: { if !$0 { editTurn = nil } })) {
-            TextField("Message".localized, text: $editText)
-            Button("Send".localized) { if let turn = editTurn { Task { await model.mutateTurn(turn, type: "edit_message", text: editText) } } }
-            Button("Cancel".localized, role: .cancel) { editTurn = nil }
-        }
-        .navigationDestination(item: $forked) { ChatScreen(destination: $0) }
     }
     private var composer: some View {
         VStack(spacing: 10) {

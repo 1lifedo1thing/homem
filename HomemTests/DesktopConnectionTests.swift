@@ -5,6 +5,32 @@ import CoreGraphics
 
 /// A real local WebRTC peer answers through the HTTP test transport. No production session is used.
 @MainActor final class DesktopConnectionTests: XCTestCase {
+    func testViewOnlyBlocksRemoteInputAndReleasesHeldPointer() async throws {
+        let api = APIClient(baseURL: OfficialServer.apiURL, officialSession: OfficialSession(cookies: []))
+        let connection = RecoverableDesktopFixture()
+        let model = DesktopModel(api: api, botID: "fixture") { _, _ in connection }
+        model.setViewOnly(true)
+        await model.connect()
+        try await waitUntil { model.hasVideo }
+        model.pointer(CGPoint(x: 1, y: 1), mask: 1)
+        model.key(65)
+        try await Task.sleep(for: .milliseconds(40))
+        var packets = await connection.sent
+        XCTAssertTrue(packets.isEmpty)
+        XCTAssertEqual(model.status, "Connected")
+
+        model.setViewOnly(false)
+        model.pointer(CGPoint(x: 1, y: 1), mask: 1)
+        try await Task.sleep(for: .milliseconds(40))
+        model.setViewOnly(true)
+        model.key(66)
+        model.pointer(CGPoint(x: 0, y: 0), mask: 4)
+        try await Task.sleep(for: .milliseconds(40))
+        packets = await connection.sent
+        XCTAssertEqual(packets, [RFBClient.pointer(x: 1, y: 1, mask: 1), RFBClient.pointer(x: 1, y: 1, mask: 0)])
+        model.disconnect()
+        XCTAssertTrue(model.viewOnly)
+    }
     func testOfficialDesktopRecoversAfterNetworkDropAndStopsWhenDismissed() async throws {
         let api = APIClient(baseURL: OfficialServer.apiURL, officialSession: OfficialSession(cookies: []))
         var connections = [RecoverableDesktopFixture]()
@@ -138,6 +164,7 @@ private final class DesktopOfferProtocol: URLProtocol, @unchecked Sendable {
 
 private actor RecoverableDesktopFixture: DesktopTransport {
     private var interrupted = false
+    private(set) var sent: [Data] = []
     func run(frame: @Sendable (CGImage) async -> Void) async throws {
         let bytes = Data(repeating: 127, count: 16)
         let provider = CGDataProvider(data: bytes as CFData)!
@@ -148,5 +175,5 @@ private actor RecoverableDesktopFixture: DesktopTransport {
     }
     func drop() { interrupted = true }
     func close() { interrupted = true }
-    func send(_ data: Data) async throws {}
+    func send(_ data: Data) async throws { sent.append(data) }
 }
