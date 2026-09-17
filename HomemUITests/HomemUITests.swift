@@ -57,6 +57,11 @@ final class HomemUITests: XCTestCase {
         app.buttons["newChatRunLocation"].tap()
         XCTAssertTrue(app.buttons["Studio Mac"].waitForExistence(timeout: 3))
         app.buttons["Studio Mac"].tap()
+        let agentMenu = app.navigationBars["New chat"].buttons["agentPickerMenu"]
+        XCTAssertEqual(agentMenu.value as? String, "Atlas")
+        agentMenu.tap(); app.buttons["Mika"].tap()
+        XCTAssertEqual(agentMenu.value as? String, "Mika")
+        XCTAssertTrue(app.buttons["newChatRunLocation"].label.contains("Agent default"))
         capture(app, "Simple new chat")
         message.tap(); message.typeText("Plan a calm afternoon")
         app.buttons["startConversation"].tap()

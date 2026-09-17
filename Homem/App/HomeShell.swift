@@ -31,7 +31,6 @@ struct LibraryView: View {
                 }.padding(.vertical, 12)
             }
             if !store.bots.isEmpty {
-                Section("Workspace") { BotPicker() }
                 if let bot = store.selectedBot {
                     Section {
                         ResourceLink(title: "Memories", icon: "brain", spec: .memory(bot.id))
@@ -47,6 +46,11 @@ struct LibraryView: View {
             }
             if store.isDemo { Section { DemoBadge() } }
         }.navigationTitle("Library")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    AgentPickerMenu(selection: Binding(get: { store.selectedBot?.id ?? "" }, set: { store.selectedBotID = $0 }))
+                }
+            }
     }
 }
 
@@ -55,5 +59,29 @@ struct BotPicker: View {
     var body: some View {
         @Bindable var store = store
         Picker("Agent", selection: $store.selectedBotID) { ForEach(store.bots) { bot in Text(bot.title).tag(bot.id) } }
+    }
+}
+
+/// The same selected-agent menu anchors chat and workspace navigation.
+struct AgentPickerMenu: View {
+    @Environment(AppStore.self) private var store
+    @Binding var selection: String
+    private var selected: Record? { store.bots.first { $0.id == selection } }
+
+    var body: some View {
+        Menu {
+            Picker("Agent", selection: $selection) {
+                ForEach(store.bots) { bot in Text(bot.title).tag(bot.id) }
+            }
+        } label: {
+            HStack(spacing: 5) {
+                AgentAvatar(name: selected?.title ?? "Agent", size: 28)
+                Image(systemName: "chevron.down").font(.caption2.weight(.semibold))
+            }.frame(minWidth: 44, minHeight: 44)
+        }
+        .disabled(store.bots.isEmpty)
+        .accessibilityLabel("Choose agent")
+        .accessibilityValue(selected?.title ?? "No agent selected")
+        .accessibilityIdentifier("agentPickerMenu")
     }
 }

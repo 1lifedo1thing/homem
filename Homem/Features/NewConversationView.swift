@@ -69,12 +69,6 @@ struct NewConversationView: View {
                     }
                     VStack(spacing: 0) {
                         HStack {
-                            Label("Agent", systemImage: "sparkle").foregroundStyle(.secondary)
-                            Spacer()
-                            Picker("Agent", selection: $botID) { ForEach(store.bots) { Text($0.title).tag($0.id) } }.labelsHidden()
-                        }.padding()
-                        Divider().padding(.leading)
-                        HStack {
                             Label("Run on", systemImage: "desktopcomputer").foregroundStyle(.secondary)
                             Spacer()
                             Picker("Run on", selection: $targetID) {
@@ -117,7 +111,10 @@ struct NewConversationView: View {
                         .frame(maxWidth: 640).frame(maxWidth: .infinity).background(.bar)
                 }
                 .navigationTitle("New chat").navigationBarTitleDisplayMode(.inline)
-                .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(busy) } }
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() }.disabled(busy) }
+                    ToolbarItem(placement: .topBarTrailing) { AgentPickerMenu(selection: $botID).disabled(busy) }
+                }
                 .interactiveDismissDisabled(busy).disabled(busy)
                 .task(id: botID) {
                     targetID = ""

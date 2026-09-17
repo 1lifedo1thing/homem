@@ -26,7 +26,6 @@ struct ConversationsView: View {
                         if store.isDemo { DemoBadge().padding(.top, 4) }
                     }.padding(.vertical, 10)
                 }.listRowBackground(Color.clear).listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 16, trailing: 0))
-                Section { BotPicker() }
                 if let error = error ?? store.error { ErrorBanner(message: error) { Task { await load() } } }
                 Section("Conversations") {
                     ForEach(sessions.filter { search.isEmpty || $0.title.localizedCaseInsensitiveContains(search) }) { session in
@@ -49,7 +48,13 @@ struct ConversationsView: View {
             }.listStyle(.insetGrouped)
                 .navigationTitle("Chats")
                 .searchable(text: $search, prompt: "Find a conversation")
-                .toolbar { Button { newChat = true } label: { Image(systemName: "square.and.pencil") }.accessibilityLabel("New conversation").disabled(store.bots.isEmpty) }
+                .toolbar {
+                    ToolbarItemGroup(placement: .topBarTrailing) {
+                        Button { newChat = true } label: { Image(systemName: "square.and.pencil") }
+                            .accessibilityLabel("New conversation").disabled(store.bots.isEmpty)
+                        AgentPickerMenu(selection: Binding(get: { store.selectedBot?.id ?? "" }, set: { store.selectedBotID = $0 }))
+                    }
+                }
                 .navigationDestination(for: ChatDestination.self) { route in ChatScreen(destination: route) }
                 .navigationDestination(item: $selection) { route in ChatScreen(destination: route) }
                 .refreshable { await store.reload(); await load() }
