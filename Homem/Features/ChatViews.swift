@@ -300,22 +300,85 @@ struct ApprovalView: View {
 }
 
 struct UserInputView: View {
+    @Environment(\.appAccent) private var accent
     let input: JSONValue
     let model: ChatModel
-    @State private var answers: [String: String] = [:]
-    @State private var selections: [String: Set<String>] = [:]
+    @State private var drafts: [String: UserInputDraft] = [:]
+    @State private var submitting = false
+    @FocusState private var focusedQuestion: String?
+    private var questions: [JSONValue] { input["questions"].array }
+    private var answers: [JSONValue]? { UserInputDraft.answers(for: questions, drafts: drafts) }
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            ForEach(input["questions"].array, id: \.self) { q in
-                let id = q.text("id", "question_id")
-                Text(q.text("text", "question", "title", "prompt")).font(.subheadline.weight(.medium))
-                ForEach(q["options"].array, id: \.self) { option in
-                    Button { let optionID = option["id"].string; if q["kind"] == "multi_select" { if selections[id, default: []].contains(optionID) { selections[id]?.remove(optionID) } else { selections[id, default: []].insert(optionID) } } else { selections[id] = [optionID] } } label: { Label(option.text("label", "title", "id"), systemImage: selections[id, default: []].contains(option["id"].string) ? "checkmark.circle.fill" : "circle") }.buttonStyle(.bordered)
+        VStack(alignment: .leading, spacing: 18) {
+            ForEach(questions, id: \.self) { question in
+                let id = UserInputDraft.questionID(question)
+                let draft = drafts[id, default: UserInputDraft()]
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(question.text("text", "question", "title", "prompt"))
+                        .font(.subheadline.weight(.semibold)).fixedSize(horizontal: false, vertical: true)
+                    if question["kind"] != "text" {
+                        VStack(spacing: 6) {
+                            ForEach(question["options"].array, id: \.self) { option in
+                                choice(option.text("label", "title", "id"), detail: option["description"].string,
+                                       selected: draft.optionIDs.contains(option["id"].string), multiple: question["kind"] == "multi_select") {
+                                    drafts[id, default: UserInputDraft()].select(option["id"].string, question: question)
+                                    if !drafts[id, default: UserInputDraft()].customSelected { focusedQuestion = nil }
+                                }.accessibilityIdentifier("answerOption_" + id + "_" + option["id"].string)
+                            }
+                            if question["allow_custom"].bool {
+                                choice("Write my own answer".localized, selected: draft.customSelected, multiple: question["kind"] == "multi_select") {
+                                    drafts[id, default: UserInputDraft()].selectCustom(question: question)
+                                    focusedQuestion = drafts[id, default: UserInputDraft()].customSelected ? id : nil
+                                }.accessibilityIdentifier("customAnswer_" + id)
+                            }
+                        }
+                    }
+                    if question["kind"] == "text" || draft.customSelected {
+                        TextField(question["placeholder"].string.nonEmpty ?? "Your answer".localized,
+                                  text: Binding(get: { drafts[id, default: UserInputDraft()].text }, set: { drafts[id, default: UserInputDraft()].text = $0 }), axis: .vertical)
+                            .font(.body).lineLimit(2...6).focused($focusedQuestion, equals: id)
+                            .padding(12).background(Theme.surface, in: RoundedRectangle(cornerRadius: 12))
+                            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(accent.opacity(0.3), lineWidth: 1))
+                            .accessibilityIdentifier("answerText_" + id)
+                    }
                 }
-                if q["allow_custom"].bool || q["kind"] == "text" { TextField(q["placeholder"].string.nonEmpty ?? "Your answer".localized, text: Binding(get: { answers[id] ?? "" }, set: { answers[id] = $0 }), axis: .vertical).textFieldStyle(.roundedBorder) }
             }
-            Button("Send answers".localized) { Task { await model.control("user_input_response", extra: ["decision_id": input["user_input_id"], "answers": .array(input["questions"].array.map { q in let id = q["id"].string; return ["question_id": .string(id), "option_ids": .array(selections[id, default: []].sorted().map(JSONValue.string)), "custom_text": .string(answers[id] ?? "")] })]) } }.buttonStyle(.borderedProminent).disabled(!input["can_respond"].bool || input["questions"].array.contains { q in q["required"].bool && (answers[q["id"].string] ?? "").isEmpty && selections[q["id"].string, default: []].isEmpty })
-        }
+            Button {
+                guard let answers, !submitting else { return }
+                focusedQuestion = nil
+                submitting = true
+                Task {
+                    defer { submitting = false }
+                    await model.control("user_input_response", extra: ["decision_id": input["user_input_id"], "answers": .array(answers)])
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    if submitting { ProgressView().tint(.white) }
+                    Text("Send answers".localized).fontWeight(.semibold)
+                }.frame(maxWidth: .infinity).padding(.vertical, 4)
+            }.buttonStyle(.borderedProminent).controlSize(.large)
+                .disabled(!input["can_respond"].bool || answers == nil || submitting)
+                .accessibilityIdentifier("sendUserInputAnswers")
+        }.padding(.vertical, 8)
+            .disabled(!input["can_respond"].bool || submitting)
+            .onChange(of: input["user_input_id"]) { _, _ in drafts = [:]; focusedQuestion = nil }
+    }
+    private func choice(_ title: String, detail: String = "", selected: Bool, multiple: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(alignment: .top, spacing: 11) {
+                Image(systemName: multiple ? (selected ? "checkmark.square.fill" : "square") : (selected ? "largecircle.fill.circle" : "circle"))
+                    .font(.system(size: 20)).foregroundStyle(selected ? accent : .secondary).padding(.top, 1)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title).font(.subheadline.weight(.medium)).foregroundStyle(.primary)
+                    if !detail.isEmpty { Text(detail).font(.caption).foregroundStyle(.secondary) }
+                }.fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+            }.padding(12).frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+                .background(selected ? accent.opacity(0.08) : Theme.surface, in: RoundedRectangle(cornerRadius: 12))
+                .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(selected ? accent.opacity(0.45) : .clear, lineWidth: 1))
+                .contentShape(RoundedRectangle(cornerRadius: 12))
+        }.buttonStyle(.plain).accessibilityLabel(title).accessibilityValue(selected ? "Selected".localized : "")
+            .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 

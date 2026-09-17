@@ -234,3 +234,60 @@ struct RuntimeState {
         return turns
     }
 }
+
+
+/// Wire answers differ for text questions and custom answers to a choice question.
+struct UserInputDraft {
+    var optionIDs: Set<String> = []
+    var customSelected = false
+    var text = ""
+
+    static func questionID(_ question: JSONValue) -> String { question.text("id", "question_id") }
+    mutating func select(_ optionID: String, question: JSONValue) {
+        if question["kind"] == "multi_select" {
+            if optionIDs.contains(optionID) { optionIDs.remove(optionID) }
+            else {
+                optionIDs.insert(optionID)
+                if question["custom_exclusive"].bool { customSelected = false }
+            }
+        } else {
+            optionIDs = optionIDs == [optionID] && question["required"] == false ? [] : [optionID]
+            customSelected = false
+        }
+    }
+    mutating func selectCustom(question: JSONValue) {
+        guard question["allow_custom"].bool else { return }
+        customSelected.toggle()
+        if customSelected && (question["kind"] != "multi_select" || question["custom_exclusive"].bool) { optionIDs = [] }
+    }
+    func answer(for question: JSONValue) -> JSONValue? {
+        let id = Self.questionID(question)
+        guard !id.isEmpty else { return nil }
+        let required = question["required"] != false
+        let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if question["kind"] == "text" {
+            if !text.isEmpty { return ["question_id": .string(id), "text": .string(text)] }
+            return required ? nil : ["question_id": .string(id), "skipped": true]
+        }
+        let validIDs = Set(question["options"].array.map { $0["id"].string })
+        let selected = optionIDs.intersection(validIDs).sorted()
+        let custom = customSelected && question["allow_custom"].bool ? text : ""
+        if customSelected && question["allow_custom"].bool && custom.isEmpty { return nil }
+        if selected.isEmpty && custom.isEmpty { return required ? nil : ["question_id": .string(id), "skipped": true] }
+        if question["kind"] != "multi_select" && selected.count + (custom.isEmpty ? 0 : 1) != 1 { return nil }
+        if question["custom_exclusive"].bool && !selected.isEmpty && !custom.isEmpty { return nil }
+        var answer: JSONValue = ["question_id": .string(id)]
+        if !selected.isEmpty { answer["option_ids"] = .array(selected.map(JSONValue.string)) }
+        if !custom.isEmpty { answer["custom_text"] = .string(custom) }
+        return answer
+    }
+    static func answers(for questions: [JSONValue], drafts: [String: Self]) -> [JSONValue]? {
+        guard !questions.isEmpty else { return nil }
+        var answers: [JSONValue] = []
+        for question in questions {
+            guard let answer = drafts[questionID(question), default: Self()].answer(for: question) else { return nil }
+            answers.append(answer)
+        }
+        return answers
+    }
+}

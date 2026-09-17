@@ -48,6 +48,16 @@ import Observation
                 ["id": 4, "type": "text", "content": "Your schedule is up to date."]
             ]]]
         }
+        if ProcessInfo.processInfo.arguments.contains("--ui-user-input") {
+            api!.demo.collections["messages/welcome"] = [["turn_id": "question", "role": "assistant", "messages": [
+                ["id": 1, "type": "tool", "name": "ask_user", "user_input": [
+                    "user_input_id": "preview-question", "status": "pending", "can_respond": true,
+                    "questions": [["id": "plan", "text": "How would you like to continue?", "kind": "single_select", "allow_custom": true,
+                        "options": [["id": "continue", "label": "Use the suggested plan", "description": "Continue with the current approach."],
+                                    ["id": "review", "label": "Review the details first"]]]]
+                ]]
+            ]]]
+        }
         bots = api!.demo.collections["/bots", default: []].map(Record.init)
         profile = api!.demo.documents["/users/me"] ?? .null
         selectedBotID = bots.first?.id ?? ""

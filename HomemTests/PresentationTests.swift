@@ -103,3 +103,52 @@ final class PresentationTests: XCTestCase {
         XCTAssertNil(model.track)
     }
 }
+
+final class UserInputAnswerTests: XCTestCase {
+    let single: JSONValue = ["id": "q1", "kind": "single_select", "allow_custom": true, "options": [["id": "a", "label": "Plan A"], ["id": "b", "label": "Plan B"]]]
+    func testCustomChoiceReplacesOptionAndNeverSendsBoth() throws {
+        var draft = UserInputDraft()
+        draft.select("a", question: single)
+        draft.selectCustom(question: single)
+        XCTAssertTrue(draft.optionIDs.isEmpty)
+        XCTAssertNil(draft.answer(for: single))
+        draft.text = "  自分の案 🌱  "
+        XCTAssertEqual(draft.answer(for: single), ["question_id": "q1", "custom_text": "自分の案 🌱"])
+        draft.select("b", question: single)
+        XCTAssertFalse(draft.customSelected)
+        XCTAssertEqual(draft.answer(for: single), ["question_id": "q1", "option_ids": ["b"]])
+        draft.customSelected = true // Defensive validation rejects contradictory state too.
+        XCTAssertNil(draft.answer(for: single))
+    }
+    func testTextQuestionsUseTextAndRequiredDefaultsToTrue() {
+        let question: JSONValue = ["question_id": "free", "kind": "text"]
+        var draft = UserInputDraft(); draft.text = " \n "
+        XCTAssertNil(draft.answer(for: question))
+        draft.text = "  My own answer  "
+        XCTAssertEqual(draft.answer(for: question), ["question_id": "free", "text": "My own answer"])
+        XCTAssertNil(UserInputDraft.answers(for: [single], drafts: [:]))
+    }
+    func testOptionalQuestionsSendExplicitSkipsAndEmptyCustomCannotSubmit() {
+        var question = single; question["required"] = false
+        var draft = UserInputDraft()
+        XCTAssertEqual(draft.answer(for: question), ["question_id": "q1", "skipped": true])
+        draft.selectCustom(question: question); draft.text = " \n "
+        XCTAssertNil(draft.answer(for: question))
+        draft.selectCustom(question: question)
+        XCTAssertEqual(UserInputDraft.answers(for: [question], drafts: ["q1": draft]), [["question_id": "q1", "skipped": true]])
+    }
+    func testMultiSelectHonorsCustomExclusivity() {
+        var question = single; question["kind"] = "multi_select"
+        var draft = UserInputDraft()
+        draft.select("a", question: question); draft.selectCustom(question: question); draft.text = "Also this"
+        XCTAssertEqual(draft.answer(for: question), ["question_id": "q1", "option_ids": ["a"], "custom_text": "Also this"])
+        question["custom_exclusive"] = true
+        XCTAssertNil(draft.answer(for: question))
+        draft.selectCustom(question: question); draft.selectCustom(question: question)
+        XCTAssertTrue(draft.optionIDs.isEmpty)
+        XCTAssertEqual(draft.answer(for: question), ["question_id": "q1", "custom_text": "Also this"])
+        draft.select("b", question: question)
+        XCTAssertFalse(draft.customSelected)
+        XCTAssertEqual(draft.answer(for: question), ["question_id": "q1", "option_ids": ["b"]])
+    }
+}

@@ -10086,6 +10086,28 @@
           }
         }
       }
+    },
+    "Write my own answer": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自行输入回答"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Escribir mi respuesta"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自分で回答を入力"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
