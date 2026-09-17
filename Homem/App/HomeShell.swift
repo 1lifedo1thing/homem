@@ -20,42 +20,75 @@ struct HomeShell: View {
 
 struct LibraryView: View {
     @Environment(\.appAccent) private var accent
+    @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(AppStore.self) private var store
     var body: some View {
-        List {
-            Section {
-                HStack(spacing: 14) {
-                    AgentAvatar(name: store.selectedBot?.title ?? "Library", avatarURL: store.selectedBot?.value.avatarURL ?? "", size: 36)
-                    VStack(alignment: .leading, spacing: 5) {
-                        Eyebrow(text: "Agent")
-                        Text(store.selectedBot?.title ?? "Library".localized).font(.title2.bold())
-                    }
-                    Spacer()
-                }.padding(.vertical, 8)
-            }.listRowBackground(Color.clear)
-
-            if !store.bots.isEmpty {
+        ScrollView {
+            VStack(spacing: 20) {
                 if let bot = store.selectedBot {
-                    Section {
-                        ResourceLink(title: "Memories", icon: "brain", spec: .memory(bot.id))
-                        ResourceLink(title: "Schedules", icon: "clock.arrow.circlepath", spec: .schedules(bot.id))
-                        ResourceLink(title: "Skills", icon: "sparkles", spec: .skills(bot.id))
-                        ResourceLink(title: "Installed apps", icon: "square.stack.3d.up", spec: .apps(bot.id))
-                        ResourceLink(title: "MCP connections", icon: "point.3.connected.trianglepath.dotted", spec: .mcp(bot.id))
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: typeSize.isAccessibilitySize ? 1 : 2), spacing: 12) {
+                        shortcut("Memories", icon: "brain", spec: .memory(bot.id))
+                        shortcut("Schedules", icon: "clock.arrow.circlepath", spec: .schedules(bot.id))
                     }
+                    VStack(spacing: 0) {
+                        resource("Skills", icon: "sparkles", spec: .skills(bot.id))
+                        Divider().padding(.leading, 54)
+                        resource("Installed apps", icon: "square.stack.3d.up", spec: .apps(bot.id))
+                        Divider().padding(.leading, 54)
+                        resource("Connected tools", icon: "point.3.connected.trianglepath.dotted", spec: .mcp(bot.id))
+                    }.background(Theme.surface, in: RoundedRectangle(cornerRadius: 20))
                 }
-            }
-            Section("Discover".localized) {
-                NavigationLink { MarketplaceView() } label: { Label("Supermarket".localized, systemImage: "storefront") }
-            }
-            if store.isDemo { Section { DemoBadge() } }
-        }.scrollContentBackground(.hidden).background(Theme.canvas).navigationTitle("Library".localized)
+                NavigationLink { MarketplaceView() } label: {
+                    HStack(spacing: 14) {
+                        Image(systemName: "storefront").font(.title2).foregroundStyle(accent)
+                            .frame(width: 46, height: 46)
+                            .background(accent.opacity(0.10), in: RoundedRectangle(cornerRadius: 13))
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Supermarket".localized).font(.headline).foregroundStyle(.primary)
+                            Text("Apps and skills".localized).font(.subheadline).foregroundStyle(.secondary)
+                        }
+                        Spacer(minLength: 8)
+                        Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
+                    }.padding(16).frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 20))
+                        .contentShape(RoundedRectangle(cornerRadius: 20))
+                }.buttonStyle(.plain).accessibilityLabel("Supermarket".localized)
+                if store.isDemo { DemoBadge() }
+            }.padding(.horizontal, 20).padding(.top, 12).padding(.bottom, 24)
+                .frame(maxWidth: 760).frame(maxWidth: .infinity)
+        }.background(Theme.canvas).navigationTitle("Library".localized)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) { WorkspacePickerMenu() }
                 ToolbarItem(placement: .topBarTrailing) {
                     AgentPickerMenu(selection: Binding(get: { store.selectedBot?.id ?? "" }, set: { store.selectedBotID = $0 }))
                 }
             }
+    }
+    private func shortcut(_ title: String, icon: String, spec: ResourceSpec) -> some View {
+        NavigationLink { ResourceListView(spec: spec) } label: {
+            VStack(alignment: .leading, spacing: 20) {
+                Image(systemName: icon).font(.system(size: 26, weight: .regular)).foregroundStyle(accent)
+                    .frame(height: 30).accessibilityHidden(true)
+                HStack(alignment: .firstTextBaseline) {
+                    Text(title.localized).font(.headline).foregroundStyle(.primary)
+                    Spacer(minLength: 4)
+                    Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
+                }
+            }.padding(18).frame(maxWidth: .infinity, alignment: .leading)
+                .background(Theme.surface, in: RoundedRectangle(cornerRadius: 20))
+                .contentShape(RoundedRectangle(cornerRadius: 20))
+        }.buttonStyle(.plain).accessibilityLabel(title.localized)
+    }
+    private func resource(_ title: String, icon: String, spec: ResourceSpec) -> some View {
+        NavigationLink { ResourceListView(spec: spec) } label: {
+            HStack(spacing: 12) {
+                Image(systemName: icon).font(.system(size: 19)).foregroundStyle(accent).frame(width: 26).accessibilityHidden(true)
+                Text(title.localized).font(.body).foregroundStyle(.primary)
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
+            }.padding(.horizontal, 16).padding(.vertical, 17).frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+        }.buttonStyle(.plain).accessibilityLabel(title.localized)
     }
 }
 
