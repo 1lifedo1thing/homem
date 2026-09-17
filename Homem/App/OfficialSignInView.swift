@@ -144,7 +144,8 @@ struct OfficialSignInView: View {
             }
         case .code, .mfa:
             Section {
-                TextField(login.step == .mfa ? "Authenticator code".localized : "Email code".localized, text: $login.code)
+                TextField("114514", text: $login.code)
+                    .accessibilityLabel(login.step == .mfa ? "Authenticator code".localized : "Email code".localized)
                     .textContentType(.oneTimeCode).keyboardType(.numberPad)
                     .font(.title2.monospaced()).tracking(6).focused($focusedField, equals: .code)
                     .disabled(login.busy).accessibilityIdentifier("officialCode")

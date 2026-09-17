@@ -6,6 +6,7 @@ options:
 settings:
   base:
     SWIFT_VERSION: '5.0'
+    MACOSX_DEPLOYMENT_TARGET: '14.0'
     MARKETING_VERSION: '1.0.0'
     CURRENT_PROJECT_VERSION: '1'
     DEVELOPMENT_TEAM: 7P8CLHDH5G
@@ -30,8 +31,9 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: ad.neko.homem
         TARGETED_DEVICE_FAMILY: '1,2'
-        SUPPORTS_MACCATALYST: NO
+        SUPPORTS_MACCATALYST: YES
         INFOPLIST_FILE: Homem/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Homem/Homem.entitlements
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     dependencies:
       - package: L10n-swift
@@ -46,6 +48,8 @@ targets:
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
+        SUPPORTS_MACCATALYST: YES
+        "TEST_HOST[sdk=macosx*]": "$(BUILT_PRODUCTS_DIR)/Homem.app/Contents/MacOS/Homem"
   HomemUITests:
     type: bundle.ui-testing
     platform: iOS
@@ -62,3 +66,9 @@ schemes:
         Homem: all
     test:
       targets: [HomemTests, HomemUITests]
+  HomemCatalyst:
+    build:
+      targets:
+        Homem: all
+    test:
+      targets: [HomemTests]

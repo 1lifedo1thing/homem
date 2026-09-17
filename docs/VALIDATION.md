@@ -76,7 +76,26 @@ Screenshots from the passing UI run:
 - Final iPad run `Test-Homem-2026.09.17_21-28-34-+0900.xcresult`: **32 tests passed, zero failures** (27 core/network/sign-in/presentation/desktop checks and five UI flows). The standalone HTTP/SSE and WebSocket wire smoke checks and Cloud preflight passed.
 - Desktop startup now prepares legacy hosted workspaces, polls actual readiness, allows cold-start negotiation, cleans up old sessions, and provides recovery for connection or first-frame timeouts. A real local WebRTC peer verifies native offer/answer negotiation, receipt of a remote video track, input mapping, and session cleanup. The authenticated official web desktop rendered successfully during inspection. Physical-device native video rendering against the hosted server remains unverified; the local peer test does not generate video frames.
 
+## Catalyst login storage regression — 17 September 2026
+
+- Reproduced `errSecMissingEntitlement` (`-34018`) in the initial ad-hoc Catalyst build. The corrected build uses Kitta development signing, a Mac Catalyst provisioning profile, and the app's own Keychain access group. No plaintext or preferences fallback was introduced.
+- Keychain saves now update existing items before inserting new ones, preserving a saved login if refresh persistence fails. The six-digit email/authenticator placeholder is `114514`, with meaningful localized accessibility labels.
+- Catalyst `Test-HomemCatalyst-2026.09.17_22-02-40-+0900.xcresult`: four tests passed, including real Keychain save/update/read/delete and token refresh. The same four checks passed on iPhone Simulator in `Test-Homem-2026.09.17_22-01-53-+0900.xcresult`.
+- Avatar redirect checks passed in `Test-Homem-2026.09.17_21-57-33-+0900.xcresult` (seven checks). The HTTP fixture requires authentication on the initial and same-origin redirect, then verifies that credentials are absent on a separate image host. The API session continues to reject redirects.
+
+## Catalyst crash and official desktop — 17 September 2026
+
+- Reproduced two Catalyst UIKit presentation traps: the toolbar agent popover and the new-chat workspace popover. Both now use native menus on Catalyst; iPhone/iPad retain their custom anchored pickers. Menu avatars are rendered into 22-point images because native menu rows use UIImage intrinsic dimensions.
+- Official Memoh uses `/container/display/runtime-session` followed by the authenticated `/api/runtime-gateway/v1/display/{session}` WebSocket, not the legacy WebRTC offer endpoint. The native client supplies the one-time ticket, runtime subprotocol token, and required Origin header. The endpoint contract was inspected in the public deployed client; the frame decoder implements [RFC 6143](https://www.rfc-editor.org/rfc/rfc6143.html) without copying noVNC code.
+- Native RFB supports raw, CopyRect, Hextile, and desktop resize; parsing is bounded and runs off the main actor. Partial rectangles never mutate the visible framebuffer. Remote clipboard content is discarded. Third-party servers retain the existing native WebRTC connection.
+- On the user-authenticated, development-signed Catalyst app, verified official login restoration, actual agent avatars, a 1280×960 remote desktop, mouse click/right-click, Escape dismissing the remote menu, and reconnect producing fresh frames. No production chat message was sent.
+- `Test-Homem-2026.09.17_22-25-36-+0900.xcresult`: **40 core tests plus the iPhone new-chat UI test passed**, zero failures/skips. Includes fragmented RFB handshakes/frames, overlapping CopyRect, Hextile, resize/bounds rejection, input encoding, gateway ticket/origin/subprotocol, real Keychain, avatar redirects, and third-party native WebRTC negotiation.
+
+- Final Catalyst `Test-HomemCatalyst-2026.09.17_22-28-19-+0900.xcresult`: 12 gateway/protocol/login/Keychain tests passed. After the workspace-picker change, the iPhone composer test passed again in `Test-Homem-2026.09.17_22-28-38-+0900.xcresult`. Both final native Catalyst menus were manually opened and dismissed without a crash, including inside the new-chat sheet. The 431-string translation check passed.
+
 ## Reproduce
+
+For local Mac debugging, run `bash scripts/build-catalyst.sh`, then open `build-catalyst/Build/Products/Debug-maccatalyst/Homem.app`. Keep development signing enabled: ad-hoc builds do not have the app identity required for Keychain access. The `HomemCatalyst` scheme runs the core tests on Mac Catalyst.
 
 Run `bash scripts/test.sh` from the project root, setting `HOMEM_TEST_DESTINATION` to an installed iOS simulator if needed. This starts the loopback fixture and runs the XCTest targets. Result bundles are local build artifacts and are excluded from source control.
 
@@ -84,7 +103,7 @@ For a simulator-independent transport check on the Mac, start `python3 scripts/f
 
 ## Verification limits
 
-- Native production account, model provider, container runtime credentials, and OAuth registration were not supplied to the app tests. The official public login, deployed client, and signed-in browser desktop were inspected. Local fixture results establish client transport behavior, not end-to-end compatibility with every deployment.
+- Official native sign-in, session restoration, avatars, and desktop were verified with the user-authenticated Catalyst app. Automated tests use isolated fixtures. Provider OAuth, model responses, and every third-party deployment remain outside that verification.
 - An intermediate expanded simulator run became unresponsive during UI automation and was stopped. Its wire tests had skipped after a two-second fixture startup timeout. The subsequent final core run used a longer allowance and passed both wire tests without skips. The additional onboarding screenshot test subsequently passed in Xcode Cloud Build 1.
 - iPad (A16) / iOS 26.5: new-chat/run-location/keyboard and delete-confirmation tests passed in `Test-Homem-2026.09.17_17-15-00-+0900.xcresult`; screenshots were inspected. Other iPad feature screens remain outside this focused visual check.
 - Xcode Cloud signing and internal TestFlight distribution are verified. Physical-device installation, public App Store release, accessibility audit, and the oldest supported OS remain release checks.

@@ -42,7 +42,23 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         if path == "/health":
             return self.send_json({"fixture": "homem"})
+        if path == "/avatars/cdn.png":
+            if any(self.headers.get(h) for h in ["Authorization", "Cookie", "X-Team-ID"]):
+                return self.send_json({"message": "Credentials leaked to image host"}, 400)
+            data = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNQSnv3HwAEmgJ2pp70QwAAAABJRU5ErkJggg==")
+            self.send_response(200)
+            self.send_header("Content-Type", "image/png")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+            return
         if not self.authorized():
+            return
+        if path in ["/avatars/private", "/avatars/storage"]:
+            self.send_response(302)
+            self.send_header("Location", "/avatars/storage" if path == "/avatars/private" else "http://localhost:18765/avatars/cdn.png")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
             return
         if path.endswith("/web/ws"):
             return self.websocket()

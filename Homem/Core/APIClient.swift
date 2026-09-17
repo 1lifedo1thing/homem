@@ -23,12 +23,14 @@ enum Keychain {
     }
     static func save(_ value: String?, account: String) throws {
         let q: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "ad.neko.homem", kSecAttrAccount as String: account]
-        SecItemDelete(q as CFDictionary)
-        guard let value else { return }
-        var add = q
-        add[kSecValueData as String] = Data(value.utf8)
-        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-        let status = SecItemAdd(add as CFDictionary, nil)
+        guard let value else { SecItemDelete(q as CFDictionary); return }
+        let attributes: [String: Any] = [kSecValueData as String: Data(value.utf8), kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly]
+        // A failed refresh must not delete an existing saved login.
+        var status = SecItemUpdate(q as CFDictionary, attributes as CFDictionary)
+        if status == errSecItemNotFound {
+            let add = q.merging(attributes) { _, new in new }
+            status = SecItemAdd(add as CFDictionary, nil)
+        }
         guard status == errSecSuccess else { throw ClientError.message("Could not securely save this sign-in (\(status)).") }
     }
     static func removeDrafts(server: String) {
@@ -183,6 +185,27 @@ final class SafeRedirectDelegate: NSObject, URLSessionTaskDelegate, @unchecked S
     func socket(_ path: String, query: [String: String] = [:]) async throws -> URLSessionWebSocketTask {
         let r = try await socketRequest(path, query: query)
         let socket = session.webSocketTask(with: r); socket.resume(); return socket
+    }
+    func runtimeDisplayRequest(sessionID: String, token: String) async throws -> URLRequest {
+        guard isOfficial, !sessionID.isEmpty, !token.isEmpty else { throw ClientError.invalidResponse }
+        let ticket = try await platformCall("/ws-tickets", method: "POST")
+        guard !ticket["ticket"].string.isEmpty else { throw ClientError.invalidResponse }
+        var url = URLComponents(string: "https://app.memoh.net")!
+        url.scheme = "wss"
+        url.path = "/api/runtime-gateway/v1/display/" + sessionID
+        url.queryItems = [URLQueryItem(name: "ticket", value: ticket["ticket"].string)]
+        var request = URLRequest(url: url.url!)
+        request.setValue(OfficialServer.origin.absoluteString, forHTTPHeaderField: "Origin")
+        let protocolToken = Data(token.utf8).base64EncodedString().replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: "=", with: "")
+        request.setValue("memoh-runtime-token." + protocolToken, forHTTPHeaderField: "Sec-WebSocket-Protocol")
+        return request
+    }
+    func runtimeDisplaySocket(sessionID: String, token: String) async throws -> URLSessionWebSocketTask {
+        let request = try await runtimeDisplayRequest(sessionID: sessionID, token: token)
+        let socket = session.webSocketTask(with: request)
+        socket.maximumMessageSize = 64 * 1_024 * 1_024
+        socket.resume()
+        return socket
     }
     func streamOperation(_ path: String, method: String, query: [String: String] = [:], body: JSONValue?, onEvent: (JSONValue) -> Void) async throws -> JSONValue {
         if isDemo { throw ClientError.message("This operation requires a connected Memoh server.".localized) }

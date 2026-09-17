@@ -53,7 +53,7 @@ enum AvatarImages {
         config.urlCredentialStorage = nil
         config.timeoutIntervalForRequest = 20
         config.timeoutIntervalForResource = 25
-        return URLSession(configuration: config)
+        return URLSession(configuration: config, delegate: AvatarRedirectDelegate(), delegateQueue: nil)
     }()
     static func load(_ url: URL) async throws -> UIImage? {
         decode(try await data(url))
@@ -72,6 +72,7 @@ enum AvatarImages {
             data = decoded
         } else {
             let (bytes, response) = try await (authenticatedSession ?? session).bytes(for: request ?? URLRequest(url: url))
+            DebugDiagnostics.record("Avatar HTTP \((response as? HTTPURLResponse)?.statusCode ?? 0), host \(url.host ?? "local"), type \(response.mimeType ?? "unknown")")
             guard let response = response as? HTTPURLResponse, (200..<300).contains(response.statusCode),
                   response.expectedContentLength <= limit else { throw ClientError.invalidResponse }
             var buffer = Data()
@@ -130,16 +131,19 @@ struct AgentAvatar: View {
             loaded = nil; loadedURL = nil; svg = nil
             guard let url else { return }
             let request = try? store.api?.avatarRequest(url)
-            let imageSession = request == nil ? nil : store.api?.session
             let cacheKey = ((request == nil ? "public" : String(describing: ObjectIdentifier(store.api!))) + "|" + url.absoluteString) as NSString
             if let cached = AvatarImages.cache.object(forKey: cacheKey) { loaded = cached; loadedURL = url; return }
-            guard let data = try? await AvatarImages.data(url, request: request, session: imageSession), !Task.isCancelled else { return }
+            let data: Data
+            do { data = try await AvatarImages.data(url, request: request) }
+            catch { DebugDiagnostics.record("Avatar load failed: \((error as NSError).domain) \((error as NSError).code)"); return }
+            guard !Task.isCancelled else { return }
             if let source = String(data: data, encoding: .utf8), source.contains("<svg") {
                 svg = source
             } else {
                 loaded = await Task.detached(priority: .utility) { AvatarImages.decode(data) }.value
                 if let loaded { AvatarImages.cache.setObject(loaded, forKey: cacheKey, cost: data.count) }
             }
+            DebugDiagnostics.record("Avatar decoded: raster=\(loaded != nil), svg=\(svg != nil), bytes=\(data.count)")
             loadedURL = url
         }
     }

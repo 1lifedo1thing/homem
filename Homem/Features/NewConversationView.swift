@@ -127,18 +127,21 @@ struct NewConversationView: View {
         }
     }
     private var runLocationButton: some View {
-        Button { locationPicker = true } label: {
-            HStack(spacing: 12) {
-                AgentAvatar(name: location?.name ?? "Workspace", size: 32, symbol: location?.symbol ?? "arrow.triangle.branch")
-                VStack(alignment: .leading, spacing: 4) {
-                    Eyebrow(text: "RUN ON")
-                    Text(location?.name ?? "Agent default".localized).font(.subheadline.weight(.semibold)).foregroundStyle(.primary)
+        #if targetEnvironment(macCatalyst)
+        Menu {
+            Picker("Workspace".localized, selection: $targetID) {
+                Label("Agent default".localized, systemImage: "arrow.triangle.branch").tag("")
+                ForEach(locations) { target in
+                    Label(target.name, systemImage: target.symbol).tag(target.id).disabled(!target.available)
                 }
-                Spacer(minLength: 8)
-                if let location { StatusIndicator(text: location.available ? "Online" : "Offline", color: location.available ? .green : .secondary) }
-                Image(systemName: "chevron.down").font(.caption.weight(.bold)).foregroundStyle(.secondary)
-            }.frame(minHeight: 48).contentShape(Rectangle())
-        }.buttonStyle(.plain).disabled(loadingLocations)
+            }.pickerStyle(.inline)
+        } label: { runLocationLabel }
+        .disabled(loadingLocations)
+        .accessibilityLabel(AppLocalization.format("Run on, %@", location?.name ?? "Agent default".localized))
+        .accessibilityIdentifier("newChatRunLocation")
+        #else
+        Button { locationPicker = true } label: { runLocationLabel }
+        .buttonStyle(.plain).disabled(loadingLocations)
             .accessibilityLabel(AppLocalization.format("Run on, %@", location?.name ?? "Agent default".localized))
             .accessibilityIdentifier("newChatRunLocation")
             .popover(isPresented: $locationPicker, arrowEdge: .top) {
@@ -156,6 +159,19 @@ struct NewConversationView: View {
                     }.frame(maxHeight: 340)
                 }.frame(width: 300).fixedSize(horizontal: false, vertical: true).presentationCompactAdaptation(.popover)
             }
+        #endif
+    }
+    private var runLocationLabel: some View {
+        HStack(spacing: 12) {
+            AgentAvatar(name: location?.name ?? "Workspace", size: 32, symbol: location?.symbol ?? "arrow.triangle.branch")
+            VStack(alignment: .leading, spacing: 4) {
+                Eyebrow(text: "RUN ON")
+                Text(location?.name ?? "Agent default".localized).font(.subheadline.weight(.semibold)).foregroundStyle(.primary)
+            }
+            Spacer(minLength: 8)
+            if let location { StatusIndicator(text: location.available ? "Online" : "Offline", color: location.available ? .green : .secondary) }
+            Image(systemName: "chevron.down").font(.caption.weight(.bold)).foregroundStyle(.secondary)
+        }.frame(minHeight: 48).contentShape(Rectangle())
     }
     private func locationOption(id: String, name: String, symbol: String, detail: String, available: Bool) -> some View {
         Button {

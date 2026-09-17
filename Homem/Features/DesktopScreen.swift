@@ -24,7 +24,8 @@ struct DesktopContent: View {
             GeometryReader { geometry in
                 ZStack {
                     Color.black
-                    if let track = model.track { RemoteVideo(track: track, model: model).overlay { if !model.hasVideo { ProgressView().tint(.white) } } }
+                    if let image = model.runtimeImage { Image(uiImage: image).resizable().scaledToFit().frame(maxWidth: .infinity, maxHeight: .infinity) }
+                    else if let track = model.track { RemoteVideo(track: track, model: model).overlay { if !model.hasVideo { ProgressView().tint(.white) } } }
                     else { VStack(spacing: 16) { Image(systemName: "desktopcomputer").font(.largeTitle); Text(model.status.localized); if model.error == nil { ProgressView().tint(.white) } }.foregroundStyle(.white.opacity(0.7)) }
                 }
                 .contentShape(Rectangle())
@@ -58,9 +59,12 @@ struct DesktopContent: View {
 @MainActor @Observable final class DesktopModel: NSObject {
     let api: APIClient
     let botID: String
-    var status = "Connecting"
+    var status = "Connecting" { didSet { DebugDiagnostics.record("Desktop stage: \(status)") } }
     var error: String?
     var track: RTCVideoTrack?
+    var runtimeImage: UIImage?
+    private var runtime: RuntimeDesktopConnection?
+    private var runtimeTask: Task<Void, Never>?
     var hasVideo = false
     var videoSize = CGSize(width: 1280, height: 720)
     private var peer: RTCPeerConnection?
@@ -76,12 +80,34 @@ struct DesktopContent: View {
     var base: String { "/bots/\(botID.pathComponent)/container/display" }
     init(api: APIClient, botID: String) { self.api = api; self.botID = botID; super.init() }
     func connect() async {
-        guard !connecting, peer == nil else { return }
+        guard !connecting, peer == nil, runtime == nil else { return }
         disconnect(); let attempt = generation
         connecting = true
         defer { if generation == attempt { connecting = false } }
         error = nil; status = "Preparing desktop"
         do {
+            if api.isOfficial {
+                let session = try await api.call(base + "/runtime-session", method: "POST")
+                guard attempt == generation else { return }
+                let socket = try await api.runtimeDisplaySocket(sessionID: session["session_id"].string, token: session["token"].string)
+                guard attempt == generation else { socket.cancel(with: .goingAway, reason: nil); return }
+                let connection = RuntimeDesktopConnection(socket: socket)
+                runtime = connection; status = "Connecting"
+                watchConnection(attempt)
+                runtimeTask = Task { [weak self] in
+                    do {
+                        try await connection.run { [weak self] image in
+                            await self?.receiveFrame(image, attempt: attempt)
+                        }
+                    } catch {
+                        guard let self, self.generation == attempt else { return }
+                        DebugDiagnostics.record("Desktop gateway failed: \((error as NSError).domain) \((error as NSError).code), HTTP \((socket.response as? HTTPURLResponse)?.statusCode ?? 0), close \(socket.closeCode.rawValue)")
+                        self.disconnect()
+                        self.error = "The desktop connection was lost. Try reconnecting.".localized
+                    }
+                }
+                return
+            }
             try await DesktopReadiness.prepare(api: api, base: base) { [weak self] status in
                 guard self?.generation == attempt else { return }
                 self?.status = status
@@ -103,11 +129,13 @@ struct DesktopContent: View {
             guard attempt == generation else { return }
             var request = try api.request(base + "/webrtc/offer", method: "POST", body: ["type": "offer", "sdp": .string(pc.localDescription?.sdp ?? offer.sdp), "candidate_host": .string(api.baseURL.host ?? "")])
             request.timeoutInterval = 120
+            DebugDiagnostics.record("Desktop sending offer")
             let answer = try JSONDecoder().decode(JSONValue.self, from: await api.perform(request))
             guard attempt == generation else {
                 if !answer["session_id"].string.isEmpty { _ = try? await api.call(base + "/sessions/" + answer["session_id"].string.pathComponent, method: "DELETE") }
                 return
             }
+            DebugDiagnostics.record("Desktop received answer; candidates=\(answer["sdp"].string.components(separatedBy: "a=candidate:").count - 1)")
             displaySessionID = answer["session_id"].string
             guard !answer["sdp"].string.isEmpty else { throw ClientError.invalidResponse }
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in pc.setRemoteDescription(RTCSessionDescription(type: .answer, sdp: answer["sdp"].string)) { e in if let e { continuation.resume(throwing: e) } else { continuation.resume() } } }
@@ -116,6 +144,7 @@ struct DesktopContent: View {
 
         } catch {
             if attempt == generation {
+                DebugDiagnostics.record("Desktop error: \(error.localizedDescription)")
                 disconnect()
                 if !(error is CancellationError) { self.error = error.localizedDescription }
             }
@@ -130,7 +159,15 @@ struct DesktopContent: View {
             error = "The desktop could not connect. Check your connection and try again.".localized
         }
     }
+    private func receiveFrame(_ image: CGImage, attempt: UUID) {
+        guard generation == attempt else { return }
+        if !hasVideo { DebugDiagnostics.record("Desktop gateway frame: \(image.width)x\(image.height)") }
+        runtimeImage = UIImage(cgImage: image); videoSize = CGSize(width: image.width, height: image.height)
+        hasVideo = true; if status != "Connected" { status = "Connected" }; watchdog?.cancel()
+    }
     func disconnect() {
+        runtimeTask?.cancel(); runtimeTask = nil
+        if let runtime { Task { await runtime.close() } }; runtime = nil; runtimeImage = nil
         generation = UUID(); connecting = false; watchdog?.cancel(); watchdog = nil; channel?.close(); channel = nil; peer?.close(); peer = nil; track = nil; hasVideo = false; status = "Disconnected"
         if !displaySessionID.isEmpty { let path = base + "/sessions/" + displaySessionID.pathComponent; displaySessionID = ""; Task { _ = try? await api.call(path, method: "DELETE") } }
     }
@@ -138,8 +175,12 @@ struct DesktopContent: View {
         guard channel?.readyState == .open, let data = try? value.encoded else { return }
         channel?.sendData(RTCDataBuffer(data: data, isBinary: false))
     }
-    func pointer(_ point: CGPoint, mask: Int) { input(["type": "pointer", "x": .number(point.x.rounded()), "y": .number(point.y.rounded()), "button_mask": .number(Double(mask))]) }
-    func key(_ code: UInt32) { input(["type": "key", "keysym": .number(Double(code)), "down": true]); input(["type": "key", "keysym": .number(Double(code)), "down": false]) }
+    func pointer(_ point: CGPoint, mask: Int) {
+        if let runtime { Task { try? await runtime.send(RFBClient.pointer(x: Int(point.x.rounded()), y: Int(point.y.rounded()), mask: mask)) }; return }
+        input(["type": "pointer", "x": .number(point.x.rounded()), "y": .number(point.y.rounded()), "button_mask": .number(Double(mask))]) }
+    func key(_ code: UInt32) {
+        if let runtime { Task { try? await runtime.send(RFBClient.key(code, down: true)); try? await runtime.send(RFBClient.key(code, down: false)) }; return }
+        input(["type": "key", "keysym": .number(Double(code)), "down": true]); input(["type": "key", "keysym": .number(Double(code)), "down": false]) }
     func point(_ touch: CGPoint, in size: CGSize) -> CGPoint? {
         let scale = min(size.width / videoSize.width, size.height / videoSize.height)
         guard scale > 0 else { return nil }
@@ -157,6 +198,7 @@ extension DesktopModel: RTCPeerConnectionDelegate {
     nonisolated func peerConnectionShouldNegotiate(_ peerConnection: RTCPeerConnection) {}
     nonisolated func peerConnection(_ peerConnection: RTCPeerConnection, didChange newState: RTCIceConnectionState) { Task { @MainActor in
         guard self.peer === peerConnection else { return }
+        DebugDiagnostics.record("Desktop ICE: \(newState.rawValue)")
         switch newState { case .connected, .completed: self.status = "Connected"; case .failed, .closed:
             self.disconnect()
             self.error = "The desktop connection was lost. Try reconnecting.".localized
@@ -183,6 +225,6 @@ struct RemoteVideo: UIViewRepresentable {
         var track: RTCVideoTrack?
         let model: DesktopModel
         init(model: DesktopModel) { self.model = model }
-        func videoView(_ videoView: RTCVideoRenderer, didChangeVideoSize size: CGSize) { Task { @MainActor in if size.width > 0 && size.height > 0 { model.videoSize = size; model.hasVideo = true } } }
+        func videoView(_ videoView: RTCVideoRenderer, didChangeVideoSize size: CGSize) { Task { @MainActor in if size.width > 0 && size.height > 0 { model.videoSize = size; model.hasVideo = true; DebugDiagnostics.record("Desktop frame size: \(size)") } } }
     }
 }

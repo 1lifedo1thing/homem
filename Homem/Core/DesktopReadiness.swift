@@ -17,6 +17,7 @@ enum DesktopReadiness {
     }
     @MainActor static func prepare(api: APIClient, base: String, progress: @escaping (String) -> Void) async throws {
         var info = try await api.call(base)
+        DebugDiagnostics.record("Desktop readiness: enabled=\(info["enabled"].bool), available=\(info["available"].bool), running=\(info["running"].bool)")
         try Task.checkCancellation()
         if let reason = blockingReason(info) { throw ClientError.message(reason.localized) }
         if ready(info) { return }

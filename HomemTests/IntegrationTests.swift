@@ -33,6 +33,19 @@ import XCTest
         XCTAssertEqual(turns.first?["attachments"].array, [attachment])
         XCTAssertTrue(model.pending.isEmpty)
     }
+    func testAvatarLoadsThroughPrivateAndCDNRedirects() async throws {
+        let api = try await connectedClient()
+        let url = URL(string: "http://127.0.0.1:18765/avatars/private")!
+        var request = try XCTUnwrap(api.avatarRequest(url))
+        request.setValue("fixture-team", forHTTPHeaderField: "X-Team-ID")
+        request.setValue("session=fixture", forHTTPHeaderField: "Cookie")
+        let data = try await AvatarImages.data(url, request: request)
+        XCTAssertNotNil(AvatarImages.decode(data))
+        // Mutating API traffic retains its stricter no-redirect behavior.
+        let strictAPI = APIClient(baseURL: api.baseURL, token: api.token)
+        let (_, response) = try await strictAPI.session.data(for: request)
+        XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 302)
+    }
     func testRealHTTPAndStreamOperation() async throws {
         let api = try await connectedClient()
         let bots = try await api.call("/bots")

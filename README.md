@@ -8,7 +8,7 @@ A native Swift / SwiftUI iPhone and iPad client for [Memoh](https://github.com/f
 
 **API baseline:** Memoh commit `51bb2073d8d99c961ce9f23555e8fb3bdd2aadc4`
 
-Homem connects to an existing Memoh backend. It does not run an agent or a container on the phone. The interface uses SwiftUI and UIKit, SwiftTerm for the interactive terminal, and native WebRTC for the remote desktop. The workspace remains native; an optional embedded browser is used for official account sign-in and account/workspace setup. SVG avatars use an isolated WebKit renderer with scripts and network access disabled.
+Homem connects to an existing Memoh backend. It does not run an agent or a container on the phone. The interface uses SwiftUI and UIKit, SwiftTerm for the interactive terminal, and native RFB for official remote desktops (WebRTC for third-party servers). The workspace remains native; an optional embedded browser is used for official account sign-in and account/workspace setup. SVG avatars use an isolated WebKit renderer with scripts and network access disabled.
 
 ## Run
 
@@ -45,7 +45,7 @@ In **Settings**, choose **Appearance** (System, Light, Dark) and **Color scheme*
 
 - **Conversations:** session creation, history pagination, rename/delete, native Markdown and code blocks, live runtime snapshots/deltas, reconnect and replay recovery, model/reasoning choices, attachments, voice recordings, local read-aloud, retry/edit/fork, abort, approval decisions, agent questions, follow-up and steer queues.
 - **Agents:** create/edit/pause/delete, model and behavior settings, native and external agent runtime configuration, permissions, health checks, usage, compaction logs, and backups.
-- **Workspace:** directories and files, text/Markdown editing with revision conflict protection, upload/download/share, rename/delete, archive controls, native interactive terminal, native WebRTC desktop with pointer/drag/scroll/keyboard input, workspace lifecycle, snapshots, workdirs, dependencies.
+- **Workspace:** directories and files, text/Markdown editing with revision conflict protection, upload/download/share, rename/delete, archive controls, native interactive terminal, native desktop with pointer/drag/scroll/keyboard input, workspace lifecycle, snapshots, workdirs, dependencies.
 - **Memory and scheduling:** memory CRUD and semantic search, native memory graph, compaction/status/usage, schedule configuration and execution history.
 - **Integrations:** channels with adapter-provided native credential fields, MCP, OAuth/device authorization, skills, email bindings, installed apps, Supermarket discovery and installation with streamed progress.
 - **Server management:** providers/models, memory/search/fetch/email providers, speech/transcription/video models, remote runtimes, people, profile/password, system/light/dark appearance.

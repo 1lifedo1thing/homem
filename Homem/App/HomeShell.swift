@@ -79,13 +79,45 @@ struct AgentPickerMenu: View {
     @State private var presented = false
     private var selected: Record? { store.bots.first { $0.id == selection } }
 
+    @State private var menuImages: [String: UIImage] = [:]
     var body: some View {
-        Button { presented.toggle() } label: {
-            HStack(spacing: 5) {
-                AgentAvatar(name: selected?.title ?? "Agent", avatarURL: selected?.value.avatarURL ?? "", size: 28)
-                Image(systemName: "chevron.down").font(.system(size: 9, weight: .bold)).foregroundStyle(.secondary)
-            }.frame(minWidth: 44, minHeight: 44)
+        #if targetEnvironment(macCatalyst)
+        Menu {
+            Picker("Agent".localized, selection: $selection) {
+                ForEach(store.bots) { bot in
+                    Label {
+                        Text(bot.title)
+                    } icon: {
+                        if let image = menuImages[bot.id] { Image(uiImage: image).renderingMode(.original) }
+                        else { Image(systemName: "person.crop.square") }
+                    }.tag(bot.id)
+                }
+            }.pickerStyle(.inline)
+        } label: { pickerLabel }
+        .disabled(store.bots.isEmpty)
+        .accessibilityLabel("Choose agent".localized)
+        .accessibilityValue(selected?.title ?? "No agent selected")
+        .accessibilityIdentifier("agentPickerMenu")
+        .task(id: store.bots.map { $0.id + $0.value.avatarURL }.joined()) {
+            for bot in store.bots {
+                guard let url = AvatarSource.url(bot.value.avatarURL, baseURL: store.api?.baseURL) else { continue }
+                let request = try? store.api?.avatarRequest(url)
+                if let data = try? await AvatarImages.data(url, request: request), !Task.isCancelled {
+                    if let image = AvatarImages.decode(data) {
+                        // Native menus use the UIImage's intrinsic size, not SwiftUI's frame.
+                        let size = CGSize(width: 22, height: 22)
+                        menuImages[bot.id] = UIGraphicsImageRenderer(size: size).image { _ in
+                            UIBezierPath(roundedRect: CGRect(origin: .zero, size: size), cornerRadius: 5).addClip()
+                            let scale = max(size.width / image.size.width, size.height / image.size.height)
+                            let drawn = CGSize(width: image.size.width * scale, height: image.size.height * scale)
+                            image.draw(in: CGRect(x: (size.width - drawn.width) / 2, y: (size.height - drawn.height) / 2, width: drawn.width, height: drawn.height))
+                        }
+                    }
+                }
+            }
         }
+        #else
+        Button { presented.toggle() } label: { pickerLabel }
         .disabled(store.bots.isEmpty)
         .accessibilityLabel("Choose agent".localized)
         .accessibilityValue(selected?.title ?? "No agent selected")
@@ -121,5 +153,12 @@ struct AgentPickerMenu: View {
             }.frame(width: 300).fixedSize(horizontal: false, vertical: true)
                 .presentationCompactAdaptation(.popover)
         }
+        #endif
+    }
+    private var pickerLabel: some View {
+        HStack(spacing: 5) {
+            AgentAvatar(name: selected?.title ?? "Agent", avatarURL: selected?.value.avatarURL ?? "", size: 28)
+            Image(systemName: "chevron.down").font(.system(size: 9, weight: .bold)).foregroundStyle(.secondary)
+        }.frame(minWidth: 44, minHeight: 44)
     }
 }

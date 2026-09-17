@@ -12,6 +12,23 @@ import XCTest
         let config = URLSessionConfiguration.ephemeral; config.protocolClasses = [StubURLProtocol.self]
         return APIClient(baseURL: OfficialServer.apiURL, session: URLSession(configuration: config), officialSession: OfficialSession(cookies: cookies, teamID: teamID))
     }
+    func testRuntimeDesktopUsesGatewayTicketOriginAndProtocol() async throws {
+        let api = client(cookies: [cookie()], teamID: "team-1")
+        StubURLProtocol.handler = { request in
+            XCTAssertEqual(request.url?.path, "/api/v1/ws-tickets")
+            XCTAssertEqual(request.httpMethod, "POST")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "X-Team-ID"), "team-1")
+            return (200, Data(#"{"ticket":"fixture-ticket"}"#.utf8))
+        }
+        let request = try await api.runtimeDisplayRequest(sessionID: "fixture-display", token: "fixture-token")
+        XCTAssertEqual(request.url?.scheme, "wss")
+        XCTAssertEqual(request.url?.host, "app.memoh.net")
+        XCTAssertEqual(request.url?.path, "/api/runtime-gateway/v1/display/fixture-display")
+        XCTAssertEqual(URLComponents(url: request.url!, resolvingAgainstBaseURL: false)?.queryItems, [URLQueryItem(name: "ticket", value: "fixture-ticket")])
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Origin"), "https://app.memoh.net")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Sec-WebSocket-Protocol"), "memoh-runtime-token.Zml4dHVyZS10b2tlbg")
+        XCTAssertNil(request.value(forHTTPHeaderField: "Authorization"))
+    }
     func testCookiesAreScopedAndRoundTripWithoutIdentityProviderCredentials() throws {
         let session = OfficialSession(cookies: [cookie(), cookie(domain: "github.com"), cookie(domain: "memoh.net.evil.example"), cookie(secure: false), cookie(expires: .distantPast)], teamID: "team-1")
         let restored = try JSONDecoder().decode(OfficialSession.self, from: JSONEncoder().encode(session))

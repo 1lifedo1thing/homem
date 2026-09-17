@@ -44,6 +44,22 @@ final class PresentationTests: XCTestCase {
         }
         XCTAssertEqual(JSONValue.object(["metadata": ["icon_url": "/icon.svg"]]).avatarURL, "/icon.svg")
     }
+    func testAvatarRedirectsKeepCredentialsOnlyOnSameOrigin() throws {
+        let source = URL(string: "https://memoh.example/avatars/a")!
+        var request = URLRequest(url: URL(string: "https://memoh.example/avatars/b")!)
+        request.setValue("Bearer fixture", forHTTPHeaderField: "Authorization")
+        request.setValue("session=fixture", forHTTPHeaderField: "Cookie")
+        request.setValue("fixture-team", forHTTPHeaderField: "X-Team-ID")
+        XCTAssertEqual(AvatarRedirectDelegate.redirectedRequest(request, from: source)?.value(forHTTPHeaderField: "Authorization"), "Bearer fixture")
+        request.url = URL(string: "https://cdn.example/avatar.png?signature=fixture")!
+        let external = try XCTUnwrap(AvatarRedirectDelegate.redirectedRequest(request, from: source))
+        XCTAssertEqual(external.url, request.url)
+        XCTAssertEqual(external.allHTTPHeaderFields, ["Accept": "image/*"])
+        request.url = URL(string: "http://memoh.example/avatar.png")!
+        XCTAssertNil(AvatarRedirectDelegate.redirectedRequest(request, from: source))
+        request.url = URL(string: "https://user:secret@cdn.example/avatar.png")!
+        XCTAssertNil(AvatarRedirectDelegate.redirectedRequest(request, from: source))
+    }
     func testSVGDataAvatarSupportsPercentEncoding() async throws {
         let data = try await AvatarImages.data(URL(string: "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%3E%3C/svg%3E")!)
         XCTAssertTrue(String(decoding: data, as: UTF8.self).hasPrefix("<svg"))
