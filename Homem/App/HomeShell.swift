@@ -25,9 +25,9 @@ struct LibraryView: View {
         List {
             Section {
                 HStack(spacing: 14) {
-                    AgentAvatar(name: store.selectedBot?.title ?? "Library", avatarURL: store.selectedBot?.value["avatar_url"].string ?? "", size: 52)
+                    AgentAvatar(name: store.selectedBot?.title ?? "Library", avatarURL: store.selectedBot?.value["avatar_url"].string ?? "", size: 36)
                     VStack(alignment: .leading, spacing: 5) {
-                        Eyebrow(text: "AGENT LIBRARY")
+                        Eyebrow(text: "AGENT")
                         Text(store.selectedBot?.title ?? "Library").font(.title2.bold())
                     }
                     Spacer()
@@ -50,7 +50,7 @@ struct LibraryView: View {
                 NavigationLink { MarketplaceView() } label: { Label("Supermarket", systemImage: "storefront") }
             }
             if store.isDemo { Section { DemoBadge() } }
-        }.navigationTitle("Library")
+        }.scrollContentBackground(.hidden).background(Theme.canvas).navigationTitle("Library")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     AgentPickerMenu(selection: Binding(get: { store.selectedBot?.id ?? "" }, set: { store.selectedBotID = $0 }))

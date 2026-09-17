@@ -53,6 +53,10 @@ In **Settings**, choose **Appearance** (System, Light, Dark) and **Color scheme*
 
 See [feature coverage and limits](docs/FEATURES.md) for the distinction between dedicated interfaces, advanced controls, and unverified server-dependent behavior.
 
+## Design
+
+UI changes follow the [Homem design language](docs/DESIGN.md): compact context, clear hierarchy, real bot/workspace images, and restrained use of color.
+
 ## Build and test
 
 The checked-in Xcode project is generated from `project.yml`. Regenerate after changing project configuration or adding source files:

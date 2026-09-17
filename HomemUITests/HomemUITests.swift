@@ -135,6 +135,7 @@ final class HomemUITests: XCTestCase {
         let agents = XCTAttachment(screenshot: app.screenshot()); agents.name = "Agents"; agents.lifetime = .keepAlways; add(agents)
         app.staticTexts["Atlas"].firstMatch.tap()
         app.buttons["Files, terminal & desktop"].tap()
+        capture(app, "Workspace tools")
         app.buttons["Files"].tap()
         XCTAssertTrue(app.staticTexts["AGENTS.md"].waitForExistence(timeout: 5))
         app.staticTexts["AGENTS.md"].tap()

@@ -2,6 +2,11 @@ import SwiftUI
 import ImageIO
 
 enum Theme {
+    static let canvas = Color(uiColor: .systemBackground)
+    static let surface = Color(uiColor: .secondarySystemBackground)
+    static let separator = Color(uiColor: .separator).opacity(0.35)
+    static let cornerRadius: CGFloat = 16
+    static let gutter: CGFloat = 20
     static let schemes = ["system", "memoh", "ocean", "forest", "rose", "amber"]
     static func accent(for scheme: String) -> Color {
         switch scheme {
@@ -96,14 +101,14 @@ struct AgentAvatar: View {
     private var url: URL? { AvatarSource.url(avatarURL, baseURL: baseURL ?? store.api?.baseURL) }
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: size * 0.25, style: .continuous).fill(accent.opacity(0.10))
+            RoundedRectangle(cornerRadius: size * 0.25, style: .continuous).fill(Color(.tertiarySystemFill))
             if let loaded, loadedURL == url {
                 Image(uiImage: loaded).resizable().scaledToFill()
             } else if let symbol {
-                Image(systemName: symbol).font(.system(size: size * 0.42, weight: .medium)).foregroundStyle(accent)
+                Image(systemName: symbol).font(.system(size: size * 0.42, weight: .medium)).foregroundStyle(.secondary)
             } else {
                 Text(AvatarSource.initials(name)).font(.system(size: size * 0.36, weight: .bold, design: .rounded))
-                    .foregroundStyle(accent)
+                    .foregroundStyle(.primary)
             }
         }
         .frame(width: size, height: size)
@@ -133,6 +138,24 @@ struct WorkspaceIdentity: View {
             AgentAvatar(name: store.workspaceName, avatarURL: store.workspace["avatar_url"].string, size: 22, symbol: "square.stack.3d.up")
             Text(store.workspaceName).font(.subheadline.weight(.medium)).foregroundStyle(.secondary).lineLimit(1)
         }.accessibilityElement(children: .combine)
+    }
+}
+
+struct StatusIndicator: View {
+    let text: String
+    var color: Color = .green
+    var body: some View {
+        HStack(spacing: 5) {
+            Circle().fill(color).frame(width: 5, height: 5)
+            Text(text).font(.caption.weight(.medium))
+        }.foregroundStyle(color).fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+struct DetailSurface: ViewModifier {
+    func body(content: Content) -> some View {
+        content.background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.cornerRadius))
+            .overlay(RoundedRectangle(cornerRadius: Theme.cornerRadius).strokeBorder(Theme.separator, lineWidth: 0.5))
     }
 }
 

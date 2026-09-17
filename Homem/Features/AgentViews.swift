@@ -25,12 +25,12 @@ struct AgentsView: View {
                             Text("Create an agent").font(.headline)
                             Spacer()
                             Image(systemName: "arrow.right").font(.subheadline)
-                        }.foregroundStyle(accent).padding(18).background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 20))
+                        }.foregroundStyle(accent).padding(18).modifier(DetailSurface())
                     }.accessibilityIdentifier("createAgent")
                 }
                 if store.isDemo { DemoBadge() }
             }.padding(22).frame(maxWidth: 1100).frame(maxWidth: .infinity)
-        }.background(Color(.systemGroupedBackground)).navigationTitle("Agents")
+        }.background(Theme.canvas).navigationTitle("Agents")
             .searchable(text: $search, prompt: "Find an agent")
             .toolbar { Button { create = true } label: { Image(systemName: "plus") }.accessibilityLabel("Create agent") }
             .refreshable { await store.reload() }
@@ -48,7 +48,7 @@ struct AgentCard: View {
                 AgentAvatar(name: bot.title, avatarURL: bot.value["avatar_url"].string, size: 52)
                 VStack(alignment: .leading, spacing: 6) {
                     Text(bot.title).font(.title2.weight(.bold))
-                    StatusPill(text: bot.value["is_active"].bool ? "Active" : "Paused", color: bot.value["is_active"].bool ? .green : .secondary)
+                    StatusIndicator(text: bot.value["is_active"].bool ? "Active" : "Paused", color: bot.value["is_active"].bool ? .green : .secondary)
                 }
                 Spacer(minLength: 0)
             }
@@ -61,8 +61,7 @@ struct AgentCard: View {
                 Spacer()
                 Image(systemName: "arrow.up.right").fontWeight(.semibold)
             }.font(.caption).foregroundStyle(.secondary)
-        }.padding(20).background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 20))
-            .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(.primary.opacity(0.045), lineWidth: 0.5))
+        }.padding(Theme.gutter).modifier(DetailSurface())
 
     }
 }
@@ -81,7 +80,7 @@ struct AgentDetailView: View {
         List {
             Section {
                 VStack(alignment: .leading, spacing: 15) {
-                    HStack { AgentAvatar(name: current.title, avatarURL: current.value["avatar_url"].string, size: 72); Spacer(); StatusPill(text: current.value["is_active"].bool ? "Active" : "Paused", color: current.value["is_active"].bool ? .green : .secondary) }
+                    HStack { AgentAvatar(name: current.title, avatarURL: current.value["avatar_url"].string, size: 72); Spacer(); StatusIndicator(text: current.value["is_active"].bool ? "Active" : "Paused", color: current.value["is_active"].bool ? .green : .secondary) }
                     Text(current.title).font(.largeTitle.weight(.bold))
                     Text(current.value["metadata"]["description"].string.nonEmpty ?? "A dedicated workspace, tools, and memories. All yours.").foregroundStyle(.secondary)
                 }.padding(.vertical, 8)

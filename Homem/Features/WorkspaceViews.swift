@@ -9,6 +9,8 @@ struct WorkspaceView: View {
     @State private var status: JSONValue = .null
     @State private var error: String?
     @State private var busy = false
+    private enum Tool: String { case files, terminal, desktop }
+    @State private var selectedTool: Tool?
     var body: some View {
         List {
             Section {
@@ -22,15 +24,17 @@ struct WorkspaceView: View {
                         }
                         Spacer()
                     }
-                    StatusPill(text: status.text("status", "state").nonEmpty?.fieldLabel ?? "Loading", color: status.text("status", "state") == "running" ? .green : .secondary)
+                    StatusIndicator(text: status.text("status", "state").nonEmpty?.fieldLabel ?? (error == nil ? "Loading" : "Unavailable"), color: status.text("status", "state") == "running" ? .green : .secondary)
                 }.padding(.vertical, 8)
             }.listRowBackground(Color.clear)
 
             Section {
-                NavigationLink("Files", systemImage: "folder") { FileBrowserView(botID: botID, path: "/data") }
-                NavigationLink("Terminal", systemImage: "terminal") { TerminalScreen(botID: botID) }
-                NavigationLink("Desktop", systemImage: "desktopcomputer") { DesktopScreen(botID: botID) }
-            }
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 10) { workspaceTools }
+                    VStack(spacing: 10) { workspaceTools }
+                }.listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
+            }.listRowBackground(Color.clear)
+
             Section("Manage") {
                 ResourceLink(title: "Working directories", icon: "folder.badge.gearshape", spec: .bot(botID, "workdirs", title: "Working directories", detail: "/bots/{bot_id}/workdirs/{workdir_id}"))
                 ResourceLink(title: "Snapshots", icon: "camera", spec: .bot(botID, "container/snapshots", title: "Snapshots"))
@@ -42,12 +46,36 @@ struct WorkspaceView: View {
                 OperationButton(title: "Restore snapshot", path: base + "/container/snapshots/rollback", template: "/bots/{bot_id}/container/snapshots/rollback", method: "POST")
             }
             if let error { ErrorBanner(message: error) }
-        }.navigationTitle(name + "’s workspace").navigationBarTitleDisplayMode(.inline).task { await load() }
+        }.scrollContentBackground(.hidden).background(Theme.canvas).navigationTitle(name + "’s workspace").navigationBarTitleDisplayMode(.inline).task { await load() }
+            .navigationDestination(item: $selectedTool) { tool in
+                switch tool {
+                case .files: FileBrowserView(botID: botID, path: "/data")
+                case .terminal: TerminalScreen(botID: botID)
+                case .desktop: DesktopScreen(botID: botID)
+                }
+            }
+    }
+    @ViewBuilder private var workspaceTools: some View {
+        Button { selectedTool = .files } label: { WorkspaceToolLabel(title: "Files", symbol: "folder") }.buttonStyle(.plain)
+        Button { selectedTool = .terminal } label: { WorkspaceToolLabel(title: "Terminal", symbol: "terminal") }.buttonStyle(.plain)
+        Button { selectedTool = .desktop } label: { WorkspaceToolLabel(title: "Desktop", symbol: "desktopcomputer") }.buttonStyle(.plain)
     }
     func load() async { do { status = try await store.api?.call(base + "/container") ?? .null; error = nil } catch { self.error = error.localizedDescription } }
     func action(_ action: String) async {
         busy = true; defer { busy = false }
         do { _ = try await store.api?.call(base + "/container/" + action, method: "POST"); await load() } catch { self.error = error.localizedDescription }
+    }
+}
+
+private struct WorkspaceToolLabel: View {
+    let title: String
+    let symbol: String
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Image(systemName: symbol).font(.title3.weight(.medium)).foregroundStyle(.secondary)
+            Text(title).font(.subheadline.weight(.semibold)).foregroundStyle(.primary).fixedSize()
+        }.frame(maxWidth: .infinity, alignment: .leading).padding(16).modifier(DetailSurface())
+            .accessibilityElement(children: .ignore).accessibilityLabel(title)
     }
 }
 

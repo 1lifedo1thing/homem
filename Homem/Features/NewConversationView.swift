@@ -66,12 +66,12 @@ struct NewConversationView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
-                    VStack(alignment: .leading, spacing: 22) {
+                    VStack(alignment: .leading, spacing: 18) {
                         HStack(spacing: 16) {
-                            AgentAvatar(name: bot?.title ?? "Agent", avatarURL: bot?.value["avatar_url"].string ?? "", size: 60)
+                            AgentAvatar(name: bot?.title ?? "Agent", avatarURL: bot?.value["avatar_url"].string ?? "", size: 44)
                             VStack(alignment: .leading, spacing: 6) {
-                                Eyebrow(text: "NEW CONVERSATION")
-                                Text(bot?.title ?? "Choose an agent").font(.system(.largeTitle, weight: .bold)).lineLimit(2)
+                                Eyebrow(text: "TO")
+                                Text(bot?.title ?? "Choose an agent").font(.system(.title2, weight: .bold)).lineLimit(2)
                             }
                             Spacer(minLength: 0)
                         }
@@ -85,8 +85,8 @@ struct NewConversationView: View {
                             Button("Try again") { Task { await loadLocations() } }.font(.caption)
                         }
                     }
+                    Divider()
                     VStack(alignment: .leading, spacing: 16) {
-                        Eyebrow(text: "MESSAGE")
                         TextField("Message \(bot?.title ?? "your agent")…", text: $text, axis: .vertical)
                             .lineLimit(5...12).focused($focused).accessibilityIdentifier("newChatMessage")
                         ForEach(Array(attachments.enumerated()), id: \.offset) { index, item in
@@ -101,11 +101,10 @@ struct NewConversationView: View {
                             }.font(.subheadline)
                         }
 
-                    }.padding(20).background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 20))
-                        .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(.primary.opacity(0.06), lineWidth: 0.5))
+                    }.padding(.vertical, 8)
                     if let error { ErrorBanner(message: error) }
-                }.padding(22).frame(maxWidth: 640).frame(maxWidth: .infinity)
-            }.scrollDismissesKeyboard(.interactively).background(Color(.systemGroupedBackground))
+                }.padding(Theme.gutter).frame(maxWidth: 640).frame(maxWidth: .infinity)
+            }.scrollDismissesKeyboard(.interactively).background(Theme.canvas)
                 .safeAreaInset(edge: .bottom) {
                     composerActions.padding(.horizontal, 22).padding(.vertical, 12)
                         .frame(maxWidth: 640).frame(maxWidth: .infinity).background(.bar)
@@ -130,13 +129,13 @@ struct NewConversationView: View {
     private var runLocationButton: some View {
         Button { locationPicker = true } label: {
             HStack(spacing: 12) {
-                AgentAvatar(name: location?.name ?? "Workspace", size: 40, symbol: location?.symbol ?? "arrow.triangle.branch")
+                AgentAvatar(name: location?.name ?? "Workspace", size: 32, symbol: location?.symbol ?? "arrow.triangle.branch")
                 VStack(alignment: .leading, spacing: 4) {
                     Eyebrow(text: "RUN ON")
                     Text(location?.name ?? "Agent default").font(.subheadline.weight(.semibold)).foregroundStyle(.primary)
                 }
                 Spacer(minLength: 8)
-                if let location { StatusPill(text: location.available ? "Online" : "Offline", color: location.available ? .green : .secondary) }
+                if let location { StatusIndicator(text: location.available ? "Online" : "Offline", color: location.available ? .green : .secondary) }
                 Image(systemName: "chevron.down").font(.caption.weight(.bold)).foregroundStyle(.secondary)
             }.frame(minHeight: 48).contentShape(Rectangle())
         }.buttonStyle(.plain).disabled(loadingLocations)

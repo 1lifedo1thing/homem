@@ -61,6 +61,13 @@ Screenshots from the passing UI run:
 - iPhone 17 Pro / iOS 26.5: **23 tests passed**, zero failures (`Test-Homem-2026.09.17_19-53-06-+0900.xcresult`), covering image decoding, URL resolution, official sign-in, dropdown selection, first-message sending, deletion cancellation, workspace files, and Dark/Rose persistence. Screenshots of both anchored dropdowns, chat setup, the chat list, agents, and dark mode were exported and inspected.
 - iPad (A16): the new-chat/dropdown/keyboard flow and 16 core/sign-in checks passed in `Test-Homem-2026.09.17_19-55-52-+0900.xcresult`. The iPad floating-tab accessibility selector was corrected for the theme test; the final theme and valid/invalid image checks both passed in `Test-Homem-2026.09.17_19-57-33-+0900.xcresult`.
 
+## Design-language refinement
+
+- Inspected Flighty's published iPhone screenshots and detail views, and translated the hierarchy into [Homem's design rules](DESIGN.md). Shared canvas/surface tokens, restrained labeled status dots, flat conversation rows, compact context, and a clean writing surface now govern the main screens.
+- Six iPhone UI flows passed in `Test-Homem-2026.09.17_20-02-49-+0900.xcresult`. The workspace-tools test exposed SwiftUI combining multiple navigation links within a List row; the controls now use independent button routing. The corrected chat/workspace/file-opening flow passed in `Test-Homem-2026.09.17_20-07-11-+0900.xcresult`.
+- All three final iPad flows (chat/workspace files, new chat/dropdowns/keyboard, and Dark/Rose persistence) passed in `Test-Homem-2026.09.17_20-08-14-+0900.xcresult`. Workspace-tool and keyboard-visible dark screenshots were inspected.
+- Updated chat, agent, composer, and dropdown screenshots were exported and visually inspected, including Dark/Rose. Demo screenshots show the neutral fallback identities; server-configured images are used when present.
+
 ## Reproduce
 
 Run `bash scripts/test.sh` from the project root, setting `HOMEM_TEST_DESTINATION` to an installed iOS simulator if needed. This starts the loopback fixture and runs the XCTest targets. Result bundles are local build artifacts and are excluded from source control.
