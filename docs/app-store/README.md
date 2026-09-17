@@ -10,17 +10,18 @@ App: Homem · `ad.neko.homem` · Apple ID `6812852139` · Kitta Ltd
 - English (U.S.), Simplified Chinese, Japanese, and Spanish (Spain): subtitle, promotional text, description, and keywords. Source copy is in `metadata.json`.
 - Primary category Productivity; secondary category Utilities.
 - Copyright: 2026 Kitta Ltd.
-- Review notes explain official/custom server sign-in, demo limitations, and portrait split view. They explicitly mark the review setup as pending.
+- The user has supplied the review server URL in review notes. Review username and password fields are still blank as of the screenshot capture pass.
+- Five privacy-checked screenshots from the live official service are uploaded to the iPhone 6.5-inch gallery. Source captures, upload exports, and remaining capture work are documented in `screenshots/README.md`.
 - Build **18 / 1.0.0** is attached to the draft and was verified after reloading App Store Connect. Replace it with the build containing the workspace/token-usage fixes and share extension when that build is processed.
 
 ## Still required before submission
 
-- Dedicated review server URL and working credentials; keep the server available throughout review. Replace the pending-review note with final steps.
+- Working review-server credentials; keep the server available throughout review and verify the final sign-in steps.
 - Review contact first/last name, email, and phone number. These were blank and no contact details were invented.
 - Public Support URL and Privacy Policy URL. The GitHub repository is private and cannot serve as the public support page. Draft publication copy is provided in `SUPPORT-DRAFT.md` and `PRIVACY-DRAFT.md`.
 - Confirm server-side retention and provider practices before completing/publishing App Privacy answers. The native client has no advertising/tracking/analytics SDK; this does **not** mean that conversations, uploads, or account data sent to the selected server are never collected.
 - Finish/verify age rating and content-rights declarations. The age-rating questionnaire was being edited interactively and was left alone.
-- App Store screenshots for supported iPhone/iPad sizes and localizations. No private account screenshots were uploaded.
+- Complete review-server chat list/conversation screenshots and iPad screenshots. The official-server captures exclude private chats, credentials, and account details.
 - Confirm pricing, territories, and any applicable business/trader information.
 
 ## Share extension release check
