@@ -43,6 +43,11 @@ Screenshots from the passing UI run:
 - After pinning new-chat actions above the keyboard, both composer and theme tests passed again in `Test-Homem-2026.09.17_17-12-33-+0900.xcresult`.
 - New chat, delete confirmation, keyboard composer, official email login, and dark appearance screenshots were exported and visually inspected. No production email or model request was sent during these checks.
 
+## TestFlight release
+
+- Xcode Cloud build **9**, source commit `56cd461`, successfully archived and completed App Store processing on 17 September 2026. Version **1.0.0 (9)** was assigned to **Homem Internal** (three testers).
+- External submission is held by Apple's one-build-per-version review rule while build 8 awaits Beta App Review. Build 9 is not claimed as available to external testers.
+
 ## Reproduce
 
 Run `bash scripts/test.sh` from the project root, setting `HOMEM_TEST_DESTINATION` to an installed iOS simulator if needed. This starts the loopback fixture and runs the XCTest targets. Result bundles are local build artifacts and are excluded from source control.
@@ -53,6 +58,6 @@ For a simulator-independent transport check on the Mac, start `python3 scripts/f
 
 - No authenticated Memoh account, model provider, container runtime credentials, or OAuth registration was supplied. The official public login and deployed client were inspected. Local fixture results establish client transport behavior, not end-to-end compatibility with every deployment.
 - An intermediate expanded simulator run became unresponsive during UI automation and was stopped. Its wire tests had skipped after a two-second fixture startup timeout. The subsequent final core run used a longer allowance and passed both wire tests without skips. The additional onboarding screenshot test subsequently passed in Xcode Cloud Build 1.
-- iPad uses adaptive layouts and is included in the target. A separate iPad simulator launch could not be completed reliably on this host; its layout is not claimed as visually verified.
-- Physical-device signing, device installation, TestFlight/App Store submission, accessibility audit, and testing on the oldest supported OS remain release checks.
+- iPad (A16) / iOS 26.5: new-chat/run-location/keyboard and delete-confirmation tests passed in `Test-Homem-2026.09.17_17-15-00-+0900.xcresult`; screenshots were inspected. Other iPad feature screens remain outside this focused visual check.
+- Xcode Cloud signing and internal TestFlight distribution are verified. Physical-device installation, public App Store release, accessibility audit, and the oldest supported OS remain release checks.
 - See [FEATURES.md](FEATURES.md) for the explicit limits on desktop parity, specialized renderers, provider authentication, backup import, and background behavior.
