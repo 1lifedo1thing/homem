@@ -33,6 +33,7 @@
 		515FB63F31617B99E91C8640 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = F57C5E3102CDA0F1D7D34F07 /* Assets.xcassets */; };
 		518F7995AA9B2F664854CA05 /* ToolActivityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A383D576B75B1EDD141E984 /* ToolActivityView.swift */; };
 		53FE6FD34AA05A006D1C07CE /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 291B489866E3307D03F63279 /* Theme.swift */; };
+		643E9117140729B922DDAD76 /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 3927E41785DE6243E1E1C66F /* AppIcon.icon */; };
 		64558162276B92AA1C90FA03 /* AvatarRedirectDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF5022B14ED479BB1AA9180C /* AvatarRedirectDelegate.swift */; };
 		6CD20C578587EF7082CD5FAB /* SchemaEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7715B54E7C67866D62D2C8D5 /* SchemaEditor.swift */; };
 		6EA52ED947A4FC849A45884E /* KeychainTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 504BF36DA5225B38423BB33B /* KeychainTests.swift */; };
@@ -85,6 +86,7 @@
 		291B489866E3307D03F63279 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		3028BE1450525B84DE65C339 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		35B74DD4C0B4B7C4F3884D38 /* ResourceViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResourceViews.swift; sourceTree = "<group>"; };
+		3927E41785DE6243E1E1C66F /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = wrapper.icon; path = AppIcon.icon; sourceTree = "<group>"; };
 		3A11C53FEC3D427669CBD1C6 /* DesktopScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopScreen.swift; sourceTree = "<group>"; };
 		3A7C71552284738F50996FEC /* Localization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Localization.swift; sourceTree = "<group>"; };
 		42A7661B5A1EEAA504867C15 /* HomemUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = HomemUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -153,6 +155,7 @@
 			isa = PBXGroup;
 			children = (
 				F10AF841D27DCFFA1401C958 /* AGPL-3.0.txt */,
+				3927E41785DE6243E1E1C66F /* AppIcon.icon */,
 				F57C5E3102CDA0F1D7D34F07 /* Assets.xcassets */,
 				8F365A0DBEC7B8577564B35E /* InfoPlist.xcstrings */,
 				7D7D835F11404DC04AD2723A /* L10n-swift-LICENSE.txt */,
@@ -393,6 +396,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				C4929286A33FEBA723D5B241 /* AGPL-3.0.txt in Resources */,
+				643E9117140729B922DDAD76 /* AppIcon.icon in Resources */,
 				515FB63F31617B99E91C8640 /* Assets.xcassets in Resources */,
 				19C6C62DA11ECEEE5447DDA1 /* InfoPlist.xcstrings in Resources */,
 				29C62024FD9395E1EE0BF496 /* L10n-swift-LICENSE.txt in Resources */,

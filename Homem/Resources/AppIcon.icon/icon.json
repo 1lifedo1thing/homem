@@ -1,0 +1,98 @@
+{
+  "fill": {
+    "linear-gradient": [
+      "extended-srgb:0.09804,0.29412,0.50980,1.00000",
+      "extended-srgb:0.95686,0.64706,0.52549,1.00000"
+    ]
+  },
+  "groups": [
+    {
+      "blur-material": null,
+      "layers": [
+        {
+          "glass": true,
+          "hidden": false,
+          "image-name": "Handset.svg",
+          "name": "White handset",
+          "position": {
+            "scale": 1,
+            "translation-in-points": [
+              0,
+              0
+            ]
+          },
+          "fill-specializations": [
+            {
+              "appearance": "dark",
+              "value": {
+                "solid": "extended-srgb:1.00000,1.00000,1.00000,1.00000"
+              }
+            }
+          ]
+        },
+        {
+          "glass": true,
+          "hidden": false,
+          "image-name": "Memoh Face.svg",
+          "name": "Memoh eyes and smile",
+          "position": {
+            "scale": 1,
+            "translation-in-points": [
+              0,
+              0
+            ]
+          },
+          "fill-specializations": [
+            {
+              "appearance": "dark",
+              "value": {
+                "solid": "extended-srgb:1.00000,1.00000,1.00000,1.00000"
+              }
+            }
+          ]
+        }
+      ],
+      "name": "Memoh Brick Phone",
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.3
+      },
+      "specular": true,
+      "translucency": {
+        "enabled": false,
+        "value": 0
+      }
+    },
+    {
+      "name": "Memoh website sunset",
+      "blur-material": null,
+      "layers": [
+        {
+          "name": "Blue \u00b7 lavender \u00b7 peach",
+          "image-name": "Memoh Sunset.svg",
+          "glass": false,
+          "hidden": false,
+          "position": {
+            "scale": 1,
+            "translation-in-points": [
+              0,
+              0
+            ]
+          }
+        }
+      ],
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0
+      },
+      "specular": false,
+      "translucency": {
+        "enabled": false,
+        "value": 0
+      }
+    }
+  ],
+  "supported-platforms": {
+    "squares": "shared"
+  }
+}
