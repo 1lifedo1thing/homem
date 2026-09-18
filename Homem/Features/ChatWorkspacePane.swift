@@ -282,7 +282,6 @@ struct ChatWorkspacePane: View {
                 }.accessibilityLabel("Switch pane".localized)
                 Spacer(minLength: 4)
                 if tool == .desktop { DesktopModeButton(model: desktop) }
-                if tool == .terminal { TerminalKeyboardButton() }
                 if tool == .desktop || tool == .terminal {
                     Button {
                         if tool == .desktop { Task { desktop.disconnect(); await desktop.connect() } }
