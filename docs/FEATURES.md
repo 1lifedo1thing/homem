@@ -23,7 +23,7 @@ Audited against `apps/desktop`, the shared `apps/web` routes/components, and `sp
 | Channels | Discover adapters and edit native fields from their config schema, enable/disable | Adapter-specific QR login, send actions, webhook endpoints and routing use advanced forms |
 | MCP | CRUD, probe, OAuth authorization through system browser, status | Provider must accept the `homem://oauth/mcp/callback` redirect; discovery/client setup/import/export use advanced forms |
 | Providers and models | CRUD, connection tests, OAuth/device-code sign-in and status | Import models and provider-specific settings use advanced forms |
-| Email/voice/video/search/memory services | Provider/model configuration and bindings | Browser OAuth callback handling depends on provider/server configuration |
+| Voice/video/search/memory services | Provider/model configuration and bindings | Browser OAuth callback handling depends on provider/server configuration |
 | People and profile | Admin-only people entry, user access, profile/password | Backend remains the permission authority |
 | Backups | Export/share ZIP with optional passphrase; import ZIP as a new agent | Selective overwrite/merge import is not exposed as a dedicated flow |
 | Appearance and navigation | iPhone navigation, iPad conversation split view, adaptive agent grid, system/light/dark appearance, persisted System/Memoh/Ocean/Forest/Rose/Amber accent choices, Dynamic Type and SF Symbols | Web themes are browser-local; choose the matching scheme in Homem Settings. Desktop window docking, tray and OS hotkeys do not apply to iOS |
@@ -36,3 +36,5 @@ Audited against `apps/desktop`, the shared `apps/web` routes/components, and `sp
 - Demo mode is clearly labeled, has in-memory sample data, and explicitly rejects unavailable remote actions. It never silently substitutes sample data after a server error.
 - Social-provider browser completion, OAuth registrations, QR logins, actual model responses, external channel delivery, container lifecycle, terminal sessions, third-party WebRTC connectivity and backup round trips still require testing against the intended server. Official email sign-in, avatars, saved-session restoration, and remote desktop input were verified on the user-authenticated Catalyst app.
 - Full desktop parity is therefore **not certified**. The API coverage is broad, but the specialized desktop renderers and workflows listed above remain limits. Review these before treating this as an App Store release.
+
+Built-in bot email providers, bindings, outbox, and backup selection are removed in line with [Memoh PR #1321](https://github.com/felinics/Memoh/pull/1321). Account email addresses and email sign-in remain supported.

@@ -117,7 +117,6 @@ struct AgentDetailView: View {
                     ResourceLink(title: "Connected tools", icon: "point.3.connected.trianglepath.dotted", spec: .mcp(bot.id))
                     ResourceLink(title: "Skills", icon: "sparkles", spec: .skills(bot.id))
                     ResourceLink(title: "Apps", icon: "square.stack.3d.up", spec: .apps(bot.id))
-                    ResourceLink(title: "Email accounts", icon: "envelope", spec: .bot(bot.id, "email-bindings", title: "Email bindings"))
                     ResourceLink(title: "Workspace access", icon: "person.2", spec: .bot(bot.id, "user-access", title: "Workspace access", detail: "/bots/{bot_id}/user-access/{grant_id}"))
                 }
             }

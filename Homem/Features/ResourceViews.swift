@@ -123,7 +123,7 @@ struct ResourceDetailView: View {
                     OperationButton(title: "Test connection", path: spec.path + "/" + record.id.pathComponent + suffix, template: spec.resolvedDetailTemplate + suffix, method: "POST")
                 }
             }
-            if spec.template.hasSuffix("/mcp") || spec.template == "/providers" || spec.template == "/email-providers" {
+            if spec.template.hasSuffix("/mcp") || spec.template == "/providers" {
                 Section { NavigationLink("Connect account".localized, systemImage: "lock.shield") { AuthorizationView(path: spec.path + "/" + record.id.pathComponent, isMCP: spec.template.hasSuffix("/mcp")) } }
             }
             Section { NavigationLink("More actions".localized, systemImage: "slider.horizontal.3") { OperationBrowser(prefix: spec.resolvedDetailTemplate, substitutions: substitutions) } }

@@ -26,7 +26,7 @@ import Foundation
             collections[base + "/mcp"] = [["id": "filesystem", "name": "Workspace tools", "type": "stdio", "enabled": true, "config": ["command": "workspace-tools"]]]
             collections[base + "/agents"] = [["id": "native", "name": "Memoh", "type": "native", "enabled": true]]
             collections[base + "/container/skills"] = [["name": "research", "description": "Turn open questions into useful findings."]]
-            for suffix in ["apps", "dependencies", "connectors", "workdirs", "container/snapshots", "email-bindings", "email-outbox", "user-access", "schedule/logs", "compaction/logs", "hooks/events"] { collections[base + "/" + suffix] = [] }
+            for suffix in ["apps", "dependencies", "connectors", "workdirs", "container/snapshots", "user-access", "schedule/logs", "compaction/logs", "hooks/events"] { collections[base + "/" + suffix] = [] }
             documents[base + "/workspace-targets"] = ["targets": [["target_id": "native", "kind": "native", "primary": true], ["target_id": "demo-mac", "kind": "remote", "name": "Studio Mac", "online": true, "status": "online"], ["target_id": "offline-mac", "kind": "remote", "name": "Travel Mac", "online": false, "status": "offline"]]]
             documents[base + "/settings"] = ["chat_model_id": "demo-model", "language": "en", "max_context_tokens": 32000]
             documents[base + "/container"] = ["status": "running", "runtime": "docker", "image": "memoh/workspace", "id": .string("workspace-\(bot)")]
@@ -42,7 +42,7 @@ import Foundation
             ["id": "demo-claude", "name": "Claude", "type": "chat", "model_id": "example-claude", "provider_id": "demo-anthropic", "enable": true]
         ]
         collections["/channels"] = [["id": "telegram", "type": "telegram", "name": "Telegram"], ["id": "discord", "type": "discord", "name": "Discord"], ["id": "feishu", "type": "feishu", "name": "Lark"]]
-        for path in ["/memory-providers", "/search-providers", "/fetch-providers", "/email-providers", "/speech-providers", "/speech-models", "/transcription-providers", "/video-providers", "/users/me/runtimes", "/supermarket/apps", "/users"] { collections[path] = [] }
+        for path in ["/memory-providers", "/search-providers", "/fetch-providers", "/speech-providers", "/speech-models", "/transcription-providers", "/video-providers", "/users/me/runtimes", "/supermarket/apps", "/users"] { collections[path] = [] }
         documents["/users/me"] = ["id": "demo-user", "username": "explorer", "display_name": "Explorer", "role": "admin", "timezone": "Asia/Tokyo"]
     }
     func call(_ path: String, method: String, query: [String: String], body: JSONValue?) throws -> JSONValue {

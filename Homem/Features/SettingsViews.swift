@@ -27,7 +27,6 @@ struct SettingsView: View {
                 ResourceLink(title: "Fetch providers", icon: "globe", spec: .global("/fetch-providers", title: "Fetch providers"))
             }
             Section("Connections".localized) {
-                ResourceLink(title: "Email providers", icon: "envelope", spec: .global("/email-providers", title: "Email providers"))
                 ResourceLink(title: "Speech models", icon: "waveform", spec: .global("/speech-models", title: "Speech models"))
                 ResourceLink(title: "Transcription models", icon: "text.bubble", spec: .global("/transcription-models", title: "Transcription models"))
                 ResourceLink(title: "Video models", icon: "video", spec: .global("/video-models", title: "Video models"))

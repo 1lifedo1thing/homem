@@ -3267,29 +3267,6 @@
         }
       }
     },
-    "Email accounts": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "邮箱账户"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Cuentas de correo"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "メールアカウント"
-          }
-        }
-      }
-    },
     "Email address": {
       "extractionState": "manual",
       "localizations": {
@@ -3313,29 +3290,6 @@
         }
       }
     },
-    "Email bindings": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "邮箱关联"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Cuentas de correo vinculadas"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "メールの連携"
-          }
-        }
-      }
-    },
     "Email code": {
       "extractionState": "manual",
       "localizations": {
@@ -3355,29 +3309,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "メールの確認コード"
-          }
-        }
-      }
-    },
-    "Email providers": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "邮件服务"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Proveedores de correo"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "メールプロバイダ"
           }
         }
       }
