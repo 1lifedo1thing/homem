@@ -14,17 +14,16 @@ App: Homem · `ad.neko.homem` · Apple ID `6812852139` · Kitta Ltd
 - Both public pages are deployed from `kitta-co/privacy-policy` on GitHub Pages (commit `705bb4b`), linked from the docs home page, and use the existing public support contact `support@ieb.app`. Publication copies are in `SUPPORT.md` and `PRIVACY.md`.
 - Primary category Productivity; secondary category Utilities.
 - Copyright: 2026 Kitta Ltd.
-- The user has supplied the review server URL in review notes. Review username and password fields are still blank as of the screenshot capture pass.
-- Five privacy-checked screenshots from the live official service are uploaded to the iPhone 6.5-inch gallery. Source captures, upload exports, and remaining capture work are documented in `screenshots/README.md`.
-- Build **18 / 1.0.0** is attached to the draft and was verified after reloading App Store Connect. Replace it with the build containing the workspace/token-usage fixes and share extension when that build is processed.
+- The user has supplied the review server URL in review notes. The supplied credentials work in the app and browser, but the App Store Connect review username/password fields remain blank: browser input attempts did not persist. Save them in App Review Information before submission.
+- Ten current screenshots each are uploaded to the iPhone 6.9-inch and 13-inch iPad galleries and verified after reloading. The earlier five iPhone 6.5-inch screenshots remain. See `screenshots/README.md` for sources and exports.
+- Build **18 / 1.0.0** is attached to the draft and was verified after reloading App Store Connect. Replace it with a current processed build containing the dynamic workspace/navigation, sharing and terminal fixes.
 
 ## Still required before submission
 
-- Working review-server credentials; keep the server available throughout review and verify the final sign-in steps.
-- Review contact first/last name, email, and phone number. These were blank and no contact details were invented.
+- Save the supplied working review credentials in App Store Connect; keep the review server available throughout review.
+- Review contact email and phone number remain blank. Existing first/last name fields contain Kitta / Labs; confirm the reviewer contact details.
 - Confirm server-side retention and provider practices before completing/publishing App Privacy answers. The native client has no advertising/tracking/analytics SDK; this does **not** mean that conversations, uploads, or account data sent to the selected server are never collected.
 - Finish/verify age rating and content-rights declarations. The age-rating questionnaire was being edited interactively and was left alone.
-- Complete review-server chat list/conversation screenshots and iPad screenshots. The official-server captures exclude private chats, credentials, and account details.
 - Confirm pricing, territories, and any applicable business/trader information.
 
 ## Share extension release check
@@ -48,3 +47,5 @@ Workspace content is bounded below the navigation bar. Embedded file browsing an
 Validation: simulator build, two focused geometry tests (all four arrangements, 1–8 panes, narrow/keyboard/iPad sizes), localization coverage, live iPad pane add/remove and two independent real conversations, and iPhone portrait split with the software keyboard. The review server's desktop connection still disconnects; this layout change does not claim to resolve that server connection problem.
 
 The iPhone 17 Pro Max and iPad Pro 13-inch simulators have both authorized official and review accounts. Five MyGO agents with five-star card icons and real conversations are configured on the review server. Temporary credential-transfer test code was removed. App Privacy still needs confirmation of whether Kitta operates or receives data from a Memoh service. App Store review has not been submitted.
+
+Terminal follow-up: periodic WebSocket pings keep idle shells alive through proxies, and an explicit keyboard-dismiss button is available in standalone and split panes. Standalone terminals hide the app tab bar. Simulator build passed; live iPad idle/reuse and iPhone keyboard dismissal were verified.

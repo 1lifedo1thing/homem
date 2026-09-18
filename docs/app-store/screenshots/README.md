@@ -1,25 +1,26 @@
 # App Store screenshots
 
-Captured 2026-09-18 from the connected iOS app at commit `bd1e73d`, on an iPhone 17 Pro simulator running iOS 26.5. These are real app screens using the official Memoh service, not demo fixtures or generated mockups.
+Captured 2026-09-18 from the live iOS app, including the dynamic workspace/navigation changes in `47ff53d` and the terminal heartbeat/keyboard follow-up. These are native Simulator Save Screen captures, not generated mockups. No UI content was replaced or composited.
 
-## Files and provenance
+## Current sets
 
-- `en-US/*.png`: original Simulator Save Screen captures, 1206 × 2622.
-- `iphone-6.5/en-US/*.jpg`: full-screen exports resampled to Apple's accepted 1284 × 2778 size, maximum JPEG quality, without alpha. No UI content was replaced or composited.
-- `03-agent-tools`: connected Max agent and workspace tools.
-- `04-desktop`: connected remote desktop in view-only mode. A separate private Chromium window shows only Google; the existing browser session was left intact.
-- `05-terminal`: live workspace shell running official neofetch. The shell prompt omits username/hostname, and the configuration only prints OS, kernel, uptime, shell, memory, and colors.
-- `06-library`: Library navigation, without private memories or schedules.
-- `07-supermarket`: public app catalog with loaded service icons.
+- `iphone-6.9/en-US/*.png`: ten iPhone 17 Pro Max captures at 1320 × 2868.
+- `ipad-13/en-US/*.png`: ten iPad Pro 13-inch M5 landscape captures at 2752 × 2064.
+- Each platform's `upload/*.jpg`: maximum-quality JPEG exports at the original dimensions, without alpha.
+- Earlier `en-US` and `iphone-6.5` files preserve the previous five-screen set.
 
-All five exports were visually checked for credentials, account email, private conversations, hostnames, IP addresses, and private file contents before upload. Only neutral agent/workspace identity and public catalog/system information are visible.
+The current sets cover the chat list, real conversations, a real file-writing task with formatted code, MyGO agents, workspace tools, connected desktop, live terminal, Library, Supermarket, and grouped models. The iPad set also shows two independent real conversations side by side.
 
-## App Store Connect status
+Chats and MyGO agents use the authorized review server. Other screens use the official Memoh service. Private official-server chats, credentials, account email, IP addresses and private file contents are excluded. Public agent icons and provider display names remain visible.
 
-Five iPhone 6.5-inch screenshots are uploaded to the English (U.S.) version 1.0 draft; persistence was verified after reloading. App Store Connect applies this source set to the other iPhone sizes and localizations unless overridden in Media Manager. The version remains **Prepare for Submission**. No review submission was made.
+The remote desktop is connected in view-only mode, showing only Google in a separate Chromium window. The terminal runs official neofetch with a neutral prompt and only OS, kernel, uptime, shell, memory and colors. No username or hostname is shown. Its connection remained usable after several minutes idle following the heartbeat fix.
 
-The set is incomplete: slots `01` and `02` are reserved for the review-server chat list and real agent conversation. The review server URL is present in App Store Connect, but its review username and password fields were blank at capture time. Do not capture the official server's private conversations as a substitute. iPad screenshots also remain to be captured.
+## App Store Connect
 
-For the terminal setup, neofetch was unavailable in the workspace package repository, so its script was downloaded from its [official repository](https://github.com/dylanaraps/neofetch) to `/tmp/homem-neofetch`. The privacy-safe configuration is `/tmp/nf.conf`. These are temporary workspace files, not changes to agent instructions or saved account settings.
+Ten screenshots are uploaded to the English (U.S.) iPhone 6.9-inch gallery and ten to the 13-inch iPad gallery. Both counts were verified after reloading the version draft and reopening Media Manager. The first screens show real review-server chats; the iPad gallery also leads with the multiple-chat layout and agent grid. The earlier five iPhone 6.5-inch assets remain as a separate size override. Other sizes/localizations use Apple's fallback unless overridden.
 
-Apple's accepted upload dimensions: [Screenshot specifications](https://developer.apple.com/help/app-store-connect/reference/app-information/screenshot-specifications).
+The version remains Prepare for Submission. No review submission was made. App Privacy, review contact details, saving the supplied review credentials, and selecting a current processed build remain release checks; see `../README.md`.
+
+## Sources
+
+MyGO icon provenance and review fixtures are documented in `../REVIEW-FIXTURES.md`. Neofetch came from its [official repository](https://github.com/dylanaraps/neofetch); the temporary workspace files are `/tmp/homem-neofetch` and `/tmp/nf.conf`.

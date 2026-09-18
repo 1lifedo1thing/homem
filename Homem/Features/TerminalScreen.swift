@@ -12,7 +12,8 @@ struct TerminalScreen: View {
             if embedded { terminal }
             else {
                 terminal.navigationTitle("Terminal".localized).navigationBarTitleDisplayMode(.inline)
-                    .toolbar { Button { connectionID = UUID() } label: { Image(systemName: "arrow.clockwise") }.accessibilityLabel("Reconnect terminal".localized) }
+                    .toolbar(.hidden, for: .tabBar)
+                    .toolbar { TerminalKeyboardButton(); Button { connectionID = UUID() } label: { Image(systemName: "arrow.clockwise") }.accessibilityLabel("Reconnect terminal".localized) }
             }
         }.onChange(of: scenePhase) { _, phase in if phase == .active { connectionID = UUID() } }
     }
@@ -21,6 +22,15 @@ struct TerminalScreen: View {
             if let api = store.api, !api.isDemo { NativeTerminal(api: api, botID: botID).id(connectionID) }
             else { EmptyState(title: "Terminal unavailable", symbol: "terminal", detail: "Connect your Memoh server to open an interactive workspace shell.") }
         }
+    }
+}
+
+struct TerminalKeyboardButton: View {
+    var body: some View {
+        Button {
+            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        } label: { Image(systemName: "keyboard.chevron.compact.down").frame(minWidth: 40, minHeight: 44) }
+            .accessibilityLabel("Hide keyboard".localized)
     }
 }
 
@@ -48,6 +58,7 @@ struct NativeTerminal: UIViewRepresentable {
         weak var terminal: TerminalView?
         var socket: URLSessionWebSocketTask?
         var receiver: Task<Void, Never>?
+        var heartbeat: Task<Void, Never>?
         init(api: APIClient, botID: String) { self.api = api; self.botID = botID }
         func connect() {
             receiver = Task { [weak self] in
@@ -56,6 +67,26 @@ struct NativeTerminal: UIViewRepresentable {
                     let socket = try await self.api.socket("/bots/\(self.botID.pathComponent)/container/terminal/ws", query: ["cols": "80", "rows": "24"])
                     guard !Task.isCancelled else { socket.cancel(with: .goingAway, reason: nil); return }
                     self.socket = socket
+                    // Keep idle shells alive through reverse proxies, just like chat
+                    // and the desktop transport. A failed ping wakes the receive loop.
+                    self.heartbeat = Task {
+                        while !Task.isCancelled {
+                            do {
+                                try await Task.sleep(for: .seconds(20))
+                                let deadline = Task { try await Task.sleep(for: .seconds(10)); socket.cancel(with: .goingAway, reason: nil) }
+                                defer { deadline.cancel() }
+                                try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                                    socket.sendPing { error in
+                                        if let error { continuation.resume(throwing: error) } else { continuation.resume() }
+                                    }
+                                }
+                            } catch {
+                                if !Task.isCancelled { socket.cancel(with: .goingAway, reason: nil) }
+                                return
+                            }
+                        }
+                    }
+                    defer { self.heartbeat?.cancel(); self.heartbeat = nil }
                     if let terminal = self.terminal {
                         let size = terminal.getTerminal()
                         try await socket.send(.string("{\"type\":\"resize\",\"cols\":\(size.cols),\"rows\":\(size.rows)}"))
@@ -71,7 +102,7 @@ struct NativeTerminal: UIViewRepresentable {
                 } catch { if !Task.isCancelled { self.terminal?.feed(text: "\r\n\u{1B}[31mConnection closed: \(error.localizedDescription)\u{1B}[0m\r\nUse Reconnect to open a new shell.\r\n") } }
             }
         }
-        func close() { receiver?.cancel(); socket?.cancel(with: .goingAway, reason: nil); socket = nil }
+        func close() { heartbeat?.cancel(); heartbeat = nil; receiver?.cancel(); socket?.cancel(with: .goingAway, reason: nil); socket = nil }
         func send(source: TerminalView, data: ArraySlice<UInt8>) { Task { do { try await socket?.send(.data(Data(data))) } catch { source.feed(text: "\r\nSend failed: \(error.localizedDescription)\r\n") } } }
         func sizeChanged(source: TerminalView, newCols: Int, newRows: Int) { Task { try? await socket?.send(.string("{\"type\":\"resize\",\"cols\":\(newCols),\"rows\":\(newRows)}")) } }
         func setTerminalTitle(source: TerminalView, title: String) {}
