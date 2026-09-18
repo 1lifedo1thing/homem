@@ -30,6 +30,8 @@ App: Homem · `ad.neko.homem` · Apple ID `6812852139` · Kitta Ltd
 
 The application embeds `ad.neko.homem.share`, using the containing app's existing Keychain access group `$(AppIdentifierPrefix)ad.neko.homem`. Automatic signing must provision both targets with the same team and matching build/version numbers. No App Group container or externally shared credentials are required.
 
+Xcode Cloud build 26 compiled and archived successfully, but distribution export failed because `ad.neko.homem.share` was not registered. On 2026-09-18, the explicit App ID **Homem Share Extension** was registered under **Kitta Ltd / 7P8CLHDH5G**. Xcode Cloud can now create its managed provisioning profiles. Register future extension bundle IDs in the same Apple Developer team before the first Cloud archive; the Cloud export service cannot register them automatically. No application code or entitlement changes were needed for this signing fix.
+
 After updating, open Homem once so it can publish the saved-account directory to Keychain. Other apps' system share sheets can then choose an account, workspace, and bot. Up to 20 files (50 MB each) are copied locally, streamed to a new `Shared-…` folder under `/data`, and removed from the extension's temporary storage on completion/dismissal. The sheet stays open during uploads; a partial failure can retry only remaining files.
 
 Validation: iPhone simulator build and focused token/date/auth/file regression tests; live official-server token usage; Photos → Share → Homem → Max successfully uploaded the app-icon fixture into `/data/Shared-20260918-0219-062FA7D6`.
