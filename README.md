@@ -1,104 +1,45 @@
 # Homem
 
-A native Swift / SwiftUI iPhone and iPad client for [Memoh](https://github.com/felinics/Memoh).
+Your Memoh cloud computer, on iPhone and iPad. Built with Swift and SwiftUI.
 
-**Bundle identifier:** `ad.neko.homem`
-
-**Deployment target:** iOS 17.0+
-
-**API baseline:** Memoh commit `51bb2073d8d99c961ce9f23555e8fb3bdd2aadc4`
-
-Homem connects to an existing Memoh backend. It does not run an agent or a container on the phone. The interface uses SwiftUI and UIKit, SwiftTerm for the interactive terminal, and native RFB for official remote desktops (WebRTC for third-party servers). The workspace remains native; an optional embedded browser is used for official account sign-in and account/workspace setup. SVG avatars use an isolated WebKit renderer with scripts and network access disabled.
-
-## Run
-
-1. Open `Homem.xcodeproj` in Xcode. Swift Package Manager resolves the pinned SwiftTerm and WebRTC packages.
-2. Select the **Homem** scheme and an iPhone or iPad simulator, then Run.
-3. Signing is configured for Kitta Ltd (`7P8CLHDH5G`). For another organization, choose its Apple signing team under Signing & Capabilities and update `project.yml`.
-4. Choose **Sign in to Memoh** for the official service, **Use another server** for a custom deployment, or **Explore the demo**. Demo changes are local to the current app session and never contact a server.
-
-### Official Memoh
-
-The primary sign-in option connects to [app.memoh.net](https://app.memoh.net). Enter your email, receive a six-digit sign-in code, and verify it in native screens. Resend cooldowns and authenticator-based two-factor challenges are supported. Then select a workspace to open the native app.
-
-**Continue in browser** opens the official website in an isolated, temporary browser, including its GitHub/Google options and account/workspace setup. SVG avatars use an isolated WebKit renderer with scripts and network access disabled. After signing in, tap **Continue in Homem** and select a workspace. Identity providers may reject embedded browsers; native email sign-in remains available without changing browser identity or bypassing provider restrictions.
-
-Only HTTPS cookies scoped to `app.memoh.net` or its parent domain are transferred to the native session. Identity-provider cookies are discarded. The selected workspace and session are saved in Keychain only after its native API succeeds. Official requests use `/api/v1` for platform authentication/workspace selection and `/api/memoh` for workspace operations, with workspace headers and short-lived WebSocket tickets. Custom servers use separate bearer credentials and receive no official cookies.
-
-### Custom servers
-
-Expand **Use another server** and enter the complete **API base URL**, including any reverse-proxy prefix:
-
-- Web/reverse proxy: `https://memoh.example.com/api`
-- Direct backend: `http://192.168.1.20:8080`
-- Simulator with a backend on the Mac: `http://127.0.0.1:8080`
-
-Use your Memoh username/password or an existing access token. JWTs and conversation drafts are kept in the device Keychain. Passwords are not persisted. Signing out removes the saved session/token and drafts for that server. Plain HTTP is supported for self-hosted networks; the connection screen explicitly identifies it.
-
-### Chat and appearance
-
-Start a new chat by writing a message, optionally attaching files, and choosing an agent and **Run on** location. Sessions are created when you send; titles come from the first message. Available computers are loaded from that agent’s workspace targets. If a server does not expose targets, **Agent default** remains available.
-
-In **Settings**, choose **Appearance** (System, Light, Dark) and **Color scheme** (System, Memoh, Ocean, Forest, Rose, Amber). Homem remembers these on the device. Memoh’s web theme is stored in that browser, so choose the corresponding scheme here to match it.
+Connect to [official Memoh](https://app.memoh.net) or your own [Memoh server](https://github.com/felinics/Memoh).
 
 ## Features
 
-- **Conversations:** session creation, history pagination, rename/delete, native Markdown and code blocks, live runtime snapshots/deltas, reconnect and replay recovery, model/reasoning choices, attachments, voice recordings, local read-aloud, retry/edit/fork, abort, approval decisions, agent questions, follow-up and steer queues.
-- **Agents:** create/edit/pause/delete, model and behavior settings, native and external agent runtime configuration, permissions, health checks, usage, compaction logs, and backups.
-- **Workspace:** directories and files, text/Markdown editing with revision conflict protection, upload/download/share, rename/delete, archive controls, native interactive terminal, native desktop with pointer/drag/scroll/keyboard input, workspace lifecycle, snapshots, workdirs, dependencies.
-- **Memory and scheduling:** memory CRUD and semantic search, native memory graph, compaction/status/usage, schedule configuration and execution history.
-- **Integrations:** channels with adapter-provided native credential fields, MCP, OAuth/device authorization, skills, email bindings, installed apps, Supermarket discovery and installation with streamed progress.
-- **Server management:** providers/models, memory/search/fetch/email providers, speech/transcription/video models, remote runtimes, people, profile/password, system/light/dark appearance.
-- **Advanced controls:** native request forms generated from the bundled OpenAPI contract expose all 352 documented operations. Long-lived chat, terminal, desktop, file, backup, and activity transports use their dedicated screens; the advanced browser does not substitute for those transports. Less common workflows use these forms and structured results rather than bespoke screens.
+- Chat with your agents, share attachments, and view formatted code and tool activity.
+- Browse files, use an interactive terminal, and control your remote desktop—or keep it view-only.
+- Arrange chat, terminal, files, and desktop panes together in a flexible workspace.
+- Switch between accounts, servers, and workspaces.
+- Manage agents, models, memories, schedules, apps, and integrations.
 
-See [feature coverage and limits](docs/FEATURES.md) for the distinction between dedicated interfaces, advanced controls, and unverified server-dependent behavior.
+Supports iOS 17+, system appearance, and English, Simplified Chinese, Spanish, and Japanese.
 
-## Design
+## Get started
 
-UI changes follow the [Homem design language](docs/DESIGN.md): compact context, clear hierarchy, real bot/workspace images, and restrained use of color.
+Choose **Sign in to Memoh** for email or browser sign-in, **Use another server** for a custom deployment, or **Explore the demo** to try the app locally.
 
-## Build and test
+For a custom server, enter its API URL (for example, `https://memoh.example.com/api`) and sign in with your credentials or access token.
 
-The checked-in Xcode project is generated from `project.yml`. Regenerate after changing project configuration or adding source files:
+## Development
 
-```sh
-xcodegen generate
-xcodebuild -project Homem.xcodeproj -scheme Homem \
-  -destination 'generic/platform=iOS Simulator' \
-  -derivedDataPath build -skipPackagePluginValidation build
-```
+1. Open `Homem.xcodeproj` in Xcode and let Swift packages resolve.
+2. Select the **Homem** scheme and an iPhone or iPad simulator, then run.
+3. For a physical device, select your signing team. The bundle ID is `ad.neko.homem`.
 
-SwiftTerm 1.20 includes a build tool plugin that generates its version metadata. In Xcode, allow that package plugin when prompted. The command above permits its execution for automated builds.
+Project configuration lives in `project.yml`; regenerate changes with `xcodegen generate`. Allow the SwiftTerm package plugin when Xcode prompts.
 
-Run tests, including a local HTTP/WebSocket/SSE protocol fixture:
+Run the test suite with its local server fixture:
 
 ```sh
-HOMEM_TEST_DESTINATION='platform=iOS Simulator,name=iPhone 17 Pro,OS=26.5' bash scripts/test.sh
+bash scripts/test.sh
 ```
 
-Or start `python3 scripts/fixture-server.py` separately and run tests from Xcode. Wire integration tests explicitly skip when this fixture is unavailable. The fixture binds only to `127.0.0.1:18765`, uses disposable test credentials, and is **not** a substitute for a real Memoh deployment. Unit tests use URLProtocol to test error and token-refresh behavior. UI tests exercise the running native app and attach screenshots to the `.xcresult`.
+Set `HOMEM_TEST_DESTINATION` to use a different simulator.
 
-With the fixture running, `bash scripts/wire-smoke.sh` also checks the app's actual HTTP, SSE, and WebSocket code directly on macOS without launching a simulator.
+## More
 
-Tested builds and remaining verification are recorded in [VALIDATION.md](docs/VALIDATION.md).
+[Feature coverage](docs/FEATURES.md) · [Design](docs/DESIGN.md) · [Localization](docs/LOCALIZATION.md) · [Validation](docs/VALIDATION.md) · [Xcode Cloud](docs/XCODE_CLOUD.md)
 
-Repository and Xcode Cloud configuration are documented in [XCODE_CLOUD.md](docs/XCODE_CLOUD.md).
+[Support](https://docs.kitta.co/homem/support/) · [Privacy](https://docs.kitta.co/homem/)
 
-## Source layout
-
-| Directory | Responsibility |
-|---|---|
-| `Homem/App` | App lifecycle, connection flow, navigation, appearance |
-| `Homem/Core` | HTTP/Keychain, runtime reducer, demo service, JSON/schema contract, voice |
-| `Homem/Features` | Native chat, agents, integrations, workspace, terminal, desktop, management |
-| `Homem/Resources` | App icon, privacy manifest, pinned upstream API contract |
-| `HomemTests` | Reducer, schema, networking, and live local transport tests |
-| `HomemUITests` | Native simulator flows and screenshots |
-
-## License and attribution
-
-Homem is an independent client, not an official Memoh distribution. This project is distributed under AGPL-3.0, with the Memoh API schema attributed to MemohAI. See [LICENSE](LICENSE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
-
-## Languages
-
-English, Simplified Chinese, Spanish, and Japanese are supported through [L10n-swift](https://github.com/Decybel07/L10n-swift) and bundled Xcode string catalogs. The app follows the iOS app language preference. See [localization guidance](docs/LOCALIZATION.md).
+Homem is an independent Memoh client, licensed under [AGPL-3.0](LICENSE). See [third-party notices](THIRD_PARTY_NOTICES.md) for attribution.
