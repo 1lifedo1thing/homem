@@ -1,5 +1,6 @@
 import Foundation
 import CoreGraphics
+import zlib
 
 /// RFB 3.8 (RFC 6143), carried by the official runtime gateway's authenticated socket.
 /// Only None authentication is accepted here: the gateway authenticates the connection.
@@ -9,11 +10,20 @@ struct RFBClient {
     private var phase = Phase.version
     private var buffer = [UInt8]()
     private var rectangles: Int?
+    private var hextile: HextileRectangle?
+    private var inflater: RFBInflater?
+    private struct HextileRectangle {
+        let x: Int, y: Int, width: Int, height: Int
+        var tileX = 0, tileY = 0
+        var background: [UInt8] = [0, 0, 0, 0]
+        var foreground: [UInt8] = [0, 0, 0, 0]
+    }
     private(set) var width = 0
     private(set) var height = 0
     private(set) var pixels = [UInt8]() // little-endian BGRX, as requested in SetPixelFormat
     private(set) var revision = 0
     private let limit = 64 * 1_024 * 1_024
+    var diagnosticState: String { "\(phase), revision=\(revision), buffered=\(buffer.count), size=\(width)x\(height), tile=\(hextile?.tileY ?? -1)" }
 
     mutating func receive(_ data: Data) throws -> [Data] {
         guard buffer.count + data.count <= limit else { throw Failure.invalid }
@@ -23,6 +33,22 @@ struct RFBClient {
         while consumed < buffer.count {
             var reader = Reader(bytes: buffer, offset: consumed)
             do {
+                // Commit complete tiles as they arrive. Replaying an entire incomplete
+                // framebuffer rectangle for every socket fragment can starve the socket.
+                if var tile = hextile {
+                    let w = min(16, tile.width - tile.tileX), h = min(16, tile.height - tile.tileY)
+                    let patch = try Self.decodeTile(&reader, width: w, height: h,
+                                                    background: &tile.background, foreground: &tile.foreground)
+                    apply(patch, x: tile.x + tile.tileX, y: tile.y + tile.tileY, width: w, height: h)
+                    tile.tileX += w
+                    if tile.tileX == tile.width { tile.tileX = 0; tile.tileY += h }
+                    if tile.tileY == tile.height {
+                        hextile = nil
+                        finishRectangle(output: &output)
+                    } else { hextile = tile }
+                    consumed = reader.offset
+                    continue
+                }
                 switch phase {
                 case .version:
                     let version = try reader.take(12)
@@ -43,8 +69,8 @@ struct RFBClient {
                     _ = try reader.take(nameLength)
                     try resize(w, h)
                     output.append(Data([0, 0, 0, 0, 32, 24, 0, 1, 0, 255, 0, 255, 0, 255, 16, 8, 0, 0, 0, 0]))
-                    var encodings = Data([2, 0, 0, 4])
-                    for encoding: Int32 in [5, 1, 0, -223] { encodings.appendBE(UInt32(bitPattern: encoding)) }
+                    var encodings = Data([2, 0, 0, 5])
+                    for encoding: Int32 in [6, 5, 1, 0, -223] { encodings.appendBE(UInt32(bitPattern: encoding)) }
                     output.append(encodings); output.append(updateRequest(incremental: false)); phase = .messages
                 case .messages:
                     if let remaining = rectangles, remaining > 0 {
@@ -54,12 +80,22 @@ struct RFBClient {
                         if encoding == -223 {
                             try resize(w, h)
                         } else {
-                            guard x + w <= width, y + h <= height else { throw Failure.invalid }
-                            // Decode a whole rectangle before applying it. Partial socket messages never
-                            // alter the framebuffer or advance the protocol state.
+                            guard w > 0, h > 0, x + w <= width, y + h <= height else { throw Failure.invalid }
+                            if encoding == 5 {
+                                hextile = HextileRectangle(x: x, y: y, width: w, height: h)
+                                consumed = reader.offset
+                                continue
+                            }
+                            // Raw and copy rectangles commit only after their complete payload arrives.
                             let patch: [UInt8]
                             switch encoding {
                             case 0: patch = try reader.take(w * h * 4)
+                            case 6:
+                                let length = Int(try reader.u32())
+                                guard length <= limit else { throw Failure.invalid }
+                                let compressed = try reader.take(length)
+                                if inflater == nil { inflater = try RFBInflater() }
+                                patch = try inflater!.decode(compressed, expected: w * h * 4)
                             case 1:
                                 let sx = Int(try reader.u16()), sy = Int(try reader.u16())
                                 guard sx + w <= width, sy + h <= height else { throw Failure.invalid }
@@ -70,15 +106,11 @@ struct RFBClient {
                                     copy.append(contentsOf: pixels[start..<start + w * 4])
                                 }
                                 patch = copy
-                            case 5: patch = try Self.hextile(&reader, width: w, height: h)
                             default: throw Failure.unsupported
                             }
-                            for row in 0..<h {
-                                pixels.replaceSubrange(((y + row) * width + x) * 4..<((y + row) * width + x + w) * 4, with: patch[row * w * 4..<(row + 1) * w * 4])
-                            }
+                            apply(patch, x: x, y: y, width: w, height: h)
                         }
-                        rectangles = remaining - 1
-                        if remaining == 1 { revision += 1; rectangles = nil; output.append(updateRequest(incremental: true)) }
+                        finishRectangle(output: &output)
                     } else {
                         switch try reader.byte() {
                         case 0:
@@ -124,35 +156,44 @@ struct RFBClient {
     static func key(_ code: UInt32, down: Bool) -> Data {
         var data = Data([4, down ? 1 : 0, 0, 0]); data.appendBE(code); return data
     }
-    private static func hextile(_ reader: inout Reader, width: Int, height: Int) throws -> [UInt8] {
-        var result = [UInt8](repeating: 0, count: width * height * 4)
-        var background = [UInt8](repeating: 0, count: 4), foreground = background
-        func fill(_ x: Int, _ y: Int, _ w: Int, _ h: Int, _ color: [UInt8]) {
-            for row in y..<y+h { for col in x..<x+w { let i = (row * width + col) * 4; result.replaceSubrange(i..<i+4, with: color) } }
+    private mutating func finishRectangle(output: inout [Data]) {
+        guard let remaining = rectangles else { return }
+        rectangles = remaining - 1
+        if remaining == 1 {
+            revision += 1; rectangles = nil
+            output.append(updateRequest(incremental: true))
         }
-        for ty in stride(from: 0, to: height, by: 16) {
-            for tx in stride(from: 0, to: width, by: 16) {
-                let w = min(16, width - tx), h = min(16, height - ty)
-                let flags = try reader.byte()
-                guard flags & 0xe0 == 0 else { throw Failure.invalid }
-                if flags & 1 != 0 {
-                    let raw = try reader.take(w * h * 4)
-                    for row in 0..<h { let i = ((ty + row) * width + tx) * 4; result.replaceSubrange(i..<i+w*4, with: raw[row*w*4..<(row+1)*w*4]) }
-                    continue
-                }
-                if flags & 2 != 0 { background = try reader.take(4) }
-                if flags & 4 != 0 { foreground = try reader.take(4) }
-                fill(tx, ty, w, h, background)
-                if flags & 8 != 0 {
-                    let count = Int(try reader.byte())
-                    for _ in 0..<count {
-                        let color = flags & 16 != 0 ? try reader.take(4) : foreground
-                        let xy = Int(try reader.byte()), wh = Int(try reader.byte())
-                        let x = xy >> 4, y = xy & 15, sw = (wh >> 4) + 1, sh = (wh & 15) + 1
-                        guard x + sw <= w, y + sh <= h else { throw Failure.invalid }
-                        fill(tx + x, ty + y, sw, sh, color)
-                    }
-                }
+    }
+    private mutating func apply(_ patch: [UInt8], x: Int, y: Int, width w: Int, height h: Int) {
+        for row in 0..<h {
+            let start = ((y + row) * width + x) * 4
+            pixels.replaceSubrange(start..<start + w * 4, with: patch[row * w * 4..<(row + 1) * w * 4])
+        }
+    }
+    private static func decodeTile(_ reader: inout Reader, width: Int, height: Int,
+                                   background: inout [UInt8], foreground: inout [UInt8]) throws -> [UInt8] {
+        let flags = try reader.byte()
+        guard flags & 0xe0 == 0 else { throw Failure.invalid }
+        if flags & 1 != 0 { return try reader.take(width * height * 4) }
+        if flags & 2 != 0 { background = try reader.take(4) }
+        if flags & 4 != 0 { foreground = try reader.take(4) }
+        var result = [UInt8](repeating: 0, count: width * height * 4)
+        func fill(_ x: Int, _ y: Int, _ w: Int, _ h: Int, _ color: [UInt8]) {
+            for row in y..<y+h { for col in x..<x+w {
+                let i = (row * width + col) * 4
+                result[i] = color[0]; result[i + 1] = color[1]
+                result[i + 2] = color[2]; result[i + 3] = color[3]
+            } }
+        }
+        fill(0, 0, width, height, background)
+        if flags & 8 != 0 {
+            let count = Int(try reader.byte())
+            for _ in 0..<count {
+                let color = flags & 16 != 0 ? try reader.take(4) : foreground
+                let xy = Int(try reader.byte()), wh = Int(try reader.byte())
+                let x = xy >> 4, y = xy & 15, w = (wh >> 4) + 1, h = (wh & 15) + 1
+                guard x + w <= width, y + h <= height else { throw Failure.invalid }
+                fill(x, y, w, h, color)
             }
         }
         return result
@@ -164,9 +205,46 @@ struct RFBClient {
             guard count >= 0, count <= bytes.count - offset else { throw Failure.incomplete }
             defer { offset += count }; return Array(bytes[offset..<offset + count])
         }
-        mutating func byte() throws -> UInt8 { try take(1)[0] }
+        mutating func byte() throws -> UInt8 {
+            guard offset < bytes.count else { throw Failure.incomplete }
+            defer { offset += 1 }; return bytes[offset]
+        }
         mutating func u16() throws -> UInt16 { let b = try take(2); return UInt16(b[0]) << 8 | UInt16(b[1]) }
         mutating func u32() throws -> UInt32 { let b = try take(4); return b.reduce(0) { $0 << 8 | UInt32($1) } }
+    }
+}
+
+/// Zlib encoding (6) keeps one compression stream for the entire connection.
+/// Only complete rectangle payloads enter the inflater, so fragmented input cannot
+/// consume stream state twice. Output is bounded by the validated rectangle size.
+private final class RFBInflater {
+    private let stream: UnsafeMutablePointer<z_stream>
+    init() throws {
+        let stream = UnsafeMutablePointer<z_stream>.allocate(capacity: 1)
+        stream.initialize(to: z_stream())
+        guard inflateInit_(stream, ZLIB_VERSION, Int32(MemoryLayout<z_stream>.size)) == Z_OK else {
+            stream.deinitialize(count: 1); stream.deallocate()
+            throw RFBClient.Failure.invalid
+        }
+        self.stream = stream
+    }
+    deinit { inflateEnd(stream); stream.deinitialize(count: 1); stream.deallocate() }
+    func decode(_ input: [UInt8], expected: Int) throws -> [UInt8] {
+        var output = [UInt8](repeating: 0, count: expected + 1)
+        let status = input.withUnsafeBufferPointer { source in
+            output.withUnsafeMutableBufferPointer { destination in
+                stream.pointee.next_in = UnsafeMutablePointer(mutating: source.baseAddress)
+                stream.pointee.avail_in = uInt(source.count)
+                stream.pointee.next_out = destination.baseAddress
+                stream.pointee.avail_out = uInt(destination.count)
+                defer { stream.pointee.next_in = nil; stream.pointee.next_out = nil }
+                return inflate(stream, Z_SYNC_FLUSH)
+            }
+        }
+        guard status == Z_OK || status == Z_STREAM_END,
+              stream.pointee.avail_in == 0, stream.pointee.avail_out == 1 else { throw RFBClient.Failure.invalid }
+        output.removeLast()
+        return output
     }
 }
 
@@ -211,12 +289,18 @@ actor RuntimeDesktopConnection: DesktopTransport {
             }
         }
         defer { heartbeat?.cancel(); heartbeat = nil }
-        while !Task.isCancelled {
-            let message = try await socket.receive()
-            guard case .data(let data) = message else { throw RFBClient.Failure.invalid }
-            let previous = decoder.revision
-            for response in try decoder.receive(data) { try await send(response) }
-            if decoder.revision != previous, let image = decoder.image() { await frame(image) }
+        do {
+            while !Task.isCancelled {
+                let message = try await socket.receive()
+                guard case .data(let data) = message else { throw RFBClient.Failure.invalid }
+                let previous = decoder.revision
+                for response in try decoder.receive(data) { try await send(response) }
+                if decoder.revision != previous, let image = decoder.image() { await frame(image) }
+            }
+        } catch {
+            // Protocol stage and status codes only; never log tickets, pixels or input.
+            DebugDiagnostics.record("Desktop socket ended: HTTP=\((socket.response as? HTTPURLResponse)?.statusCode ?? 0), close=\(socket.closeCode.rawValue), RFB=\(decoder.diagnosticState)")
+            throw error
         }
     }
     func send(_ data: Data) async throws {

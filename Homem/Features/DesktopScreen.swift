@@ -404,10 +404,7 @@ enum RemoteKeyInput {
     private func connectionFailed(_ failure: Error) {
         let frame = runtimeImage
         disconnect()
-        let canRetry: Bool
-        if let http = failure as? ClientError, case .http(let status, _) = http { canRetry = status >= 500 }
-        else { canRetry = failure is URLError || (failure as NSError).domain == NSURLErrorDomain }
-        guard api.isOfficial, canRetry, retries < 3 else {
+        guard api.isOfficial, DesktopRecovery.canRetry(failure), retries < 3 else {
             error = failure is ClientError ? failure.localizedDescription : "The desktop connection was lost. Try reconnecting.".localized
             return
         }

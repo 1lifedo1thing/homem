@@ -107,6 +107,23 @@ import CoreGraphics
         XCTAssertEqual(count, 1)
         XCTAssertEqual(model.status, "Disconnected")
     }
+    func testOfficialDesktopRecoversFromUnwrappedSocketDisconnect() async throws {
+        let api = APIClient(baseURL: OfficialServer.apiURL, officialSession: OfficialSession(cookies: []))
+        var attempts = 0
+        let model = DesktopModel(api: api, botID: "fixture") { _, _ in
+            attempts += 1
+            if attempts == 1 { throw NSError(domain: NSPOSIXErrorDomain, code: Int(POSIXErrorCode.ENOTCONN.rawValue)) }
+            return RecoverableDesktopFixture()
+        }
+        await model.connect()
+        XCTAssertEqual(model.status, "Reconnecting")
+        try await waitUntil { model.status == "Connected" }
+        XCTAssertEqual(attempts, 2)
+        XCTAssertNil(model.error)
+        model.disconnect()
+        XCTAssertFalse(DesktopRecovery.canRetry(ClientError.http(401, "Unauthorized")))
+        XCTAssertFalse(DesktopRecovery.canRetry(RFBClient.Failure.unsupported))
+    }
     private func waitUntil(_ condition: () -> Bool) async throws {
         let deadline = Date().addingTimeInterval(5)
         while !condition(), Date() < deadline { try await Task.sleep(for: .milliseconds(30)) }

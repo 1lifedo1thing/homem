@@ -1,5 +1,21 @@
 import Foundation
 
+enum DesktopRecovery {
+    static func canRetry(_ failure: Error) -> Bool {
+        if let client = failure as? ClientError, case .http(let status, _) = client { return status >= 500 }
+        let error = failure as NSError
+        if error.domain == NSURLErrorDomain { return true }
+        // URLSession WebSockets can expose BSD socket failures directly instead
+        // of wrapping them as URLError.networkConnectionLost.
+        if error.domain == NSPOSIXErrorDomain {
+            let transient: [POSIXErrorCode] = [.ENOTCONN, .ECONNRESET, .ECONNABORTED, .EPIPE,
+                                               .ETIMEDOUT, .ECONNREFUSED, .ENETDOWN, .ENETUNREACH, .EHOSTUNREACH]
+            return transient.contains { Int($0.rawValue) == error.code }
+        }
+        return false
+    }
+}
+
 /// Follows Memoh's prepare → poll → offer sequence, including older hosted responses.
 enum DesktopReadiness {
     static func ready(_ info: JSONValue) -> Bool {
