@@ -31,6 +31,50 @@ import CoreGraphics
         model.disconnect()
         XCTAssertTrue(model.viewOnly)
     }
+    func testRapidTypingPreservesRepeatedKeysAndShortcutOrdering() async throws {
+        let api = APIClient(baseURL: OfficialServer.apiURL, officialSession: OfficialSession(cookies: []))
+        let connection = RecoverableDesktopFixture(sendDelay: .milliseconds(2))
+        let model = DesktopModel(api: api, botID: "fixture") { _, _ in connection }
+        await model.connect()
+        try await waitUntil { model.hasVideo }
+        let text = "bookkeeper 114514!!\r\n中文\t日本語 café"
+        model.type(text)
+        model.key(0xffff, modifiers: [0xffe3, 0xffe9])
+        let codes = RemoteKeyInput.codes(text)
+        let expected = codes.flatMap { [RFBClient.key($0, down: true), RFBClient.key($0, down: false)] }
+            + [RFBClient.key(0xffe3, down: true), RFBClient.key(0xffe9, down: true),
+               RFBClient.key(0xffff, down: true), RFBClient.key(0xffff, down: false),
+               RFBClient.key(0xffe9, down: false), RFBClient.key(0xffe3, down: false)]
+        let deadline = Date().addingTimeInterval(3)
+        while await connection.sent.count < codes.count + 1, Date() < deadline { try await Task.sleep(for: .milliseconds(10)) }
+        let packets = await connection.sent
+        XCTAssertEqual(packets.reduce(Data(), +), expected.reduce(Data(), +))
+        XCTAssertEqual(RemoteKeyInput.codes("\r\n\t\u{1b}中"), [0xff0d, 0xff09, 0xff1b, 0x01004e2d])
+        model.disconnect()
+    }
+
+    func testNativeKeyboardCommitsCompositionOnceAndDeletesOnEmptyInput() {
+        let view = RemoteKeyboardView()
+        var texts: [String] = []
+        var keys: [UInt32] = []
+        view.onText = { texts.append($0) }
+        view.onKey = { key, _ in keys.append(key) }
+        view.setMarkedText("にほん", selectedRange: NSRange(location: 3, length: 0))
+        view.flushCommittedText()
+        XCTAssertTrue(texts.isEmpty, "Do not send unfinished IME candidates")
+        view.setMarkedText("日本", selectedRange: NSRange(location: 2, length: 0))
+        view.unmarkText()
+        view.flushCommittedText()
+        XCTAssertEqual(texts, ["日本"])
+        XCTAssertEqual(view.text, "")
+        view.deleteBackward()
+        XCTAssertEqual(keys, [0xff08])
+        view.text = "hello!!\n中文"
+        view.textViewDidChange(view)
+        XCTAssertEqual(texts, ["日本", "hello!!\n中文"])
+        XCTAssertEqual(view.text, "")
+    }
+
     func testOfficialDesktopRecoversAfterNetworkDropAndStopsWhenDismissed() async throws {
         let api = APIClient(baseURL: OfficialServer.apiURL, officialSession: OfficialSession(cookies: []))
         var connections = [RecoverableDesktopFixture]()
@@ -164,6 +208,8 @@ private final class DesktopOfferProtocol: URLProtocol, @unchecked Sendable {
 
 private actor RecoverableDesktopFixture: DesktopTransport {
     private var interrupted = false
+    private let sendDelay: Duration
+    init(sendDelay: Duration = .zero) { self.sendDelay = sendDelay }
     private(set) var sent: [Data] = []
     func run(frame: @Sendable (CGImage) async -> Void) async throws {
         let bytes = Data(repeating: 127, count: 16)
@@ -175,5 +221,5 @@ private actor RecoverableDesktopFixture: DesktopTransport {
     }
     func drop() { interrupted = true }
     func close() { interrupted = true }
-    func send(_ data: Data) async throws { sent.append(data) }
+    func send(_ data: Data) async throws { try await Task.sleep(for: sendDelay); sent.append(data) }
 }

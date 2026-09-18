@@ -42,6 +42,8 @@ Implementation references: Apple’s [share-extension activation keys](https://d
 
 ## Workspace layouts
 
+Desktop input now uses the native iOS keyboard directly, with committed IME text, backspace on an empty input buffer, newline/tab keysym mapping, hardware navigation keys, and a scrolling shortcut row (modifiers, arrows, F1–F12, Home/End and Delete). Runtime input writes are queued in order and each complete key press/release is sent together, preventing rapid repeated characters from overlapping. Fullscreen presents the same desktop connection from a standalone screen or workspace pane; view-only mode still blocks input. Validation: iPhone simulator build, six desktop connection/input tests, and localization coverage passed. Live fullscreen/keyboard UI verification remains pending because simulator coordinate taps were inconsistent.
+
 The Add pane menu supports additional chats, files, terminals and desktops. Each chat can select its own agent and conversation. Pane menus reorder the added panes; each pane closes independently. Automatic layout uses chat on the left and two tools on the right on iPad, a grid for larger sets, and a vertical split on iPhone. Side-by-side, stacked and grid arrangements are also available; overflowing layouts scroll instead of shrinking panes beyond usability. Automatic two/three-pane dividers remain resizable and accessible. Desktops start in view-only mode.
 
 Workspace content is bounded below the navigation bar. Embedded file browsing and conversation selection use local controls instead of replacing the workspace title. iPad app tabs sit at the bottom, and the chat sidebar has a dedicated title/compose row, separate from the workspace and agent selectors.
