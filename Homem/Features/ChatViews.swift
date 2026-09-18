@@ -26,22 +26,15 @@ struct ConversationsView: View {
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility, preferredCompactColumn: $compactColumn) {
             List(selection: $selection) {
-                if sizeClass == .regular {
-                    HStack {
-                        Text("Chats".localized).font(.largeTitle.bold()).accessibilityAddTraits(.isHeader)
-                        Spacer()
-                        composeButton
-                    }.listRowSeparator(.hidden).listRowBackground(Color.clear).padding(.vertical, 8)
-                }
                 if let error = error ?? store.error { ErrorBanner(message: error) { Task { await load() } } }
-                Section("Recent".localized) {
+                Section {
                     ForEach(sessions.filter { search.isEmpty || $0.title.localizedCaseInsensitiveContains(search) }) { session in
                         let destination = ChatDestination(botID: store.selectedBot?.id ?? "", sessionID: session.id, title: session.title, botName: store.selectedBot?.title ?? "Agent")
                         NavigationLink(value: destination) {
                             HStack(alignment: .top, spacing: 12) {
                                 AgentAvatar(name: store.selectedBot?.title ?? "", avatarURL: store.selectedBot?.value.avatarURL ?? "", size: 30)
                                 VStack(alignment: .leading, spacing: 5) {
-                                    Text(session.title).font(.body.weight(.semibold)).lineLimit(2)
+                                    Text(session.title).font(sizeClass == .regular ? .subheadline.weight(.medium) : .body.weight(.semibold)).lineLimit(2)
                                     HStack(spacing: 6) {
                                         Image(systemName: session.value["type"] == "schedule" ? "clock" : "bubble.left")
                                         Text(session.value["type"].string.fieldLabel.localized.nonEmpty ?? "Chat".localized)
@@ -52,7 +45,7 @@ struct ConversationsView: View {
                                     }.font(.caption).foregroundStyle(.secondary)
 
                                 }
-                            }.padding(.vertical, 8)
+                            }.padding(.vertical, sizeClass == .regular ? 4 : 8)
                         }
                         .accessibilityIdentifier("conversation_" + session.id)
                         .contextMenu { Button("Rename".localized, systemImage: "pencil") { rename = session; newTitle = session.title }; Button("Delete".localized, systemImage: "trash", role: .destructive) { deletion = session } }
@@ -60,16 +53,23 @@ struct ConversationsView: View {
                     }
                     if !cursor.isEmpty { Button("Load more conversations".localized) { Task { await load(more: true) } } }
                     if sessions.isEmpty && !loading && error == nil { Text("Start a new conversation.".localized).foregroundStyle(.secondary).padding(.vertical) }
+                } header: {
+                    if sizeClass != .regular { Text("Recent".localized) }
                 }
-            }.listStyle(.plain).scrollContentBackground(.hidden).background(Theme.canvas)
-                .navigationSplitViewColumnWidth(min: 360, ideal: 400, max: 460)
-                .navigationTitle(sizeClass == .regular ? "" : "Chats".localized)
-                .searchable(text: $search, prompt: "Find a conversation")
+            }
+                .modifier(ConversationListStyle(isSidebar: sizeClass == .regular))
+                .scrollContentBackground(.hidden).background(Theme.canvas)
+                .navigationSplitViewColumnWidth(min: 280, ideal: 320, max: 380)
+                .navigationTitle("Chats".localized)
+                .navigationBarTitleDisplayMode(sizeClass == .regular ? .inline : .large)
+                .searchable(text: $search, placement: sizeClass == .regular ? .sidebar : .navigationBarDrawer(displayMode: .automatic), prompt: Text("Find a conversation".localized))
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) { WorkspacePickerMenu() }
                     ToolbarItemGroup(placement: .topBarTrailing) {
-                        if sizeClass != .regular { composeButton }
-                        AgentPickerMenu(selection: Binding(get: { store.selectedBot?.id ?? "" }, set: { store.selectedBotID = $0 }))
+                        composeButton
+                        if sizeClass != .regular {
+                            AgentPickerMenu(selection: Binding(get: { store.selectedBot?.id ?? "" }, set: { store.selectedBotID = $0 }))
+                        }
                     }
                 }
                 .refreshable { await store.reload(); await load() }
@@ -94,8 +94,18 @@ struct ConversationsView: View {
                 }
         } detail: {
             if let selection { ChatScreen(destination: selection, showsAgentSwitcher: true).id(selection.botID) }
-            else { EmptyState(title: "No conversations", symbol: "bubble.left.and.bubble.right", detail: "Choose a conversation or start a new one.") }
+            else {
+                EmptyState(title: "Choose a conversation", symbol: "bubble.left.and.bubble.right", detail: "Choose a conversation or start a new one.")
+                    .toolbar {
+                        if sizeClass == .regular {
+                            ToolbarItem(placement: .topBarTrailing) {
+                                AgentPickerMenu(selection: Binding(get: { store.selectedBot?.id ?? "" }, set: { store.selectedBotID = $0 }))
+                            }
+                        }
+                    }
+            }
         }
+        .navigationSplitViewStyle(.balanced)
         .environment(\.expandChatWorkspace, { columnVisibility = .detailOnly })
         .onChange(of: selection) { _, value in compactColumn = value == nil ? .sidebar : .detail }
         .task(id: store.selectedBot?.id) {
@@ -138,6 +148,15 @@ struct ConversationsView: View {
             }
         }
         rename = nil; deletion = nil
+    }
+}
+
+/// Let the system provide sidebar selection, insets, and compact window behavior.
+private struct ConversationListStyle: ViewModifier {
+    var isSidebar: Bool
+    @ViewBuilder func body(content: Content) -> some View {
+        if isSidebar { content.listStyle(.sidebar) }
+        else { content.listStyle(.plain) }
     }
 }
 
