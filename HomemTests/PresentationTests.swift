@@ -180,3 +180,31 @@ final class ChatSplitLayoutTests: XCTestCase {
         XCTAssertEqual(ChatSplitLayout.fraction(2), 0.65)
     }
 }
+
+final class WorkspaceGeometryTests: XCTestCase {
+    func testDynamicArrangementsKeepEveryPaneInsideCanvasWithoutOverlap() {
+        for size in [CGSize(width: 430, height: 320), CGSize(width: 430, height: 740), CGSize(width: 1032, height: 700)] {
+            for count in 1...8 {
+                for arrangement in WorkspaceArrangement.allCases {
+                    let layout = WorkspaceGeometry.make(size: size, count: count, arrangement: arrangement)
+                    XCTAssertEqual(layout.frames.count, count)
+                    let canvas = CGRect(origin: .zero, size: layout.size).insetBy(dx: -0.001, dy: -0.001)
+                    for (index, frame) in layout.frames.enumerated() {
+                        XCTAssertTrue(canvas.contains(frame), "\(arrangement) pane \(index)")
+                        XCTAssertGreaterThan(frame.width, 0)
+                        XCTAssertGreaterThan(frame.height, 0)
+                        for other in layout.frames.dropFirst(index + 1) { XCTAssertFalse(frame.intersects(other)) }
+                    }
+                }
+            }
+        }
+    }
+    func testAutomaticThreePaneIPadKeepsChatFullHeightAndToolsOnRight() {
+        let layout = WorkspaceGeometry.make(size: CGSize(width: 1032, height: 700), count: 3, arrangement: .automatic)
+        XCTAssertEqual(layout.frames[0].height, 700)
+        XCTAssertEqual(layout.frames[1].minX, layout.frames[2].minX)
+        XCTAssertLessThan(layout.frames[0].maxX, layout.frames[1].minX)
+        XCTAssertLessThan(layout.frames[1].maxY, layout.frames[2].minY)
+        XCTAssertEqual(layout.dividers.count, 2)
+    }
+}

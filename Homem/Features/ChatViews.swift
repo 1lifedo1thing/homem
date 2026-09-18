@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 struct ChatDestination: Hashable { var botID: String; var sessionID: String; var title: String; var botName: String; var firstMessage: NewChatDraft? = nil }
 
 struct ConversationsView: View {
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.appAccent) private var accent
     @Environment(AppStore.self) private var store
     @State private var sessions: [Record] = []
@@ -20,6 +21,13 @@ struct ConversationsView: View {
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             List {
+                if sizeClass == .regular {
+                    HStack {
+                        Text("Chats".localized).font(.largeTitle.bold()).accessibilityAddTraits(.isHeader)
+                        Spacer()
+                        composeButton
+                    }.listRowSeparator(.hidden).listRowBackground(Color.clear).padding(.vertical, 8)
+                }
                 if let error = error ?? store.error { ErrorBanner(message: error) { Task { await load() } } }
                 Section("Recent".localized) {
                     ForEach(sessions.filter { search.isEmpty || $0.title.localizedCaseInsensitiveContains(search) }) { session in
@@ -49,13 +57,13 @@ struct ConversationsView: View {
                     if sessions.isEmpty && !loading && error == nil { Text("Start a new conversation.".localized).foregroundStyle(.secondary).padding(.vertical) }
                 }
             }.listStyle(.plain).scrollContentBackground(.hidden).background(Theme.canvas)
-                .navigationTitle("Chats".localized)
+                .navigationSplitViewColumnWidth(min: 360, ideal: 400, max: 460)
+                .navigationTitle(sizeClass == .regular ? "" : "Chats".localized)
                 .searchable(text: $search, prompt: "Find a conversation")
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) { WorkspacePickerMenu() }
                     ToolbarItemGroup(placement: .topBarTrailing) {
-                        Button { newChat = true } label: { Image(systemName: "square.and.pencil") }
-                            .accessibilityLabel("New conversation".localized).accessibilityIdentifier("newConversation").disabled(store.bots.isEmpty)
+                        if sizeClass != .regular { composeButton }
                         AgentPickerMenu(selection: Binding(get: { store.selectedBot?.id ?? "" }, set: { store.selectedBotID = $0 }))
                     }
                 }
@@ -84,6 +92,11 @@ struct ConversationsView: View {
                 }
         } detail: { EmptyState(title: "No conversations", symbol: "bubble.left.and.bubble.right", detail: "Choose a conversation or start a new one.") }
         .environment(\.expandChatWorkspace, { columnVisibility = .detailOnly })
+    }
+    private var composeButton: some View {
+        Button { newChat = true } label: { Image(systemName: "square.and.pencil").frame(width: 44, height: 44) }
+            .buttonStyle(.plain).foregroundStyle(accent)
+            .accessibilityLabel("New conversation".localized).accessibilityIdentifier("newConversation").disabled(store.bots.isEmpty)
     }
     func load(more: Bool = false) async {
         guard let bot = store.selectedBot, let api = store.api else { return }
@@ -115,12 +128,15 @@ struct ChatScreen: View {
     }
 }
 
+private struct IdentifiedChat: Identifiable { let route: ChatDestination; var id: String { route.sessionID } }
+
 struct ChatContent: View {
     @Environment(AppStore.self) private var store
     @Environment(\.appAccent) private var accent
     @Environment(\.expandChatWorkspace) private var expandWorkspace
     @State var model: ChatModel
     let destination: ChatDestination
+    var allowsWorkspace = true
     @Environment(\.scenePhase) private var scenePhase
     @State private var attachments: [JSONValue] = []
     @State private var filePicker = false
@@ -130,55 +146,44 @@ struct ChatContent: View {
     @FocusState private var composerFocused: Bool
     @State private var voice = VoiceRecorder()
     @State private var sentFirstMessage = false
-    @State private var workspacePane: ChatWorkspaceTool?
-    @State private var showsBothTools = false
-    @State private var workspaceFraction = 0.44
-    @State private var chatColumnFraction = 0.45
-    @State private var desktopFraction = 0.55
-    @State private var dragStartFraction: Double?
-    var body: some View {
-        GeometryReader { geometry in
-            if ChatSplitLayout.usesColumns(width: geometry.size.width), workspacePane != nil {
-                let available = geometry.size.width - 24
-                HStack(spacing: 0) {
-                    transcript
-                        .frame(width: available * ChatSplitLayout.columnFraction(chatColumnFraction, available: available))
-                    ChatPaneDivider(fraction: $chatColumnFraction, vertical: true, available: available)
-                    workspaceTools(height: geometry.size.height, allowsBoth: true)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity).clipped()
-                }
-            } else {
-                VStack(spacing: 0) {
-                    if workspacePane != nil {
-                        workspaceTools(height: geometry.size.height, allowsBoth: false)
-                            .frame(height: ChatSplitLayout.paneHeight(available: geometry.size.height, fraction: workspaceFraction))
-                            .clipped()
-                        splitDivider(available: geometry.size.height)
-                    }
-                    transcript
-                }
-            }
+    @State private var workspacePanes: [WorkspacePane] = []
+    @State private var paneArrangement = WorkspaceArrangement.automatic
+    private var canvas: some View {
+        WorkspaceCanvas(panes: $workspacePanes, arrangement: paneArrangement,
+                        api: model.api, botID: destination.botID, botName: destination.botName) {
+            transcript
         }
-        .coordinateSpace(name: "chatSplit")
-        .toolbar(workspacePane == nil ? .visible : .hidden, for: .tabBar)
+    }
+    @ViewBuilder private var presentedCanvas: some View {
+        if allowsWorkspace {
+            canvas
+        .toolbar(workspacePanes.isEmpty ? .visible : .hidden, for: .tabBar)
         .navigationTitle(destination.title).navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(Theme.canvas, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Menu {
-                    Button("Chat only".localized, systemImage: "bubble.left") { workspacePane = nil; showsBothTools = false }
-                        .keyboardShortcut("0", modifiers: [.command, .option])
-                    ForEach(ChatWorkspaceTool.allCases) { tool in
-                        Button(tool.chatTitle.localized, systemImage: tool.symbol) { composerFocused = false; showsBothTools = false; workspacePane = tool; expandWorkspace() }
-                            .keyboardShortcut(tool == .desktop ? "1" : "2", modifiers: [.command, .option])
-                    }
-                    if UIDevice.current.userInterfaceIdiom == .pad || ProcessInfo.processInfo.isMacCatalystApp {
-                        Button("Chat + desktop + terminal".localized, systemImage: "rectangle.split.2x2") {
-                            composerFocused = false; workspacePane = .desktop; showsBothTools = true; expandWorkspace()
-                        }.keyboardShortcut("3", modifiers: [.command, .option])
-                    }
-                } label: { Image(systemName: workspacePane == nil ? "rectangle.split.1x2" : "rectangle.split.1x2.fill") }
-                    .accessibilityLabel("Split view".localized).accessibilityIdentifier("chatSplitView")
-            }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Section("Add pane".localized) {
+                            ForEach(ChatWorkspaceTool.allCases) { tool in
+                                Button(tool.title.localized, systemImage: tool.symbol) {
+                                    composerFocused = false
+                                    workspacePanes.append(WorkspacePane(tool: tool))
+                                    expandWorkspace()
+                                }
+                            }
+                        }
+                        if !workspacePanes.isEmpty {
+                            Picker("Arrange panes".localized, selection: $paneArrangement) {
+                                ForEach(WorkspaceArrangement.allCases) { item in
+                                    Text(item.title.localized).tag(item)
+                                }
+                            }
+                            Button("Chat only".localized, systemImage: "bubble.left") { workspacePanes.removeAll() }
+                        }
+                    } label: { Image(systemName: "rectangle.badge.plus") }
+                        .accessibilityLabel("Add pane".localized).accessibilityIdentifier("chatSplitView")
+                }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     NavigationLink("Workspace".localized, systemImage: "folder") { WorkspaceView(botID: destination.botID, name: destination.botName) }
@@ -187,6 +192,15 @@ struct ChatContent: View {
                 } label: { Image(systemName: "ellipsis.circle") }
             }
         }
+            .navigationDestination(item: $forked) { ChatScreen(destination: $0) }
+        } else {
+            canvas.sheet(item: Binding(get: { forked.map(IdentifiedChat.init) }, set: { forked = $0?.route })) { item in
+                NavigationStack { ChatScreen(destination: item.route) }
+            }
+        }
+    }
+    var body: some View {
+        presentedCanvas
         .task {
             if !sentFirstMessage, let first = destination.firstMessage {
                 sentFirstMessage = true
@@ -208,45 +222,10 @@ struct ChatContent: View {
             Button("Send".localized) { if let turn = editTurn { Task { await model.mutateTurn(turn, type: "edit_message", text: editText) } } }
             Button("Cancel".localized, role: .cancel) { editTurn = nil }
         }
-        .navigationDestination(item: $forked) { ChatScreen(destination: $0) }
-    }
-    @ViewBuilder private func workspaceTools(height: CGFloat, allowsBoth: Bool) -> some View {
-        let both = showsBothTools && allowsBoth
-        VStack(spacing: 0) {
-            if both {
-                workspaceTool(.desktop, both: true)
-                    .frame(height: max(0, height - 24) * ChatSplitLayout.fraction(desktopFraction))
-                    .clipped()
-                ChatPaneDivider(fraction: $desktopFraction, vertical: false, available: max(0, height - 24))
-                workspaceTool(.terminal, both: true).frame(maxHeight: .infinity).clipped()
-            } else if let workspacePane {
-                workspaceTool(workspacePane, both: false)
-            }
-        }
-    }
-    private func workspaceTool(_ tool: ChatWorkspaceTool, both: Bool) -> some View {
-        ChatWorkspacePane(api: model.api, botID: destination.botID, tool: tool, allowsSelection: !both,
-                          select: { workspacePane = $0 }, close: {
-            if both { workspacePane = tool == .desktop ? .terminal : .desktop; showsBothTools = false }
-            else { workspacePane = nil; showsBothTools = false }
-        }).id(tool)
-    }
-    private func splitDivider(available: CGFloat) -> some View {
-        Capsule().fill(.tertiary).frame(width: 32, height: 4)
-            .frame(maxWidth: .infinity).frame(height: 24).background(Theme.surface)
-            .contentShape(Rectangle())
-            .gesture(DragGesture(minimumDistance: 2, coordinateSpace: .named("chatSplit")).onChanged { value in
-                if dragStartFraction == nil { dragStartFraction = workspaceFraction }
-                workspaceFraction = ChatSplitLayout.fraction((dragStartFraction ?? workspaceFraction) + value.translation.height / max(available, 1))
-            }.onEnded { _ in dragStartFraction = nil })
-            .accessibilityElement().accessibilityLabel("Resize split view".localized)
-            .accessibilityValue(Text(workspaceFraction, format: .percent.precision(.fractionLength(0))))
-            .accessibilityAdjustableAction { direction in
-                workspaceFraction = ChatSplitLayout.fraction(workspaceFraction + (direction == .increment ? 0.05 : -0.05))
-            }
     }
     private var transcript: some View {
         ScrollViewReader { proxy in
+            VStack(spacing: 0) {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 26) {
                     HStack { AgentAvatar(name: destination.botName, avatarURL: store.bots.first { $0.id == destination.botID }?.value.avatarURL ?? "", size: 34); VStack(alignment: .leading, spacing: 3) { Text(destination.botName).font(.subheadline.weight(.semibold)); Text(model.connection.localized).font(.caption).foregroundStyle(.secondary) }; Spacer(); if model.api.isDemo { DemoBadge() } }.padding(.bottom, 8)
@@ -272,9 +251,10 @@ struct ChatContent: View {
             .defaultScrollAnchor(.bottom)
             .scrollDismissesKeyboard(.interactively)
             .onChange(of: model.visibleTurns.count) { _, _ in withAnimation { proxy.scrollTo("bottom", anchor: .bottom) } }
-            .onChange(of: workspacePane) { _, _ in proxy.scrollTo("bottom", anchor: .bottom) }
+            .onChange(of: workspacePanes.count) { _, _ in proxy.scrollTo("bottom", anchor: .bottom) }
             .onChange(of: composerFocused) { _, focused in if focused { proxy.scrollTo("bottom", anchor: .bottom) } }
-            .safeAreaInset(edge: .bottom) { composer }
+            composer
+            }
         }
     }
     private var composer: some View {

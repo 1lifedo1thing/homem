@@ -5,6 +5,7 @@ struct AgentsView: View {
     @Environment(AppStore.self) private var store
     @State private var create = false
     @State private var search = ""
+    @ScaledMetric(relativeTo: .body) private var cardHeight = 210
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
@@ -14,18 +15,20 @@ struct AgentsView: View {
                     Spacer()
                     Text(AppLocalization.format("Agents · %lld", store.bots.count)).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
                 }
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 300), spacing: 16)], spacing: 16) {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 300), spacing: 16, alignment: .top)], alignment: .leading, spacing: 16) {
                     ForEach(store.bots.filter { search.isEmpty || $0.title.localizedCaseInsensitiveContains(search) }) { bot in
-                        NavigationLink { AgentDetailView(bot: bot) } label: { AgentCard(bot: bot) }.buttonStyle(.plain)
+                        NavigationLink { AgentDetailView(bot: bot) } label: { AgentCard(bot: bot, height: cardHeight) }.buttonStyle(.plain)
                     }
                     Button { create = true } label: {
                         HStack(spacing: 12) {
-                            Image(systemName: "plus").font(.headline).frame(width: 42, height: 42).background(accent.opacity(0.10), in: RoundedRectangle(cornerRadius: 12))
+                            Image(systemName: "plus").font(.title2).frame(width: 52, height: 52).background(accent.opacity(0.10), in: RoundedRectangle(cornerRadius: 12))
                             Text("Create an agent".localized).font(.headline)
                             Spacer()
                             Image(systemName: "arrow.right").font(.subheadline)
-                        }.foregroundStyle(accent).padding(18).modifier(DetailSurface())
-                    }.accessibilityIdentifier("createAgent")
+                        }.foregroundStyle(accent).padding(Theme.gutter)
+                            .frame(maxWidth: .infinity).frame(height: cardHeight, alignment: .top)
+                            .modifier(DetailSurface())
+                    }.buttonStyle(.plain).accessibilityIdentifier("createAgent")
                 }
                 if store.isDemo { DemoBadge() }
             }.padding(22).frame(maxWidth: 1100).frame(maxWidth: .infinity)
@@ -44,27 +47,29 @@ struct AgentsView: View {
 
 struct AgentCard: View {
     let bot: Record
+    let height: CGFloat
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack(alignment: .center, spacing: 14) {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .top, spacing: 14) {
                 AgentAvatar(name: bot.title, avatarURL: bot.value.avatarURL, size: 52)
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(bot.title).font(.title2.weight(.bold)).lineLimit(2)
+                    Text(bot.title).font(.title3.weight(.semibold)).lineLimit(2, reservesSpace: true).fixedSize(horizontal: false, vertical: true)
                     StatusIndicator(text: bot.value["is_active"].bool ? "Active" : "Paused", color: bot.value["is_active"].bool ? .green : .secondary)
                 }
                 Spacer(minLength: 4)
                 AgentResourceSummary(botID: bot.id)
             }
             if let description = bot.value["metadata"]["description"].string.nonEmpty {
-                Text(description).font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
+                Text(description).font(.subheadline).foregroundStyle(.secondary).lineLimit(2).padding(.top, 12)
             }
+            Spacer(minLength: 12)
             Divider()
             HStack {
                 Label("Workspace & tools".localized, systemImage: "shippingbox")
                 Spacer()
                 Image(systemName: "arrow.up.right").fontWeight(.semibold)
-            }.font(.caption).foregroundStyle(.secondary)
-        }.padding(Theme.gutter).modifier(DetailSurface())
+            }.font(.caption).foregroundStyle(.secondary).padding(.top, 14)
+        }.padding(Theme.gutter).frame(maxWidth: .infinity).frame(height: height, alignment: .top).modifier(DetailSurface())
 
     }
 }

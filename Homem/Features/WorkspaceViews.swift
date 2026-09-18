@@ -150,6 +150,10 @@ struct FileBrowserView: View {
     @Environment(AppStore.self) private var store
     var botID: String
     var path: String
+    var embedded = false
+    var openFile: ((Record) -> Void)?
+    var goBack: (() -> Void)?
+    @State private var archive = false
     @State private var files: [Record] = []
     @State private var error: String?
     @State private var loading = false
@@ -160,37 +164,68 @@ struct FileBrowserView: View {
     @State private var rename: Record?
     @State private var delete: Record?
     var base: String { "/bots/\(botID.pathComponent)/container/fs" }
-    var body: some View {
+    private var fileList: some View {
         List {
-            Section { Text(path).font(.caption.monospaced()).foregroundStyle(.secondary).textSelection(.enabled) }
+            if !embedded { Section { Text(path).font(.caption.monospaced()).foregroundStyle(.secondary).textSelection(.enabled) } }
             if let error { ErrorBanner(message: error) { Task { await load() } } }
             ForEach(files) { file in
-                NavigationLink {
-                    if file.value["isDir"].bool { FileBrowserView(botID: botID, path: file.value["path"].string) }
-                    else { FileEditorView(botID: botID, path: file.value["path"].string) }
-                } label: {
-                    HStack(spacing: 12) {
-                        Image(systemName: file.value["isDir"].bool ? "folder.fill" : "doc.text").foregroundStyle(file.value["isDir"].bool ? accent : .secondary)
-                        VStack(alignment: .leading, spacing: 4) { Text(file.value["name"].string); if !file.value["isDir"].bool { Text(ByteCountFormatter.string(fromByteCount: Int64(file.value["size"].number), countStyle: .file)).font(.caption).foregroundStyle(.secondary) } }
-                    }.padding(.vertical, 4)
+                Group {
+                    if embedded { Button { openFile?(file) } label: { fileRow(file) }.buttonStyle(.plain) }
+                    else {
+                        NavigationLink {
+                            if file.value["isDir"].bool { FileBrowserView(botID: botID, path: file.value["path"].string) }
+                            else { FileEditorView(botID: botID, path: file.value["path"].string) }
+                        } label: { fileRow(file) }
+                    }
                 }.contextMenu { Button("Rename".localized, systemImage: "pencil") { rename = file; name = file.value["name"].string }; Button("Delete".localized, systemImage: "trash", role: .destructive) { delete = file } }
             }
-        }.navigationTitle(path == "/data" ? "Files" : (path as NSString).lastPathComponent).navigationBarTitleDisplayMode(.inline)
-            .overlay { if loading { ProgressView() } else if files.isEmpty && error == nil { EmptyState(title: "No files", symbol: "folder", detail: "Upload a file or create something new.") } }
-            .toolbar {
-                Menu {
-                    Button("Upload file".localized, systemImage: "square.and.arrow.up") { importFile = true }
-                    Button("New folder".localized, systemImage: "folder.badge.plus") { name = ""; newFolder = true }
-                    Button("New text file".localized, systemImage: "doc.badge.plus") { name = ""; newFile = true }
-                    NavigationLink("Archive & extract".localized, systemImage: "archivebox") { OperationBrowser(prefix: "/bots/{bot_id}/container/fs", substitutions: ["bot_id": botID, "path": path]) }
-                } label: { Image(systemName: "plus") }.accessibilityLabel("File actions".localized)
+        }
+    }
+    @ViewBuilder private var presentedList: some View {
+        if embedded {
+            VStack(spacing: 0) {
+                HStack {
+                    if let goBack { Button(action: goBack) { Image(systemName: "chevron.left").frame(width: 44, height: 44) }.accessibilityLabel("Back".localized) }
+                    Text(path).font(.caption.monospaced()).lineLimit(1).truncationMode(.middle)
+                    Spacer()
+                    fileActions.frame(width: 44, height: 44)
+                }.padding(.horizontal, 12).background(Theme.surface)
+                fileList
             }
+        } else {
+            fileList.navigationTitle(path == "/data" ? "Files" : (path as NSString).lastPathComponent).navigationBarTitleDisplayMode(.inline)
+                .toolbar { fileActions }
+        }
+    }
+    var body: some View {
+        presentedList
+            .overlay { if loading { ProgressView() } else if files.isEmpty && error == nil { EmptyState(title: "No files", symbol: "folder", detail: "Upload a file or create something new.") } }
+            .sheet(isPresented: $archive) { NavigationStack { OperationBrowser(prefix: "/bots/{bot_id}/container/fs", substitutions: ["bot_id": botID, "path": path]).toolbar { ToolbarItem(placement: .topBarLeading) { Button("Done".localized) { archive = false } } } } }
             .task { await load() }.refreshable { await load() }
             .fileImporter(isPresented: $importFile, allowedContentTypes: [.data]) { result in Task { do { let url = try result.get(); _ = try await store.api?.upload(path: base + "/upload", fileURL: url, destination: child(url.lastPathComponent)); await load() } catch { self.error = error.localizedDescription } } }
             .alert("New folder".localized, isPresented: $newFolder) { TextField("Folder name".localized, text: $name); Button("Create".localized) { Task { await operation("mkdir", body: ["path": .string(child(name))]) } }; Button("Cancel".localized, role: .cancel) {} }
             .alert("New text file".localized, isPresented: $newFile) { TextField("File name".localized, text: $name); Button("Create".localized) { Task { await operation("write", body: ["path": .string(child(name)), "content": ""]) } }; Button("Cancel".localized, role: .cancel) {} }
             .alert("Rename".localized, isPresented: Binding(get: { rename != nil }, set: { if !$0 { rename = nil } })) { TextField("Name".localized, text: $name); Button("Save".localized) { if let file = rename { Task { await operation("rename", body: ["oldPath": file.value["path"], "newPath": .string(child(name))]) } } }; Button("Cancel".localized, role: .cancel) { rename = nil } }
             .alert(AppLocalization.format("Delete %@?", delete?.value["name"].string ?? "Files".localized), isPresented: Binding(get: { delete != nil }, set: { if !$0 { delete = nil } })) { Button("Delete".localized, role: .destructive) { if let file = delete { Task { await operation("delete", body: ["path": file.value["path"], "recursive": file.value["isDir"]]) } } } } message: { Text("Folders are deleted with all their contents.".localized) }
+    }
+    private func fileRow(_ file: Record) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: file.value["isDir"].bool ? "folder.fill" : "doc.text").foregroundStyle(file.value["isDir"].bool ? accent : .secondary)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(file.value["name"].string)
+                if !file.value["isDir"].bool { Text(ByteCountFormatter.string(fromByteCount: Int64(file.value["size"].number), countStyle: .file)).font(.caption).foregroundStyle(.secondary) }
+            }
+            Spacer()
+            if embedded { Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary) }
+        }.padding(.vertical, 4).contentShape(Rectangle())
+    }
+    private var fileActions: some View {
+        Menu {
+            Button("Upload file".localized, systemImage: "square.and.arrow.up") { importFile = true }
+            Button("New folder".localized, systemImage: "folder.badge.plus") { name = ""; newFolder = true }
+            Button("New text file".localized, systemImage: "doc.badge.plus") { name = ""; newFile = true }
+            Button("Archive & extract".localized, systemImage: "archivebox") { archive = true }
+        } label: { Image(systemName: "plus") }.accessibilityLabel("File actions".localized)
     }
     func child(_ name: String) -> String { path + (path.hasSuffix("/") ? "" : "/") + name }
     func load() async {
@@ -210,6 +245,7 @@ struct FileEditorView: View {
     @Environment(\.dismiss) private var dismiss
     var botID: String
     var path: String
+    var onClose: (() -> Void)? = nil
     @State private var text = ""
     @State private var original = ""
     @State private var revision = ""
@@ -228,8 +264,9 @@ struct FileEditorView: View {
             HStack { Text((text != original ? "Unsaved changes" : loaded ? "Saved" : "Loading…").localized); Spacer(); Text(ByteCountFormatter.string(fromByteCount: Int64(text.utf8.count), countStyle: .file)) }.font(.caption).foregroundStyle(.secondary).padding(12).background(.bar)
         }.navigationTitle((path as NSString).lastPathComponent).navigationBarTitleDisplayMode(.inline)
             .navigationBarBackButtonHidden(text != original)
-            .toolbar { if text != original { ToolbarItem(placement: .topBarLeading) { Button { discard = true } label: { Label("Files".localized, systemImage: "chevron.left") } } } }
-            .confirmationDialog("Discard unsaved changes?".localized, isPresented: $discard, titleVisibility: .visible) { Button("Discard changes".localized, role: .destructive) { dismiss() } }
+            .toolbar { if text != original || onClose != nil { ToolbarItem(placement: .topBarLeading) { Button { if text != original { discard = true } else { onClose?() } } label: { Text((onClose == nil ? "Files" : "Done").localized) } } } }
+            .interactiveDismissDisabled(text != original)
+            .confirmationDialog("Discard unsaved changes?".localized, isPresented: $discard, titleVisibility: .visible) { Button("Discard changes".localized, role: .destructive) { if let onClose { onClose() } else { dismiss() } } }
             .toolbar {
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     if path.hasSuffix(".md") { Button { preview.toggle() } label: { Image(systemName: preview ? "pencil" : "eye") }.accessibilityLabel("Toggle preview".localized) }

@@ -39,10 +39,12 @@ No App Store review submission or release was performed.
 
 Implementation references: Apple’s [share-extension activation keys](https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/AppExtensionKeys.html) and [extension data-handling guidance](https://developer.apple.com/library/archive/documentation/General/Conceptual/ExtensibilityPG/ExtensionScenarios.html).
 
-## iPad workspace layouts
+## Workspace layouts
 
-The chat split-view menu supports chat on the left with desktop or terminal on the right, or desktop above terminal in the right column. Opening a workspace layout collapses the conversation sidebar. Both dividers resize and support VoiceOver adjustment; narrow windows fall back to a vertical split. Desktop opens in view-only mode. Keyboard shortcuts: Option-Command-0 for chat, 1 for desktop, 2 for terminal, 3 for both tools.
+The Add pane menu supports additional chats, files, terminals and desktops. Each chat can select its own agent and conversation. Pane menus reorder the added panes; each pane closes independently. Automatic layout uses chat on the left and two tools on the right on iPad, a grid for larger sets, and a vertical split on iPhone. Side-by-side, stacked and grid arrangements are also available; overflowing layouts scroll instead of shrinking panes beyond usability. Automatic two/three-pane dividers remain resizable and accessible. Desktops start in view-only mode.
 
-Validation: iPad simulator build and two focused split-layout tests passed. Live toolbar interaction could not be completed because the desktop automation could not reach the simulator window coordinates; three-pane screenshot verification remains pending.
+Workspace content is bounded below the navigation bar. Embedded file browsing and conversation selection use local controls instead of replacing the workspace title. iPad app tabs sit at the bottom, and the chat sidebar has a dedicated title/compose row, separate from the workspace and agent selectors.
 
-The iPhone 17 Pro Max and iPad Pro 13-inch simulators now have the existing authorized official login. Temporary credential-transfer test code and files were removed. Review-server chat captures still need the missing review username/password; App Privacy still needs confirmation of whether Kitta operates or receives data from a Memoh service. No new screenshots were uploaded during this layout pass.
+Validation: simulator build, two focused geometry tests (all four arrangements, 1–8 panes, narrow/keyboard/iPad sizes), localization coverage, live iPad pane add/remove and two independent real conversations, and iPhone portrait split with the software keyboard. The review server's desktop connection still disconnects; this layout change does not claim to resolve that server connection problem.
+
+The iPhone 17 Pro Max and iPad Pro 13-inch simulators have both authorized official and review accounts. Five MyGO agents with five-star card icons and real conversations are configured on the review server. Temporary credential-transfer test code was removed. App Privacy still needs confirmation of whether Kitta operates or receives data from a Memoh service. App Store review has not been submitted.

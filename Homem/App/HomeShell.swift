@@ -1,15 +1,19 @@
 import SwiftUI
 
 struct HomeShell: View {
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(AppStore.self) private var store
     @Environment(\.scenePhase) private var scenePhase
     var body: some View {
         TabView {
-            ConversationsView().tabItem { Label("Chats".localized, systemImage: "bubble.left.and.bubble.right") }
-            NavigationStack { AgentsView() }.tabItem { Label("Agents".localized, systemImage: "square.grid.2x2") }
-            NavigationStack { LibraryView() }.tabItem { Label("Library".localized, systemImage: "books.vertical") }
-            NavigationStack { SettingsView() }.tabItem { Label("Settings".localized, systemImage: "slider.horizontal.3") }
+            ConversationsView().environment(\.horizontalSizeClass, sizeClass).tabItem { Label("Chats".localized, systemImage: "bubble.left.and.bubble.right") }
+            NavigationStack { AgentsView() }.environment(\.horizontalSizeClass, sizeClass).tabItem { Label("Agents".localized, systemImage: "square.grid.2x2") }
+            NavigationStack { LibraryView() }.environment(\.horizontalSizeClass, sizeClass).tabItem { Label("Library".localized, systemImage: "books.vertical") }
+            NavigationStack { SettingsView() }.environment(\.horizontalSizeClass, sizeClass).tabItem { Label("Settings".localized, systemImage: "slider.horizontal.3") }
         }
+        // Keep app navigation below the workspace on iPad. Restore the real size
+        // class inside each tab so split views and adaptive grids remain native.
+        .environment(\.horizontalSizeClass, .compact)
         .task { await store.reload() }
         .onChange(of: scenePhase) { _, value in if value == .active { Task { await store.reload() } } }
         .alert("Sign in again".localized, isPresented: Binding(get: { store.api?.unauthorized == true }, set: { _ in })) {
