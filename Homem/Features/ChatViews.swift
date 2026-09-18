@@ -301,7 +301,7 @@ struct ChatContent: View {
                                 }
                             }
                     }
-                    if model.active { HStack(spacing: 8) { ProgressView().controlSize(.small); Text(model.runtime.run["status"] == "waiting_decision" ? "Waiting for your response".localized : "Working…".localized).font(.caption).foregroundStyle(.secondary) } }
+                    if model.active { HStack(spacing: 8) { Image(systemName: "sparkle").foregroundStyle(accent).symbolEffect(.pulse, options: .repeating); Text(model.runtime.run["status"] == "waiting_decision" ? "Waiting for your response".localized : "Working…".localized).font(.caption).foregroundStyle(.secondary) } }
                     if let error = model.error { ErrorBanner(message: error) { Task { await model.loadHistory() } } }
                     Color.clear.frame(height: 1).id("bottom")
                 }.padding(22).frame(maxWidth: 840).frame(maxWidth: .infinity)
