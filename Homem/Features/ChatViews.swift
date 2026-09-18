@@ -189,6 +189,7 @@ private struct AgentChatWorkspace: View {
                             if workspace.snapshot.conversation?.sessionID == currentRoute.sessionID { workspace.snapshot.conversation?.firstMessage = nil }
                         }).id(currentRoute.sessionID)
         }
+        .background { Theme.canvas.ignoresSafeArea(.container, edges: .bottom) }
         .navigationTitle(route.title).navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(Theme.canvas, for: .navigationBar).toolbarBackground(.visible, for: .navigationBar)
         .toolbar(workspace.snapshot.panes.isEmpty ? .visible : .hidden, for: .tabBar)
@@ -340,7 +341,7 @@ struct ChatContent: View {
                     Button { Task { if await model.send(attachments: attachments) { attachments = []; composerFocused = false } } } label: { Image(systemName: "arrow.up").font(.body.weight(.semibold)).foregroundStyle(.white).frame(width: 40, height: 40).background(accent, in: Circle()) }
                         .disabled(model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && attachments.isEmpty).accessibilityLabel("Send message".localized).accessibilityIdentifier("sendMessage")
                 }
-            }.padding(.horizontal, 10).padding(.vertical, 5).background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 24)).overlay(RoundedRectangle(cornerRadius: 24).stroke(.quaternary))
+            }.padding(.horizontal, 10).padding(.vertical, 5).background(Theme.surface, in: RoundedRectangle(cornerRadius: 24)).overlay(RoundedRectangle(cornerRadius: 24).stroke(Theme.separator, lineWidth: 0.5))
             HStack {
                 Menu {
                     Picker("Model".localized, selection: $model.modelID) { Text("Agent default".localized).tag(""); ForEach(model.models) { Text($0.title).tag($0.id) } }
@@ -353,7 +354,10 @@ struct ChatContent: View {
                         .accessibilityLabel("Hide keyboard".localized).accessibilityIdentifier("hideChatKeyboard")
                 }
             }.padding(.horizontal, 6)
-        }.padding(.horizontal, 16).padding(.vertical, 10).frame(maxWidth: 840).frame(maxWidth: .infinity).background(.bar)
+        }.padding(.horizontal, 16).padding(.vertical, 10).frame(maxWidth: 840).frame(maxWidth: .infinity)
+            // A solid semantic surface avoids material changing color above the
+            // keyboard and joins the home-indicator area without a second band.
+            .background(Theme.canvas)
     }
     func attach(_ url: URL) throws {
         attachments.append(try ChatAttachment.read(url, existingCount: attachments.count))
