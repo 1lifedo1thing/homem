@@ -111,7 +111,7 @@ struct AgentDetailView: View {
             }
             if manage {
                 Section("Settings".localized) {
-                    NavigationLink { SettingsDocumentView(title: "Agent settings", path: base + "/settings", template: "/bots/{bot_id}/settings") } label: { Label("Model & behavior".localized, systemImage: "slider.horizontal.3") }
+                    NavigationLink { AgentSettingsView(botID: bot.id) } label: { Label("Model & behavior".localized, systemImage: "slider.horizontal.3") }
                     ResourceLink(title: "Agents", icon: "cpu", spec: .bot(bot.id, "agents", title: "Agent runtimes"))
                     NavigationLink { ChannelsView(botID: bot.id) } label: { Label("Channels".localized, systemImage: "antenna.radiowaves.left.and.right") }
                     ResourceLink(title: "Connected tools", icon: "point.3.connected.trianglepath.dotted", spec: .mcp(bot.id))
@@ -312,5 +312,164 @@ struct AgentResourceSummary: View {
         guard !value.isNull else { return "—" }
         if limit && value.number <= 0 { return "∞" }
         return ByteCountFormatter.string(fromByteCount: Int64(max(0, min(value.number, Double(Int64.max / 2)))), countStyle: .memory)
+    }
+}
+
+struct AgentSettingsView: View {
+    @Environment(AppStore.self) private var store
+    let botID: String
+    @State private var original: JSONValue = .null
+    @State private var draft: JSONValue = .null
+    @State private var catalogs: [String: [JSONValue]] = [:]
+    @State private var catalogErrors: [String: String] = [:]
+    @State private var loadingChoices = false
+    @State private var saving = false
+    @State private var error: String?
+    private var schema: JSONValue { SchemaCatalog.shared.schema("/bots/{bot_id}/settings", "PUT") }
+    private var keys: Set<String> { Set(schema["properties"].object.keys) }
+    private var changes: JSONValue { AgentSettingsFields.changes(from: original, to: draft, allowed: keys) }
+    var body: some View {
+        Form {
+            if original.isNull {
+                if error == nil { ProgressView() }
+            } else {
+                ForEach(AgentSettingsFields.groups, id: \.0) { group in
+                    Section(group.0.localized) {
+                        ForEach(group.1.filter { keys.contains($0) }, id: \.self) { key in settingsField(key) }
+                    }
+                }
+                // Preserve forward compatibility without presenting server metadata as editable settings.
+                let known = Set(AgentSettingsFields.groups.flatMap(\.1))
+                let remaining = keys.subtracting(known).filter { !original[$0].isNull }.sorted()
+                if !remaining.isEmpty { Section("Other settings".localized) { ForEach(remaining, id: \.self) { settingsField($0) } } }
+            }
+            if let error { ErrorBanner(message: error) }
+            if original.isNull && error != nil { Button("Retry".localized) { Task { await load() } } }
+        }
+        .navigationTitle("Agent settings".localized).navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                Button { Task { await save() } } label: {
+                    if saving { ProgressView() } else { Text("Save".localized).fontWeight(.semibold) }
+                }.disabled(saving || changes.object.isEmpty)
+            }
+            if !changes.object.isEmpty {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { draft = original; error = nil } label: { Image(systemName: "arrow.uturn.backward") }
+                        .accessibilityLabel("Discard changes".localized).disabled(saving)
+                }
+            }
+        }
+        .disabled(saving)
+        .task { if original.isNull { await load() } }
+    }
+    @ViewBuilder private func settingsField(_ key: String) -> some View {
+        let label = AgentSettingsFields.label(key).localized
+        if let source = AgentSettingsFields.source(key, botID: botID) {
+            let rows = (catalogs[source] ?? []).map { row in
+                var named = row
+                if let providerSource = AgentSettingsFields.providerSource(source),
+                   let provider = catalogs[providerSource]?.first(where: { $0["id"] == row["provider_id"] }),
+                   let providerName = provider.text("name", "display_name", "provider").nonEmpty {
+                    named["display_name"] = .string(row.displayTitle + " · " + providerName)
+                    if provider["enable"] == false { named["enable"] = false }
+                }
+                return named
+            }
+            let options = AgentSettingsFields.options(rows, key: key, selected: draft[key].string)
+            NavigationLink {
+                AgentSettingPicker(title: label, options: options, selected: Binding(get: { draft[key].string }, set: { draft[key] = .string($0) }), loading: loadingChoices, error: catalogErrors[source], retry: { Task { await loadChoices() } })
+            } label: {
+                LabeledContent(label) {
+                    Text(draft[key].string.isEmpty ? "None".localized : options.first { $0.id == draft[key].string }?.title ?? (loadingChoices ? "Loading…".localized : "Unavailable selection".localized))
+                        .foregroundStyle(.secondary).lineLimit(2).multilineTextAlignment(.trailing)
+                }
+            }.accessibilityIdentifier("agentSetting_" + key)
+        } else {
+            let fieldSchema = SchemaCatalog.shared.resolve(schema["properties"][key])
+            SchemaField(name: key, schema: fieldSchema, required: false, value: Binding(get: { draft[key] }, set: { draft[key] = $0 }), displayName: label, showDescription: false)
+                .accessibilityIdentifier("agentSetting_" + key)
+        }
+    }
+    private func load() async {
+        guard let api = store.api else { return }
+        do {
+            let value = try await api.call("/bots/\(botID.pathComponent)/settings")
+            original = value; draft = value; error = nil
+            await loadChoices()
+        } catch { self.error = error.localizedDescription }
+    }
+    private func loadChoices() async {
+        guard let api = store.api, !loadingChoices else { return }
+        loadingChoices = true; defer { loadingChoices = false }
+        let references = Set(keys.compactMap { AgentSettingsFields.source($0, botID: botID) })
+        let sources = references.union(references.compactMap(AgentSettingsFields.providerSource))
+        await withTaskGroup(of: (String, [JSONValue]?, String?).self) { group in
+            for source in sources {
+                group.addTask {
+                    do { return (source, try await api.call(source).items, nil) }
+                    catch { return (source, nil, error.localizedDescription) }
+                }
+            }
+            for await (source, rows, failure) in group {
+                if let rows { catalogs[source] = rows }
+                catalogErrors[source] = failure
+            }
+        }
+    }
+    private func save() async {
+        guard let api = store.api else { return }
+        let patch = changes
+        guard !patch.object.isEmpty else { return }
+        saving = true; error = nil; defer { saving = false }
+        do {
+            try SchemaCatalog.shared.validate(patch, schema: schema)
+            let result = try await api.call("/bots/\(botID.pathComponent)/settings", method: "PUT", body: patch)
+            // Some compatible servers return no document for successful writes.
+            if result.object.isEmpty { for (key, value) in patch.object { original[key] = value }; draft = original }
+            else { original = result; draft = result }
+        } catch { self.error = error.localizedDescription }
+    }
+}
+
+private struct AgentSettingPicker: View {
+    @Environment(\.dismiss) private var dismiss
+    let title: String
+    let options: [Record]
+    @Binding var selected: String
+    let loading: Bool
+    let error: String?
+    let retry: () -> Void
+    @State private var search = ""
+    var body: some View {
+        List {
+            Section { choice("None".localized, id: "") }
+            if !selected.isEmpty && !options.contains(where: { $0.id == selected }) {
+                Section { Label("Unavailable selection".localized, systemImage: "checkmark").foregroundStyle(.secondary) }
+            }
+            Section {
+                ForEach(options.filter { search.isEmpty || ($0.title + " " + $0.subtitle).localizedCaseInsensitiveContains(search) }) { option in
+                    choice(option.title, id: option.id, subtitle: option.value.text("provider", "model_id", "runtime"), disabled: option.value["enable"] == false || option.value["enabled"] == false)
+                }
+            }
+            if loading { ProgressView() }
+            else if let error { ErrorBanner(message: error, retry: retry) }
+            else if options.isEmpty { Text("No options available".localized).foregroundStyle(.secondary) }
+        }.navigationTitle(title).navigationBarTitleDisplayMode(.inline).searchable(text: $search)
+    }
+    private func choice(_ name: String, id: String, subtitle: String = "", disabled: Bool = false) -> some View {
+        Button {
+            selected = id; dismiss()
+        } label: {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(name).foregroundStyle(.primary)
+                    if disabled { Text("Disabled".localized).font(.caption).foregroundStyle(.secondary) }
+                    else if !subtitle.isEmpty && subtitle != name { Text(subtitle).font(.caption).foregroundStyle(.secondary) }
+                }
+                Spacer()
+                if selected == id { Image(systemName: "checkmark").fontWeight(.semibold) }
+            }
+        }.disabled(disabled && selected != id)
     }
 }

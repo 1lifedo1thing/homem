@@ -2,6 +2,28 @@ import XCTest
 @testable import Homem
 
 final class CoreTests: XCTestCase {
+    func testAgentSettingsChangesPreserveFalseAndExplicitClears() {
+        let original: JSONValue = ["search_provider_id": "old-provider", "display_enabled": true, "language": "en", "read_only_id": "unchanged"]
+        let draft: JSONValue = ["search_provider_id": "", "display_enabled": false, "language": "en", "read_only_id": "changed", "chat_model_id": .null]
+        let patch = AgentSettingsFields.changes(from: original, to: draft, allowed: ["search_provider_id", "display_enabled", "language", "chat_model_id"])
+        XCTAssertEqual(patch, ["search_provider_id": "", "display_enabled": false])
+        XCTAssertTrue(AgentSettingsFields.changes(from: original, to: original, allowed: ["display_enabled"]).object.isEmpty)
+    }
+    func testAgentSettingsPickerKeepsSelectedDisabledModelAndFiltersIncompatibleModels() {
+        let rows: [JSONValue] = [
+            ["id": "chat", "name": "Chat model", "type": "chat", "enable": true],
+            ["id": "image", "name": "Image model", "type": "chat", "config": ["compatibilities": ["image-output"]]],
+            ["id": "embedding", "name": "Embedding", "type": "embedding"],
+            ["id": "disabled", "name": "Previous model", "type": "chat", "enable": false],
+            ["id": "other-disabled", "name": "Disabled model", "type": "chat", "enable": false]
+        ]
+        XCTAssertEqual(Set(AgentSettingsFields.options(rows, key: "chat_model_id", selected: "disabled").map(\.id)), ["chat", "image", "disabled"])
+        XCTAssertEqual(AgentSettingsFields.options(rows, key: "image_model_id", selected: "").map(\.id), ["image"])
+        XCTAssertEqual(AgentSettingsFields.source("search_provider_id", botID: "bot"), "/search-providers")
+        XCTAssertEqual(AgentSettingsFields.source("default_bot_agent_id", botID: "bot"), "/bots/bot/agents")
+        XCTAssertEqual(AgentSettingsFields.source("tts_model_id", botID: "bot"), "/speech-models")
+    }
+
     func testAvatarSourcesSupportOfficialAndCustomHosts() {
         let base = URL(string: "https://selfhost.example/api")!
         XCTAssertEqual(AvatarSource.url("/avatars/one.png", baseURL: base)?.absoluteString, "https://selfhost.example/avatars/one.png")

@@ -79,7 +79,9 @@ struct SchemaField: View {
     let schema: JSONValue
     var required: Bool
     @Binding var value: JSONValue
-    private var label: String { name.fieldLabel.localized + (required ? " *" : "") }
+    var displayName: String? = nil
+    var showDescription = true
+    private var label: String { (displayName ?? name.fieldLabel.localized) + (required ? " *" : "") }
     private var stringBinding: Binding<String> { Binding(get: { value.isNull ? "" : value.scalar }, set: { value = $0.isEmpty ? .null : .string($0) }) }
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -95,14 +97,26 @@ struct SchemaField: View {
                     TextField("Default".localized, text: Binding(get: { value.isNull ? "" : value.scalar }, set: { value = $0.isEmpty ? .null : Double($0).map(JSONValue.number) ?? .string($0) }))
                         .keyboardType(.numbersAndPunctuation).multilineTextAlignment(.trailing)
                 }
+            } else if !schema["properties"].object.isEmpty {
+                DisclosureGroup(label) {
+                    ForEach(SchemaCatalog.shared.fields(schema), id: \.self) { key in
+                        AnyView(SchemaField(name: key, schema: SchemaCatalog.shared.resolve(schema["properties"][key]), required: schema["required"].array.contains(.string(key)), value: Binding(get: { value[key] }, set: { value[key] = $0 }), showDescription: showDescription))
+                    }
+                }
             } else if ["object", "array"].contains(schema["type"].string) || !schema["properties"].object.isEmpty || schema.object.isEmpty {
                 DisclosureGroup(label) { JSONInput(value: $value) }
             } else if name.contains("key") && !name.hasSuffix("_id") || name.contains("password") || name.contains("secret") || name == "token" {
                 SecureField(label, text: stringBinding).textInputAutocapitalization(.never).autocorrectionDisabled()
+            } else if displayName != nil {
+                LabeledContent(label) {
+                    TextField("Default".localized, text: stringBinding, axis: .vertical)
+                        .multilineTextAlignment(.trailing).lineLimit(1...4)
+                        .textInputAutocapitalization(.never).autocorrectionDisabled()
+                }
             } else {
                 TextField(label, text: stringBinding, axis: .vertical).lineLimit(1...8).textInputAutocapitalization(.never).autocorrectionDisabled()
             }
-            if !schema["description"].string.isEmpty { Text(schema["description"].string).font(.caption2).foregroundStyle(.secondary) }
+            if showDescription && !schema["description"].string.isEmpty { Text(schema["description"].string).font(.caption2).foregroundStyle(.secondary) }
         }.padding(.vertical, 2)
     }
 }
