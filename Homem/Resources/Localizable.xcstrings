@@ -11826,6 +11826,34 @@
           }
         }
       }
+    },
+    "Chat + desktop + terminal": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat + desktop + terminal"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "聊天 + 桌面 + 终端"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat + escritorio + terminal"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "チャット + デスクトップ + ターミナル"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

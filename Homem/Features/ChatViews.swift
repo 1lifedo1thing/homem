@@ -16,8 +16,9 @@ struct ConversationsView: View {
     @State private var rename: Record?
     @State private var newTitle = ""
     @State private var deletion: Record?
+    @State private var columnVisibility: NavigationSplitViewVisibility = .automatic
     var body: some View {
-        NavigationSplitView {
+        NavigationSplitView(columnVisibility: $columnVisibility) {
             List {
                 if let error = error ?? store.error { ErrorBanner(message: error) { Task { await load() } } }
                 Section("Recent".localized) {
@@ -82,6 +83,7 @@ struct ConversationsView: View {
                     Text(AppLocalization.format("“%@” will be permanently deleted.", record.title))
                 }
         } detail: { EmptyState(title: "No conversations", symbol: "bubble.left.and.bubble.right", detail: "Choose a conversation or start a new one.") }
+        .environment(\.expandChatWorkspace, { columnVisibility = .detailOnly })
     }
     func load(more: Bool = false) async {
         guard let bot = store.selectedBot, let api = store.api else { return }
@@ -116,6 +118,7 @@ struct ChatScreen: View {
 struct ChatContent: View {
     @Environment(AppStore.self) private var store
     @Environment(\.appAccent) private var accent
+    @Environment(\.expandChatWorkspace) private var expandWorkspace
     @State var model: ChatModel
     let destination: ChatDestination
     @Environment(\.scenePhase) private var scenePhase
@@ -128,19 +131,32 @@ struct ChatContent: View {
     @State private var voice = VoiceRecorder()
     @State private var sentFirstMessage = false
     @State private var workspacePane: ChatWorkspaceTool?
+    @State private var showsBothTools = false
     @State private var workspaceFraction = 0.44
+    @State private var chatColumnFraction = 0.45
+    @State private var desktopFraction = 0.55
     @State private var dragStartFraction: Double?
     var body: some View {
         GeometryReader { geometry in
-            VStack(spacing: 0) {
-                if let workspacePane {
-                    ChatWorkspacePane(api: model.api, botID: destination.botID, tool: workspacePane,
-                                      select: { self.workspacePane = $0 }, close: { self.workspacePane = nil })
-                        .frame(height: ChatSplitLayout.paneHeight(available: geometry.size.height, fraction: workspaceFraction))
-                        .clipped()
-                    splitDivider(available: geometry.size.height)
+            if ChatSplitLayout.usesColumns(width: geometry.size.width), workspacePane != nil {
+                let available = geometry.size.width - 24
+                HStack(spacing: 0) {
+                    transcript
+                        .frame(width: available * ChatSplitLayout.columnFraction(chatColumnFraction, available: available))
+                    ChatPaneDivider(fraction: $chatColumnFraction, vertical: true, available: available)
+                    workspaceTools(height: geometry.size.height, allowsBoth: true)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity).clipped()
                 }
-                transcript
+            } else {
+                VStack(spacing: 0) {
+                    if workspacePane != nil {
+                        workspaceTools(height: geometry.size.height, allowsBoth: false)
+                            .frame(height: ChatSplitLayout.paneHeight(available: geometry.size.height, fraction: workspaceFraction))
+                            .clipped()
+                        splitDivider(available: geometry.size.height)
+                    }
+                    transcript
+                }
             }
         }
         .coordinateSpace(name: "chatSplit")
@@ -149,9 +165,16 @@ struct ChatContent: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
-                    Button("Chat only".localized, systemImage: "bubble.left") { workspacePane = nil }
+                    Button("Chat only".localized, systemImage: "bubble.left") { workspacePane = nil; showsBothTools = false }
+                        .keyboardShortcut("0", modifiers: [.command, .option])
                     ForEach(ChatWorkspaceTool.allCases) { tool in
-                        Button(tool.chatTitle.localized, systemImage: tool.symbol) { composerFocused = false; workspacePane = tool }
+                        Button(tool.chatTitle.localized, systemImage: tool.symbol) { composerFocused = false; showsBothTools = false; workspacePane = tool; expandWorkspace() }
+                            .keyboardShortcut(tool == .desktop ? "1" : "2", modifiers: [.command, .option])
+                    }
+                    if UIDevice.current.userInterfaceIdiom == .pad || ProcessInfo.processInfo.isMacCatalystApp {
+                        Button("Chat + desktop + terminal".localized, systemImage: "rectangle.split.2x2") {
+                            composerFocused = false; workspacePane = .desktop; showsBothTools = true; expandWorkspace()
+                        }.keyboardShortcut("3", modifiers: [.command, .option])
                     }
                 } label: { Image(systemName: workspacePane == nil ? "rectangle.split.1x2" : "rectangle.split.1x2.fill") }
                     .accessibilityLabel("Split view".localized).accessibilityIdentifier("chatSplitView")
@@ -186,6 +209,27 @@ struct ChatContent: View {
             Button("Cancel".localized, role: .cancel) { editTurn = nil }
         }
         .navigationDestination(item: $forked) { ChatScreen(destination: $0) }
+    }
+    @ViewBuilder private func workspaceTools(height: CGFloat, allowsBoth: Bool) -> some View {
+        let both = showsBothTools && allowsBoth
+        VStack(spacing: 0) {
+            if both {
+                workspaceTool(.desktop, both: true)
+                    .frame(height: max(0, height - 24) * ChatSplitLayout.fraction(desktopFraction))
+                    .clipped()
+                ChatPaneDivider(fraction: $desktopFraction, vertical: false, available: max(0, height - 24))
+                workspaceTool(.terminal, both: true).frame(maxHeight: .infinity).clipped()
+            } else if let workspacePane {
+                workspaceTool(workspacePane, both: false)
+            }
+        }
+    }
+    private func workspaceTool(_ tool: ChatWorkspaceTool, both: Bool) -> some View {
+        ChatWorkspacePane(api: model.api, botID: destination.botID, tool: tool, allowsSelection: !both,
+                          select: { workspacePane = $0 }, close: {
+            if both { workspacePane = tool == .desktop ? .terminal : .desktop; showsBothTools = false }
+            else { workspacePane = nil; showsBothTools = false }
+        }).id(tool)
     }
     private func splitDivider(available: CGFloat) -> some View {
         Capsule().fill(.tertiary).frame(width: 32, height: 4)

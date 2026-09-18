@@ -154,6 +154,19 @@ final class UserInputAnswerTests: XCTestCase {
 }
 
 final class ChatSplitLayoutTests: XCTestCase {
+    func testIPadColumnsKeepBothPanesUsableAndNarrowWindowsStack() {
+        XCTAssertFalse(ChatSplitLayout.usesColumns(width: 430))
+        XCTAssertFalse(ChatSplitLayout.usesColumns(width: 600))
+        XCTAssertTrue(ChatSplitLayout.usesColumns(width: 700))
+        XCTAssertTrue(ChatSplitLayout.usesColumns(width: 1032))
+        for width: CGFloat in [676, 1008, 1352] {
+            for proposed in [-1.0, 0.45, 2.0] {
+                let fraction = ChatSplitLayout.columnFraction(proposed, available: width)
+                XCTAssertGreaterThanOrEqual(width * fraction, 300 - 0.001)
+                XCTAssertGreaterThanOrEqual(width * (1 - fraction), 300 - 0.001)
+            }
+        }
+    }
     func testPortraitSplitKeepsChatVisibleWithKeyboardAndDividerLimits() {
         for height: CGFloat in [320, 460, 740] {
             for fraction in [-1.0, 0.44, 2.0] {

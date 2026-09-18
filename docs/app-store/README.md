@@ -38,3 +38,11 @@ Validation: iPhone simulator build and focused token/date/auth/file regression t
 No App Store review submission or release was performed.
 
 Implementation references: Apple’s [share-extension activation keys](https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/AppExtensionKeys.html) and [extension data-handling guidance](https://developer.apple.com/library/archive/documentation/General/Conceptual/ExtensibilityPG/ExtensionScenarios.html).
+
+## iPad workspace layouts
+
+The chat split-view menu supports chat on the left with desktop or terminal on the right, or desktop above terminal in the right column. Opening a workspace layout collapses the conversation sidebar. Both dividers resize and support VoiceOver adjustment; narrow windows fall back to a vertical split. Desktop opens in view-only mode. Keyboard shortcuts: Option-Command-0 for chat, 1 for desktop, 2 for terminal, 3 for both tools.
+
+Validation: iPad simulator build and two focused split-layout tests passed. Live toolbar interaction could not be completed because the desktop automation could not reach the simulator window coordinates; three-pane screenshot verification remains pending.
+
+The iPhone 17 Pro Max and iPad Pro 13-inch simulators now have the existing authorized official login. Temporary credential-transfer test code and files were removed. Review-server chat captures still need the missing review username/password; App Privacy still needs confirmation of whether Kitta operates or receives data from a Memoh service. No new screenshots were uploaded during this layout pass.
