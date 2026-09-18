@@ -1,6 +1,8 @@
-# Homem privacy policy — draft for publication
+# Homem privacy policy
 
-This draft describes the current client implementation. Before publication, supply a public support/privacy contact and confirm the service-side data practices and App Store privacy declarations.
+Last updated: September 18, 2026.
+
+This policy describes how the Homem client handles your information. The servers and services you choose have their own policies, as explained below.
 
 ## About Homem
 
@@ -32,8 +34,12 @@ You can disconnect or remove saved accounts, choose a different server, and mana
 
 ## Contact
 
-Publication pending: add Kitta Ltd's public support/privacy contact or contact-page URL here.
+For questions about Homem or this policy, email [support@ieb.app](mailto:support@ieb.app). For information held by your selected Memoh server or integrations, contact that service’s operator. If you contact support, we receive the information you include and use it to respond to your request. Do not include passwords, tokens, verification codes, or private conversations.
 
 ## Sharing from other apps
 
 When you choose Homem in the iOS share sheet, the extension temporarily copies the files you selected. You choose the account, workspace, and agent before saving. The extension reads your existing login from Homem’s Keychain access group and sends the files to that selected server. Temporary copies are removed when you finish or dismiss the extension; the server copies remain until deleted there. No files are uploaded merely by opening the share sheet.
+
+## Changes
+
+We will update this page when the client’s data practices change. The date above identifies the latest revision.

@@ -8,6 +8,10 @@ App: Homem · `ad.neko.homem` · Apple ID `6812852139` · Kitta Ltd
 
 - Version 1.0 remains **Prepare for Submission**; manual release is selected.
 - English (U.S.), Simplified Chinese, Japanese, and Spanish (Spain): subtitle, promotional text, description, and keywords. Source copy is in `metadata.json`.
+- Promotional text and descriptions now lead with the cloud computer; desktop/terminal access comes before the agent-chat feature. The name, subtitles, keywords, and in-app terminology were not changed in this copy pass.
+- Support URL in all four localizations: https://docs.kitta.co/homem/support/
+- Privacy Policy URL in all four localizations: https://docs.kitta.co/homem/
+- Both public pages are deployed from `kitta-co/privacy-policy` on GitHub Pages (commit `705bb4b`), linked from the docs home page, and use the existing public support contact `support@ieb.app`. Publication copies are in `SUPPORT.md` and `PRIVACY.md`.
 - Primary category Productivity; secondary category Utilities.
 - Copyright: 2026 Kitta Ltd.
 - The user has supplied the review server URL in review notes. Review username and password fields are still blank as of the screenshot capture pass.
@@ -18,7 +22,6 @@ App: Homem · `ad.neko.homem` · Apple ID `6812852139` · Kitta Ltd
 
 - Working review-server credentials; keep the server available throughout review and verify the final sign-in steps.
 - Review contact first/last name, email, and phone number. These were blank and no contact details were invented.
-- Public Support URL and Privacy Policy URL. The GitHub repository is private and cannot serve as the public support page. Draft publication copy is provided in `SUPPORT-DRAFT.md` and `PRIVACY-DRAFT.md`.
 - Confirm server-side retention and provider practices before completing/publishing App Privacy answers. The native client has no advertising/tracking/analytics SDK; this does **not** mean that conversations, uploads, or account data sent to the selected server are never collected.
 - Finish/verify age rating and content-rights declarations. The age-rating questionnaire was being edited interactively and was left alone.
 - Complete review-server chat list/conversation screenshots and iPad screenshots. The official-server captures exclude private chats, credentials, and account details.

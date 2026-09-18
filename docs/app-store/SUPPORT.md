@@ -1,4 +1,4 @@
-# Homem support — draft for publication
+# Homem support
 
 Homem is an independent native Memoh client for iPhone and iPad. It supports the official Memoh service and compatible third-party servers.
 
@@ -16,7 +16,7 @@ You can save multiple accounts on different servers. Removing an account from Ho
 
 ## Contact support
 
-Publication pending: add a monitored public support email or contact form. Reports should include the Homem version, iOS version, affected feature, and any non-sensitive error text. Do not send passwords, access tokens, verification codes, or private conversation content.
+Email [support@ieb.app](mailto:support@ieb.app) for help with Homem. Reports should include the Homem version, iOS version, affected feature, and any non-sensitive error text. Do not send passwords, access tokens, verification codes, or private conversation content.
 
 ## Save a file from another app
 
