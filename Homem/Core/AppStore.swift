@@ -6,6 +6,15 @@ import Observation
     var savedAccounts: [SavedAccount]
     var activeAccountID: String?
     var connectionID = UUID()
+    @ObservationIgnored private var agentWorkspaces: [String: AgentWorkspaceState] = [:]
+    func chatWorkspace(for botID: String) -> AgentWorkspaceState {
+        let scope = api?.draftScope ?? "disconnected"
+        let key = scope + "|" + botID
+        if let existing = agentWorkspaces[key] { return existing }
+        let state = AgentWorkspaceState(scope: scope, botID: botID)
+        agentWorkspaces[key] = state
+        return state
+    }
     var modelCatalogRevision = 0
     var workspaces: [JSONValue] = []
     var api: APIClient?

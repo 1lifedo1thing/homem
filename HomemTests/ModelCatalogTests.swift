@@ -7,6 +7,55 @@ import XCTest
         let config = URLSessionConfiguration.ephemeral; config.protocolClasses = [StubURLProtocol.self]
         return APIClient(baseURL: URL(string: "https://models.invalid/api")!, session: URLSession(configuration: config))
     }
+    func testMarketplaceSearchPagesAndRetriesWithoutLosingLoadedApps() async throws {
+        let catalog = MarketplaceCatalog(api: client())
+        var pages: [String] = []
+        var fail = true
+        StubURLProtocol.handler = { request in
+            let query = Dictionary(uniqueKeysWithValues: URLComponents(url: request.url!, resolvingAgainstBaseURL: false)!.queryItems!.map { ($0.name, $0.value!) })
+            XCTAssertEqual(query["q"], "calendar")
+            let page = query["page"]!; pages.append(page)
+            if page == "2" && fail { fail = false; return (503, Data("{}".utf8)) }
+            let response: JSONValue = ["page": .number(Double(page)!), "limit": 2, "total": 3, "data": page == "1" ? [["registry_id": "one", "app_id": "calendar", "name": "Calendar"], ["registry_id": "two", "app_id": "calendar", "name": "Other calendar"]] : [["registry_id": "one", "app_id": "notes", "name": "Notes"]]]
+            return (200, try response.encoded)
+        }
+        await catalog.search(" calendar ", debounce: false)
+        XCTAssertEqual(catalog.records.count, 2)
+        XCTAssertTrue(catalog.hasMore)
+        await catalog.loadMore()
+        XCTAssertNotNil(catalog.error)
+        XCTAssertEqual(catalog.nextPage, 2)
+        XCTAssertEqual(catalog.records.count, 2)
+        await catalog.loadMore()
+        XCTAssertEqual(catalog.records.count, 3)
+        XCTAssertFalse(catalog.hasMore)
+        XCTAssertEqual(pages, ["1", "2", "2"])
+    }
+    func testWorkspacePersistenceKeepsPanesSeparateByAgentAndAccount() throws {
+        let suite = "WorkspaceTests-" + UUID().uuidString
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let a = AgentWorkspaceState(scope: "account-a/team-a", botID: "a", defaults: defaults)
+        a.snapshot.conversation = ChatDestination(botID: "a", sessionID: "one", title: "One", botName: "A", firstMessage: NewChatDraft(text: "must not resend", attachments: [], targetID: ""))
+        let files = WorkspacePane(tool: .files, botID: "a", directory: "/data/projects")
+        let chat = WorkspacePane(tool: .chat, botID: "b", conversation: ChatDestination(botID: "b", sessionID: "two", title: "Two", botName: "B"))
+        a.snapshot.panes = [files, chat]
+        a.snapshot.columnFraction = 0.6
+        a.snapshot.move(a.snapshot.primaryID, to: chat.id)
+        let restored = AgentWorkspaceState(scope: "account-a/team-a", botID: "a", defaults: defaults)
+        XCTAssertEqual(restored.snapshot.primaryIndex, 2)
+        XCTAssertEqual(restored.snapshot.panes.map(\.id), [files.id, chat.id])
+        XCTAssertEqual(restored.snapshot.panes[0].directory, "/data/projects")
+        XCTAssertEqual(restored.snapshot.panes[1].conversation?.sessionID, "two")
+        XCTAssertNil(restored.snapshot.conversation?.firstMessage)
+        XCTAssertEqual(restored.snapshot.columnFraction, 0.6)
+        restored.snapshot.conversation = ChatDestination(botID: "a", sessionID: "three", title: "Three", botName: "A")
+        XCTAssertEqual(restored.snapshot.panes.count, 2)
+        restored.snapshot.remove(files.id)
+        XCTAssertEqual(restored.snapshot.primaryIndex, 1)
+        XCTAssertTrue(AgentWorkspaceState(scope: "account-a/team-a", botID: "b", defaults: defaults).snapshot.panes.isEmpty)
+        XCTAssertTrue(AgentWorkspaceState(scope: "account-b/team-a", botID: "a", defaults: defaults).snapshot.panes.isEmpty)
+    }
     func testGroupsKeepProvidersDistinctAndManagedCatalogRestrictions() {
         let catalog = ModelCatalog(api: client())
         catalog.providers = [Record(value: ["id": "a", "name": "Same", "client_type": "openai-codex"]), Record(value: ["id": "b", "name": "Same", "client_type": "openai-responses"])]

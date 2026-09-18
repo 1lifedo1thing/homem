@@ -1,7 +1,11 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-struct ChatDestination: Hashable { var botID: String; var sessionID: String; var title: String; var botName: String; var firstMessage: NewChatDraft? = nil }
+struct ChatDestination: Hashable, Codable {
+    var botID: String; var sessionID: String; var title: String; var botName: String
+    var firstMessage: NewChatDraft? = nil
+    enum CodingKeys: String, CodingKey { case botID, sessionID, title, botName }
+}
 
 struct ConversationsView: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -18,9 +22,10 @@ struct ConversationsView: View {
     @State private var newTitle = ""
     @State private var deletion: Record?
     @State private var columnVisibility: NavigationSplitViewVisibility = .automatic
+    @State private var compactColumn: NavigationSplitViewColumn = .sidebar
     var body: some View {
-        NavigationSplitView(columnVisibility: $columnVisibility) {
-            List {
+        NavigationSplitView(columnVisibility: $columnVisibility, preferredCompactColumn: $compactColumn) {
+            List(selection: $selection) {
                 if sizeClass == .regular {
                     HStack {
                         Text("Chats".localized).font(.largeTitle.bold()).accessibilityAddTraits(.isHeader)
@@ -67,10 +72,7 @@ struct ConversationsView: View {
                         AgentPickerMenu(selection: Binding(get: { store.selectedBot?.id ?? "" }, set: { store.selectedBotID = $0 }))
                     }
                 }
-                .navigationDestination(for: ChatDestination.self) { route in ChatScreen(destination: route) }
-                .navigationDestination(item: $selection) { route in ChatScreen(destination: route) }
                 .refreshable { await store.reload(); await load() }
-                .task(id: store.selectedBot?.id) { await load() }
                 .overlay { if loading && sessions.isEmpty { ProgressView() } }
                 .sheet(isPresented: $newChat, onDismiss: { Task { await load() } }) {
                     NewConversationView(botID: store.selectedBot?.id ?? "") { route in
@@ -90,8 +92,19 @@ struct ConversationsView: View {
                 } message: { record in
                     Text(AppLocalization.format("“%@” will be permanently deleted.", record.title))
                 }
-        } detail: { EmptyState(title: "No conversations", symbol: "bubble.left.and.bubble.right", detail: "Choose a conversation or start a new one.") }
+        } detail: {
+            if let selection { ChatScreen(destination: selection, showsAgentSwitcher: true).id(selection.botID) }
+            else { EmptyState(title: "No conversations", symbol: "bubble.left.and.bubble.right", detail: "Choose a conversation or start a new one.") }
+        }
         .environment(\.expandChatWorkspace, { columnVisibility = .detailOnly })
+        .onChange(of: selection) { _, value in compactColumn = value == nil ? .sidebar : .detail }
+        .task(id: store.selectedBot?.id) {
+            sessions = []; cursor = ""; error = nil
+            if let bot = store.selectedBot, selection?.botID != bot.id {
+                selection = store.chatWorkspace(for: bot.id).snapshot.conversation
+            }
+            await load()
+        }
     }
     private var composeButton: some View {
         Button { newChat = true } label: { Image(systemName: "square.and.pencil").frame(width: 44, height: 44) }
@@ -101,7 +114,7 @@ struct ConversationsView: View {
     func load(more: Bool = false) async {
         guard let bot = store.selectedBot, let api = store.api else { return }
         let botID = bot.id
-        loading = true; defer { loading = false }
+        loading = true; defer { if store.selectedBot?.id == botID { loading = false } }
         do {
             var query = ["types": "chat,discuss,acp_agent,schedule", "limit": "50"]
             if more { query["cursor"] = cursor }
@@ -110,12 +123,20 @@ struct ConversationsView: View {
             let incoming = value.items.map(Record.init)
             sessions = more ? sessions + incoming.filter { r in !sessions.contains { $0.id == r.id } } : incoming
             cursor = value["next_cursor"].string; error = nil
-        } catch { self.error = error.localizedDescription }
+        } catch { if store.selectedBot?.id == botID && !Task.isCancelled { self.error = error.localizedDescription } }
     }
     func update(_ record: Record, method: String, body: JSONValue? = nil) async {
         guard let botID = record.value["bot_id"].string.nonEmpty ?? store.selectedBot?.id else { return }
-        do { _ = try await store.api?.call("/bots/\(botID.pathComponent)/sessions/\(record.id.pathComponent)", method: method, body: body); await load() }
+        var updated = false
+        do { _ = try await store.api?.call("/bots/\(botID.pathComponent)/sessions/\(record.id.pathComponent)", method: method, body: body); updated = true; await load() }
         catch { self.error = error.localizedDescription }
+        if updated && method == "DELETE", let botID = record.value["bot_id"].string.nonEmpty ?? store.selectedBot?.id {
+            let workspace = store.chatWorkspace(for: botID)
+            if workspace.snapshot.conversation?.sessionID == record.id { workspace.snapshot.conversation = nil; selection = nil }
+            for index in workspace.snapshot.panes.indices where workspace.snapshot.panes[index].conversation?.sessionID == record.id {
+                workspace.snapshot.panes[index].conversation = nil
+            }
+        }
         rename = nil; deletion = nil
     }
 }
@@ -123,8 +144,71 @@ struct ConversationsView: View {
 struct ChatScreen: View {
     @Environment(AppStore.self) private var store
     let destination: ChatDestination
+    var showsAgentSwitcher = false
     var body: some View {
-        if let api = store.api { ChatContent(model: ChatModel(api: api, botID: destination.botID, sessionID: destination.sessionID), destination: destination).id(destination.sessionID) }
+        if let api = store.api {
+            AgentChatWorkspace(workspace: store.chatWorkspace(for: destination.botID), api: api, destination: destination, showsAgentSwitcher: showsAgentSwitcher)
+                .id(destination.botID)
+        }
+    }
+}
+
+private struct AgentChatWorkspace: View {
+    @Environment(AppStore.self) private var store
+    @Environment(\.expandChatWorkspace) private var expandWorkspace
+    @Bindable var workspace: AgentWorkspaceState
+    let api: APIClient
+    let destination: ChatDestination
+    let showsAgentSwitcher: Bool
+    @State private var prepared = false
+    private var route: ChatDestination { workspace.snapshot.conversation ?? destination }
+    var body: some View {
+        WorkspaceCanvas(workspace: $workspace.snapshot, api: api, botID: destination.botID, botName: destination.botName) {
+            let currentRoute = route
+            ChatContent(model: ChatModel(api: api, botID: currentRoute.botID, sessionID: currentRoute.sessionID), destination: currentRoute, allowsWorkspace: false,
+                        onFirstMessageQueued: {
+                            if workspace.snapshot.conversation?.sessionID == currentRoute.sessionID { workspace.snapshot.conversation?.firstMessage = nil }
+                        }).id(currentRoute.sessionID)
+        }
+        .navigationTitle(route.title).navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(Theme.canvas, for: .navigationBar).toolbarBackground(.visible, for: .navigationBar)
+        .toolbar(workspace.snapshot.panes.isEmpty ? .visible : .hidden, for: .tabBar)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Section("Add pane".localized) {
+                        ForEach(ChatWorkspaceTool.allCases) { tool in
+                            Button(tool.title.localized, systemImage: tool.symbol) {
+                                workspace.snapshot.panes.append(WorkspacePane(tool: tool, botID: destination.botID))
+                                expandWorkspace()
+                            }
+                        }
+                    }
+                    if !workspace.snapshot.panes.isEmpty {
+                        Picker("Arrange panes".localized, selection: $workspace.snapshot.arrangement) {
+                            ForEach(WorkspaceArrangement.allCases) { item in Text(item.title.localized).tag(item) }
+                        }
+                        Button("Chat only".localized, systemImage: "bubble.left") { workspace.snapshot.panes = []; workspace.snapshot.primaryIndex = 0 }
+                    }
+                } label: { Image(systemName: "rectangle.badge.plus") }
+                    .accessibilityLabel("Add pane".localized).accessibilityIdentifier("chatSplitView")
+            }
+            if showsAgentSwitcher {
+                ToolbarItem(placement: .topBarTrailing) {
+                    AgentPickerMenu(selection: Binding(get: { destination.botID }, set: { store.selectedBotID = $0 }))
+                }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    NavigationLink("Workspace".localized, systemImage: "folder") { WorkspaceView(botID: destination.botID, name: destination.botName) }
+                    NavigationLink("Session controls".localized, systemImage: "slider.horizontal.3") { OperationBrowser(prefix: "/bots/{bot_id}/sessions/{session_id}", substitutions: ["bot_id": route.botID, "session_id": route.sessionID]) }
+                } label: { Image(systemName: "ellipsis.circle") }
+            }
+        }
+        .onAppear {
+            if !prepared { workspace.snapshot.conversation = destination; prepared = true }
+        }
+        .onChange(of: destination) { _, value in workspace.snapshot.conversation = value }
     }
 }
 
@@ -137,6 +221,7 @@ struct ChatContent: View {
     @State var model: ChatModel
     let destination: ChatDestination
     var allowsWorkspace = true
+    var onFirstMessageQueued: (() -> Void)? = nil
     @Environment(\.scenePhase) private var scenePhase
     @State private var attachments: [JSONValue] = []
     @State private var filePicker = false
@@ -146,57 +231,9 @@ struct ChatContent: View {
     @FocusState private var composerFocused: Bool
     @State private var voice = VoiceRecorder()
     @State private var sentFirstMessage = false
-    @State private var workspacePanes: [WorkspacePane] = []
-    @State private var paneArrangement = WorkspaceArrangement.automatic
-    private var canvas: some View {
-        WorkspaceCanvas(panes: $workspacePanes, arrangement: paneArrangement,
-                        api: model.api, botID: destination.botID, botName: destination.botName) {
-            transcript
-        }
-    }
-    @ViewBuilder private var presentedCanvas: some View {
-        if allowsWorkspace {
-            canvas
-        .toolbar(workspacePanes.isEmpty ? .visible : .hidden, for: .tabBar)
-        .navigationTitle(destination.title).navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(Theme.canvas, for: .navigationBar)
-        .toolbarBackground(.visible, for: .navigationBar)
-        .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Menu {
-                        Section("Add pane".localized) {
-                            ForEach(ChatWorkspaceTool.allCases) { tool in
-                                Button(tool.title.localized, systemImage: tool.symbol) {
-                                    composerFocused = false
-                                    workspacePanes.append(WorkspacePane(tool: tool))
-                                    expandWorkspace()
-                                }
-                            }
-                        }
-                        if !workspacePanes.isEmpty {
-                            Picker("Arrange panes".localized, selection: $paneArrangement) {
-                                ForEach(WorkspaceArrangement.allCases) { item in
-                                    Text(item.title.localized).tag(item)
-                                }
-                            }
-                            Button("Chat only".localized, systemImage: "bubble.left") { workspacePanes.removeAll() }
-                        }
-                    } label: { Image(systemName: "rectangle.badge.plus") }
-                        .accessibilityLabel("Add pane".localized).accessibilityIdentifier("chatSplitView")
-                }
-            ToolbarItem(placement: .topBarTrailing) {
-                Menu {
-                    NavigationLink("Workspace".localized, systemImage: "folder") { WorkspaceView(botID: destination.botID, name: destination.botName) }
-                    NavigationLink("Session controls".localized, systemImage: "slider.horizontal.3") { OperationBrowser(prefix: "/bots/{bot_id}/sessions/{session_id}", substitutions: ["bot_id": destination.botID, "session_id": destination.sessionID]) }
-                    Button("Refresh history".localized, systemImage: "arrow.clockwise") { Task { await model.loadHistory() } }
-                } label: { Image(systemName: "ellipsis.circle") }
-            }
-        }
-            .navigationDestination(item: $forked) { ChatScreen(destination: $0) }
-        } else {
-            canvas.sheet(item: Binding(get: { forked.map(IdentifiedChat.init) }, set: { forked = $0?.route })) { item in
-                NavigationStack { ChatScreen(destination: item.route) }
-            }
+    private var presentedCanvas: some View {
+        transcript.sheet(item: Binding(get: { forked.map(IdentifiedChat.init) }, set: { forked = $0?.route })) { item in
+            NavigationStack { ChatScreen(destination: item.route) }
         }
     }
     var body: some View {
@@ -208,6 +245,7 @@ struct ChatContent: View {
                 model.draft = first.text
                 // Queue before connecting, so navigation or reconnects cannot send twice.
                 _ = await model.send(attachments: first.attachments)
+                onFirstMessageQueued?()
             }
             await model.start()
         }.onDisappear { model.stop(); voice.cancel() }
@@ -251,7 +289,6 @@ struct ChatContent: View {
             .defaultScrollAnchor(.bottom)
             .scrollDismissesKeyboard(.interactively)
             .onChange(of: model.visibleTurns.count) { _, _ in withAnimation { proxy.scrollTo("bottom", anchor: .bottom) } }
-            .onChange(of: workspacePanes.count) { _, _ in proxy.scrollTo("bottom", anchor: .bottom) }
             .onChange(of: composerFocused) { _, focused in if focused { proxy.scrollTo("bottom", anchor: .bottom) } }
             composer
             }

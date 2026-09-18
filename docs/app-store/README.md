@@ -49,3 +49,11 @@ Validation: simulator build, two focused geometry tests (all four arrangements, 
 The iPhone 17 Pro Max and iPad Pro 13-inch simulators have both authorized official and review accounts. Five MyGO agents with five-star card icons and real conversations are configured on the review server. Temporary credential-transfer test code was removed. App Privacy still needs confirmation of whether Kitta operates or receives data from a Memoh service. App Store review has not been submitted.
 
 Terminal follow-up: periodic WebSocket pings keep idle shells alive through proxies, and an explicit keyboard-dismiss button is available in standalone and split panes. Standalone terminals hide the app tab bar. Simulator build passed; live iPad idle/reuse and iPhone keyboard dismissal were verified.
+
+## Supermarket and saved workspaces
+
+Supermarket uses server-side `q`, `page`, and `limit` parameters. It debounces search, loads the next page near the end of the list, deduplicates apps by registry/app ID, and retries failed pages without discarding earlier results. The introductory Apps and skills block has been removed. A live review-server check returned 154 apps, distinct page-one/page-two entries, and Google Calendar for the calendar query.
+
+Each agent has its own saved workspace, scoped to the signed-in account/server/team. Selecting a sidebar conversation replaces the primary chat only. Pane handles support drag-and-drop ordering (including the primary chat); header menus switch pane type or agent and retain accessible move commands. Saved layouts include pane order, arrangement, split sizes, secondary chats, file folders and desktop mode. Connections reopen when the workspace is restored; running terminal processes are not serialized. Unsent first-message payloads are excluded from the saved layout to prevent replay after relaunch.
+
+Validation: simulator build, focused pagination/retry and workspace-persistence/isolation tests, localization coverage, live catalog API checks and iPad sidebar navigation. Simulator coordinate interaction was unavailable for the pane toolbar, so drag-and-drop was not exercised live in this pass.

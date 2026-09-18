@@ -89,21 +89,89 @@ struct LicenseNoticesView: View {
     }
 }
 
+@MainActor @Observable final class MarketplaceCatalog {
+    let api: APIClient
+    var records: [Record] = []
+    var error: String?
+    var loading = false
+    var hasMore = true
+    var nextPage = 1
+    var query = ""
+    var loadedQuery: String?
+    private var generation = UUID()
+    init(api: APIClient) { self.api = api }
+    func search(_ text: String, debounce: Bool = true) async {
+        let request = UUID(); generation = request
+        query = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        records = []; error = nil; nextPage = 1; hasMore = true; loading = false; loadedQuery = nil
+        if debounce {
+            do { try await Task.sleep(for: .milliseconds(300)) } catch { return }
+        }
+        guard request == generation, !Task.isCancelled else { return }
+        await loadMore()
+    }
+    func loadMore() async {
+        guard !loading, hasMore else { return }
+        let request = generation, page = nextPage
+        loading = true; error = nil
+        defer { if request == generation { loading = false } }
+        do {
+            let value = try await api.call("/supermarket/apps", query: ["q": query, "page": String(page), "limit": "30"])
+            guard request == generation, !Task.isCancelled else { return }
+            let incoming = value.items.map { item -> Record in
+                var item = item
+                if !item["app_id"].string.isEmpty { item["id"] = .string(item["registry_id"].string + "/" + item["app_id"].string) }
+                return Record(value: item)
+            }
+            var existing = Set(records.map(\.id))
+            let added = incoming.filter { existing.insert($0.id).inserted }
+            records.append(contentsOf: added)
+            loadedQuery = query
+            nextPage = page + 1
+            let limit = value["limit"].number > 0 ? Int(value["limit"].number) : 30
+            hasMore = !added.isEmpty && (value["total"].isNull ? incoming.count >= limit : page * limit < Int(value["total"].number))
+        } catch { if request == generation && !Task.isCancelled { self.error = error.localizedDescription } }
+    }
+}
+
 struct MarketplaceView: View {
     @Environment(AppStore.self) private var store
-    @State private var records: [Record] = []
-    @State private var error: String?
+    var body: some View {
+        if let api = store.api { MarketplaceList(catalog: MarketplaceCatalog(api: api)).id(store.connectionID) }
+    }
+}
+
+private struct MarketplaceList: View {
+    @State var catalog: MarketplaceCatalog
     @State private var search = ""
     var body: some View {
         List {
-            Section { Text("Apps and skills".localized).font(.title3.weight(.semibold)).padding(.vertical, 10) }
-            ForEach(records.filter { search.isEmpty || $0.value.pretty.localizedCaseInsensitiveContains(search) }) { record in
-                NavigationLink { MarketplaceDetailView(record: record) } label: { HStack(spacing: 14) { MarketplaceIcon(value: record.value, size: 36); VStack(alignment: .leading, spacing: 5) { Text(record.title).font(.headline); Text(record.subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(2) } }.padding(.vertical, 4) }
+            ForEach(catalog.records) { record in
+                NavigationLink { MarketplaceDetailView(record: record) } label: {
+                    HStack(spacing: 14) {
+                        MarketplaceIcon(value: record.value, size: 36)
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text(record.title).font(.headline)
+                            Text(record.subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                        }
+                    }.padding(.vertical, 4)
+                }.onAppear {
+                    if catalog.records.suffix(5).contains(where: { $0.id == record.id }), catalog.error == nil {
+                        Task { await catalog.loadMore() }
+                    }
+                }
             }
-            if let error { ErrorBanner(message: error) }
-            if store.isDemo { Text("Connect your server to browse its live app registries.".localized).foregroundStyle(.secondary) }
-        }.navigationTitle("Supermarket".localized).searchable(text: $search)
-            .task { do { records = try await store.api?.call("/supermarket/apps").items.map(Record.init) ?? [] } catch { self.error = error.localizedDescription } }
+            if let error = catalog.error { ErrorBanner(message: error) { Task { await catalog.loadMore() } } }
+            else if catalog.hasMore {
+                HStack { Spacer(); ProgressView(); Spacer() }
+                    .onAppear { if !catalog.records.isEmpty { Task { await catalog.loadMore() } } }
+            } else if catalog.records.isEmpty {
+                Text("No results".localized).foregroundStyle(.secondary)
+            }
+        }.navigationTitle("Supermarket".localized)
+            .searchable(text: $search, prompt: "Search Supermarket".localized)
+            .task(id: search) { if catalog.loadedQuery != search.trimmingCharacters(in: .whitespacesAndNewlines) { await catalog.search(search) } }
+            .refreshable { await catalog.search(search, debounce: false) }
     }
 }
 

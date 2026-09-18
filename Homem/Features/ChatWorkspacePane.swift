@@ -11,19 +11,66 @@ extension EnvironmentValues {
     }
 }
 
-enum ChatWorkspaceTool: String, CaseIterable, Identifiable {
+enum ChatWorkspaceTool: String, CaseIterable, Identifiable, Codable {
     case chat, files, terminal, desktop
     var id: Self { self }
     var title: String { switch self { case .chat: "Chat"; case .files: "Files"; case .terminal: "Terminal"; case .desktop: "Desktop" } }
     var symbol: String { switch self { case .chat: "bubble.left"; case .files: "folder"; case .terminal: "terminal"; case .desktop: "desktopcomputer" } }
 }
 
-struct WorkspacePane: Identifiable, Equatable {
-    let id = UUID()
-    let tool: ChatWorkspaceTool
+struct WorkspacePane: Identifiable, Equatable, Codable {
+    var id = UUID()
+    var tool: ChatWorkspaceTool
+    var botID = ""
+    var conversation: ChatDestination?
+    var directory = "/data"
+    var viewOnly = true
 }
 
-enum WorkspaceArrangement: String, CaseIterable, Identifiable {
+struct WorkspaceSnapshot: Codable, Equatable {
+    var primaryID = UUID()
+    var conversation: ChatDestination?
+    var panes: [WorkspacePane] = []
+    var arrangement = WorkspaceArrangement.automatic
+    var primaryIndex = 0
+    var columnFraction = 0.45
+    var rowFraction = 0.45
+    var orderedIDs: [UUID] {
+        var ids = panes.map(\.id)
+        ids.insert(primaryID, at: min(max(0, primaryIndex), ids.count))
+        return ids
+    }
+    mutating func move(_ source: UUID, to target: UUID) {
+        var ids = orderedIDs
+        guard let from = ids.firstIndex(of: source), let to = ids.firstIndex(of: target), from != to else { return }
+        ids.remove(at: from); ids.insert(source, at: to)
+        primaryIndex = ids.firstIndex(of: primaryID) ?? 0
+        let existing = Dictionary(uniqueKeysWithValues: panes.map { ($0.id, $0) })
+        panes = ids.compactMap { existing[$0] }
+    }
+    mutating func remove(_ id: UUID) {
+        let order = orderedIDs.filter { $0 != id }
+        panes.removeAll { $0.id == id }
+        primaryIndex = order.firstIndex(of: primaryID) ?? 0
+    }
+}
+
+@MainActor @Observable final class AgentWorkspaceState {
+    var snapshot: WorkspaceSnapshot { didSet { persist() } }
+    private let key: String
+    private let defaults: UserDefaults
+    init(scope: String, botID: String, defaults: UserDefaults = .standard) {
+        key = "agent-workspace." + Data((scope + "|" + botID).utf8).base64EncodedString()
+        self.defaults = defaults
+        snapshot = defaults.data(forKey: key).flatMap { try? JSONDecoder().decode(WorkspaceSnapshot.self, from: $0) } ?? WorkspaceSnapshot()
+    }
+    private func persist() {
+        // ChatDestination deliberately excludes unsent attachments/messages from disk.
+        if let data = try? JSONEncoder().encode(snapshot) { defaults.set(data, forKey: key) }
+    }
+}
+
+enum WorkspaceArrangement: String, CaseIterable, Identifiable, Codable {
     case automatic, columns, rows, grid
     var id: Self { self }
     var title: String { switch self { case .automatic: "Automatic"; case .columns: "Side by side"; case .rows: "Stacked"; case .grid: "Grid" } }
@@ -97,49 +144,54 @@ struct WorkspaceGeometry {
 }
 
 struct WorkspaceCanvas<Primary: View>: View {
-    @Binding var panes: [WorkspacePane]
-    let arrangement: WorkspaceArrangement
+    @Binding var workspace: WorkspaceSnapshot
     let api: APIClient
     let botID: String
     let botName: String
     @ViewBuilder let primary: () -> Primary
-    @State private var columnFraction = 0.45
-    @State private var rowFraction = 0.45
 
     var body: some View { PaneSurfaceHost { surface } }
-
     private var surface: some View {
         GeometryReader { proxy in
-            let layout = WorkspaceGeometry.make(size: proxy.size, count: panes.count + 1, arrangement: arrangement,
-                                                columnFraction: columnFraction, rowFraction: rowFraction)
+            let layout = WorkspaceGeometry.make(size: proxy.size, count: workspace.panes.count + 1, arrangement: workspace.arrangement,
+                                                columnFraction: workspace.columnFraction, rowFraction: workspace.rowFraction)
+            let order = workspace.orderedIDs
             let axes: Axis.Set = [layout.size.width > proxy.size.width + 1 ? .horizontal : [],
                                   layout.size.height > proxy.size.height + 1 ? .vertical : []]
             ScrollView(axes) {
                 ZStack(alignment: .topLeading) {
                     VStack(spacing: 0) {
-                        if !panes.isEmpty {
+                        if !workspace.panes.isEmpty {
                             HStack {
+                                paneHandle(workspace.primaryID)
                                 Label("Chat".localized, systemImage: "bubble.left").font(.subheadline.weight(.medium))
                                 Spacer()
                                 Text(botName).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                            }.padding(.horizontal, 14).frame(height: 44).background(Theme.surface)
+                            }.padding(.trailing, 14).frame(height: 44).background(Theme.surface)
                             Divider()
                         }
                         primary()
-                    }.background(Theme.canvas).paneFrame(layout.frames[0])
-                    ForEach(panes) { pane in
-                        if let index = panes.firstIndex(where: { $0.id == pane.id }) {
-                            ChatWorkspacePane(api: api, botID: botID, tool: pane.tool,
-                                move: { direction in move(pane.id, direction: direction) },
-                                close: { panes.removeAll { $0.id == pane.id } })
-                                .paneFrame(layout.frames[index + 1])
+                    }.background(Theme.canvas)
+                        .dropDestination(for: String.self) { values, _ in drop(values, onto: workspace.primaryID) }
+                        .paneFrame(layout.frames[order.firstIndex(of: workspace.primaryID) ?? 0])
+                    ForEach($workspace.panes) { $pane in
+                        if let index = order.firstIndex(of: pane.id) {
+                            ChatWorkspacePane(api: api, defaultBotID: botID, pane: $pane,
+                                move: { direction in
+                                    let ids = workspace.orderedIDs
+                                    if let current = ids.firstIndex(of: pane.id), ids.indices.contains(current + direction) {
+                                        workspace.move(pane.id, to: ids[current + direction])
+                                    }
+                                }, close: { workspace.remove(pane.id) })
+                                .id(pane.id.uuidString + pane.botID + pane.tool.rawValue)
+                                .dropDestination(for: String.self) { values, _ in drop(values, onto: pane.id) }
+                                .paneFrame(layout.frames[index])
                         }
                     }
-                    ForEach(Array(layout.dividers.enumerated()), id: \.offset) { index, frame in
+                    ForEach(Array(layout.dividers.enumerated()), id: \.offset) { _, frame in
                         let vertical = frame.width == 24
-                        ChatPaneDivider(fraction: vertical ? $columnFraction : $rowFraction,
-                                        vertical: vertical,
-                                        available: vertical ? layout.size.width - 24 : layout.size.height - 24)
+                        ChatPaneDivider(fraction: vertical ? $workspace.columnFraction : $workspace.rowFraction,
+                                        vertical: vertical, available: vertical ? layout.size.width - 24 : layout.size.height - 24)
                             .paneFrame(frame)
                     }
                 }.frame(width: layout.size.width, height: layout.size.height, alignment: .topLeading)
@@ -147,9 +199,16 @@ struct WorkspaceCanvas<Primary: View>: View {
             }.contentMargins(0, for: .scrollContent).scrollBounceBehavior(.basedOnSize)
         }.background(Theme.surface).clipped()
     }
-    private func move(_ id: UUID, direction: Int) {
-        guard let index = panes.firstIndex(where: { $0.id == id }), panes.indices.contains(index + direction) else { return }
-        panes.swapAt(index, index + direction)
+    private func drop(_ values: [String], onto target: UUID) -> Bool {
+        guard let value = values.first, value.hasPrefix("homem-pane:"),
+              let source = UUID(uuidString: String(value.dropFirst("homem-pane:".count))),
+              workspace.orderedIDs.contains(source), source != target else { return false }
+        workspace.move(source, to: target); return true
+    }
+    private func paneHandle(_ id: UUID) -> some View {
+        Image(systemName: "line.3.horizontal").foregroundStyle(.secondary).frame(width: 40, height: 44)
+            .contentShape(Rectangle()).draggable("homem-pane:" + id.uuidString)
+            .accessibilityLabel("Drag pane".localized)
     }
 }
 
@@ -184,32 +243,43 @@ private extension View {
 }
 
 struct ChatWorkspacePane: View {
+    @Environment(AppStore.self) private var store
     let api: APIClient
-    let botID: String
-    let tool: ChatWorkspaceTool
+    let defaultBotID: String
+    @Binding var pane: WorkspacePane
     let move: (Int) -> Void
     let close: () -> Void
     @State private var desktop: DesktopModel
     @State private var terminalID = UUID()
-
-    init(api: APIClient, botID: String, tool: ChatWorkspaceTool,
-         move: @escaping (Int) -> Void, close: @escaping () -> Void) {
-        self.api = api; self.botID = botID; self.tool = tool; self.move = move; self.close = close
-        let model = DesktopModel(api: api, botID: botID)
-        model.setViewOnly(true)
+    private var botID: String { pane.botID.nonEmpty ?? defaultBotID }
+    private var tool: ChatWorkspaceTool { pane.tool }
+    init(api: APIClient, defaultBotID: String, pane: Binding<WorkspacePane>, move: @escaping (Int) -> Void, close: @escaping () -> Void) {
+        self.api = api; self.defaultBotID = defaultBotID; _pane = pane; self.move = move; self.close = close
+        let model = DesktopModel(api: api, botID: pane.wrappedValue.botID.nonEmpty ?? defaultBotID)
+        model.setViewOnly(pane.wrappedValue.viewOnly)
         _desktop = State(initialValue: model)
     }
-
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 0) {
+                Image(systemName: "line.3.horizontal").foregroundStyle(.secondary).frame(width: 36, height: 44)
+                    .contentShape(Rectangle()).draggable("homem-pane:" + pane.id.uuidString)
+                    .accessibilityLabel("Drag pane".localized)
                 Menu {
+                    Picker("Show".localized, selection: $pane.tool) {
+                        ForEach(ChatWorkspaceTool.allCases) { item in Label(item.title.localized, systemImage: item.symbol).tag(item) }
+                    }
+                    Picker("Agent".localized, selection: Binding(get: { botID }, set: { pane.botID = $0; pane.conversation = nil; pane.directory = "/data" })) {
+                        ForEach(store.bots) { bot in Text(bot.title).tag(bot.id) }
+                    }
                     Button("Move earlier".localized, systemImage: "arrow.up") { move(-1) }
                     Button("Move later".localized, systemImage: "arrow.down") { move(1) }
                 } label: {
-                    Label(tool.title.localized, systemImage: tool.symbol)
-                        .font(.subheadline.weight(.medium)).lineLimit(1)
-                }
+                    VStack(alignment: .leading, spacing: 1) {
+                        Label(tool.title.localized, systemImage: tool.symbol).font(.subheadline.weight(.medium)).lineLimit(1)
+                        Text(store.bots.first { $0.id == botID }?.title ?? "Agent".localized).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                    }
+                }.accessibilityLabel("Switch pane".localized)
                 Spacer(minLength: 4)
                 if tool == .desktop { DesktopModeButton(model: desktop) }
                 if tool == .terminal { TerminalKeyboardButton() }
@@ -220,29 +290,25 @@ struct ChatWorkspacePane: View {
                     } label: { Image(systemName: "arrow.clockwise").frame(width: 40, height: 44) }
                         .accessibilityLabel((tool == .desktop ? "Reconnect desktop" : "Reconnect terminal").localized)
                 }
-                Button(action: close) { Image(systemName: "xmark").frame(width: 40, height: 44) }
-                    .accessibilityLabel("Close pane".localized)
-            }.buttonStyle(.plain).padding(.leading, 14).padding(.trailing, 4)
-                .frame(height: 44).background(Theme.surface)
+                Button(action: close) { Image(systemName: "xmark").frame(width: 40, height: 44) }.accessibilityLabel("Close pane".localized)
+            }.buttonStyle(.plain).padding(.trailing, 4).frame(height: 44).background(Theme.surface)
             Divider()
             switch tool {
             case .desktop:
                 if api.isDemo { EmptyState(title: "Desktop unavailable", symbol: tool.symbol, detail: "Connect to a server to use this agent’s desktop.") }
                 else { DesktopContent(model: desktop, embedded: true) }
-            case .terminal:
-                TerminalScreen(botID: botID, embedded: true).id(terminalID)
-            case .files:
-                PaneFiles(botID: botID)
-            case .chat:
-                PaneConversationPicker(initialBotID: botID)
+            case .terminal: TerminalScreen(botID: botID, embedded: true).id(terminalID)
+            case .files: PaneFiles(botID: botID, path: $pane.directory)
+            case .chat: PaneConversationPicker(initialBotID: botID, selection: $pane.conversation)
             }
         }.background(Theme.canvas).clipped()
+            .onChange(of: desktop.viewOnly) { _, value in pane.viewOnly = value }
     }
 }
 
 private struct PaneFiles: View {
     let botID: String
-    @State private var path = "/data"
+    @Binding var path: String
     @State private var selectedFile: Record?
     var body: some View {
         FileBrowserView(botID: botID, path: path, embedded: true, openFile: { file in
@@ -251,9 +317,7 @@ private struct PaneFiles: View {
         }, goBack: path == "/data" ? nil : { path = (path as NSString).deletingLastPathComponent })
             .id(path)
             .sheet(item: $selectedFile) { file in
-                NavigationStack {
-                    FileEditorView(botID: botID, path: file.value["path"].string, onClose: { selectedFile = nil })
-                }
+                NavigationStack { FileEditorView(botID: botID, path: file.value["path"].string, onClose: { selectedFile = nil }) }
             }
     }
 }
@@ -261,39 +325,33 @@ private struct PaneFiles: View {
 private struct PaneConversationPicker: View {
     @Environment(AppStore.self) private var store
     let initialBotID: String
+    @Binding var selection: ChatDestination?
     @State private var botID = ""
     @State private var sessions: [Record] = []
-    @State private var selection: ChatDestination?
     @State private var error: String?
     @State private var newChat = false
     var body: some View {
         VStack(spacing: 0) {
             if let route = selection, let api = store.api {
                 HStack {
-                    Button { selection = nil } label: { Image(systemName: "chevron.left").frame(width: 44, height: 44) }
-                        .accessibilityLabel("Choose a conversation".localized)
+                    Button { selection = nil } label: { Image(systemName: "chevron.left").frame(width: 44, height: 44) }.accessibilityLabel("Choose a conversation".localized)
                     Text(route.title).font(.subheadline).lineLimit(1)
                     Spacer()
                 }.background(Theme.surface)
-                ChatContent(model: ChatModel(api: api, botID: route.botID, sessionID: route.sessionID), destination: route, allowsWorkspace: false)
-                    .id(route.sessionID)
+                ChatContent(model: ChatModel(api: api, botID: route.botID, sessionID: route.sessionID), destination: route, allowsWorkspace: false,
+                            onFirstMessageQueued: { if selection?.sessionID == route.sessionID { selection?.firstMessage = nil } }).id(route.sessionID)
             } else {
                 List {
-                    Picker("Agent".localized, selection: $botID) {
-                        ForEach(store.bots) { bot in Text(bot.title).tag(bot.id) }
-                    }
+                    Picker("Agent".localized, selection: $botID) { ForEach(store.bots) { bot in Text(bot.title).tag(bot.id) } }
                     Button("New conversation".localized, systemImage: "square.and.pencil") { newChat = true }
                     if let error { ErrorBanner(message: error) }
                     ForEach(sessions) { session in
-                        Button(session.title) {
-                            selection = ChatDestination(botID: botID, sessionID: session.id, title: session.title,
-                                                        botName: store.bots.first { $0.id == botID }?.title ?? "Agent")
-                        }.foregroundStyle(.primary)
+                        Button(session.title) { selection = ChatDestination(botID: botID, sessionID: session.id, title: session.title, botName: store.bots.first { $0.id == botID }?.title ?? "Agent") }.foregroundStyle(.primary)
                     }
                 }
             }
         }
-        .onAppear { if botID.isEmpty { botID = initialBotID } }
+        .onAppear { if botID.isEmpty { botID = selection?.botID ?? initialBotID } }
         .task(id: botID) {
             guard !botID.isEmpty else { return }
             sessions = []; error = nil
