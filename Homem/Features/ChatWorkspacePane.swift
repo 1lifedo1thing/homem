@@ -31,7 +31,10 @@ struct WorkspaceSnapshot: Codable, Equatable {
     var primaryID = UUID()
     var conversation: ChatDestination?
     var panes: [WorkspacePane] = []
-    var arrangement = WorkspaceArrangement.automatic
+    var arrangement = WorkspaceArrangement.automatic {
+        didSet { docking = nil }
+    }
+    var docking: WorkspaceDockNode?
     var primaryIndex = 0
     var columnFraction = 0.45
     var rowFraction = 0.45
@@ -43,6 +46,7 @@ struct WorkspaceSnapshot: Codable, Equatable {
     mutating func move(_ source: UUID, to target: UUID) {
         var ids = orderedIDs
         guard let from = ids.firstIndex(of: source), let to = ids.firstIndex(of: target), from != to else { return }
+        docking = nil
         ids.remove(at: from); ids.insert(source, at: to)
         primaryIndex = ids.firstIndex(of: primaryID) ?? 0
         let existing = Dictionary(uniqueKeysWithValues: panes.map { ($0.id, $0) })
@@ -51,6 +55,7 @@ struct WorkspaceSnapshot: Codable, Equatable {
     mutating func remove(_ id: UUID) {
         let order = orderedIDs.filter { $0 != id }
         panes.removeAll { $0.id == id }
+        docking = docking?.removing(id)
         primaryIndex = order.firstIndex(of: primaryID) ?? 0
     }
 }
@@ -76,6 +81,108 @@ enum WorkspaceArrangement: String, CaseIterable, Identifiable, Codable {
     var title: String { switch self { case .automatic: "Automatic"; case .columns: "Side by side"; case .rows: "Stacked"; case .grid: "Grid" } }
 }
 
+enum WorkspaceDockEdge: CaseIterable {
+    case left, right, top, bottom
+    var horizontal: Bool { self == .left || self == .right }
+    var before: Bool { self == .left || self == .top }
+}
+
+/// A saved split tree lets any pane sit beside or above another without losing
+/// the identity (and connection) of the views it contains.
+indirect enum WorkspaceDockNode: Codable, Equatable {
+    case pane(UUID)
+    case split(horizontal: Bool, fraction: Double, first: WorkspaceDockNode, second: WorkspaceDockNode)
+
+    var ids: [UUID] {
+        switch self {
+        case .pane(let id): [id]
+        case .split(_, _, let first, let second): first.ids + second.ids
+        }
+    }
+    var minimum: CGSize {
+        switch self {
+        case .pane: CGSize(width: 300, height: 180)
+        case .split(let horizontal, _, let first, let second):
+            horizontal ? CGSize(width: first.minimum.width + second.minimum.width + 24, height: max(first.minimum.height, second.minimum.height))
+                : CGSize(width: max(first.minimum.width, second.minimum.width), height: first.minimum.height + second.minimum.height + 24)
+        }
+    }
+    func removing(_ id: UUID) -> Self? {
+        switch self {
+        case .pane(let value): return value == id ? nil : self
+        case .split(let horizontal, let fraction, let first, let second):
+            let a = first.removing(id), b = second.removing(id)
+            if let a, let b { return .split(horizontal: horizontal, fraction: fraction, first: a, second: b) }
+            return a ?? b
+        }
+    }
+    func inserting(_ source: UUID, at target: UUID, edge: WorkspaceDockEdge) -> Self {
+        switch self {
+        case .pane(let id):
+            guard id == target else { return self }
+            return .split(horizontal: edge.horizontal, fraction: 0.5,
+                          first: edge.before ? .pane(source) : self, second: edge.before ? self : .pane(source))
+        case .split(let horizontal, let fraction, let first, let second):
+            return .split(horizontal: horizontal, fraction: fraction,
+                          first: first.inserting(source, at: target, edge: edge), second: second.inserting(source, at: target, edge: edge))
+        }
+    }
+    func fraction(at path: [Bool]) -> Double {
+        guard case .split(_, let fraction, let first, let second) = self else { return 0.5 }
+        guard let next = path.first else { return fraction }
+        return (next ? second : first).fraction(at: Array(path.dropFirst()))
+    }
+    mutating func setFraction(_ value: Double, at path: [Bool]) {
+        guard case .split(let horizontal, let fraction, var first, var second) = self else { return }
+        if let next = path.first {
+            if next { second.setFraction(value, at: Array(path.dropFirst())) }
+            else { first.setFraction(value, at: Array(path.dropFirst())) }
+        }
+        self = .split(horizontal: horizontal, fraction: path.isEmpty ? value : fraction, first: first, second: second)
+    }
+    static func matching(ids: [UUID], frames: [CGRect]) -> Self? {
+        guard ids.count == frames.count, let id = ids.first else { return nil }
+        if ids.count == 1 { return .pane(id) }
+        for horizontal in [true, false] {
+            for frame in frames {
+                let boundary = horizontal ? frame.maxX : frame.maxY
+                let first = frames.indices.filter { (horizontal ? frames[$0].maxX : frames[$0].maxY) <= boundary + 1 }
+                let second = frames.indices.filter { (horizontal ? frames[$0].minX : frames[$0].minY) > boundary + 1 }
+                guard !first.isEmpty, !second.isEmpty, first.count + second.count == ids.count,
+                      let a = matching(ids: first.map { ids[$0] }, frames: first.map { frames[$0] }),
+                      let b = matching(ids: second.map { ids[$0] }, frames: second.map { frames[$0] }) else { continue }
+                return .split(horizontal: horizontal, fraction: 0.5, first: a, second: b)
+            }
+        }
+        return nil
+    }
+    func geometry(size: CGSize, order: [UUID]) -> WorkspaceGeometry? {
+        guard Set(ids) == Set(order), ids.count == order.count,
+              size.width >= minimum.width, size.height >= minimum.height else { return nil }
+        var frames: [UUID: CGRect] = [:]
+        var dividers: [CGRect] = [], paths: [[Bool]] = [], extents: [CGFloat] = []
+        func visit(_ node: Self, _ rect: CGRect, _ path: [Bool]) {
+            switch node {
+            case .pane(let id): frames[id] = rect
+            case .split(let horizontal, let fraction, let first, let second):
+                let available = (horizontal ? rect.width : rect.height) - 24
+                let minFirst = horizontal ? first.minimum.width : first.minimum.height
+                let minSecond = horizontal ? second.minimum.width : second.minimum.height
+                let length = min(available - minSecond, max(minFirst, available * fraction))
+                let a = CGRect(x: rect.minX, y: rect.minY, width: horizontal ? length : rect.width, height: horizontal ? rect.height : length)
+                let b = horizontal ? CGRect(x: a.maxX + 24, y: rect.minY, width: available - length, height: rect.height)
+                    : CGRect(x: rect.minX, y: a.maxY + 24, width: rect.width, height: available - length)
+                dividers.append(horizontal ? CGRect(x: a.maxX, y: rect.minY, width: 24, height: rect.height)
+                                : CGRect(x: rect.minX, y: a.maxY, width: rect.width, height: 24))
+                paths.append(path); extents.append(available)
+                visit(first, a, path + [false]); visit(second, b, path + [true])
+            }
+        }
+        visit(self, CGRect(origin: .zero, size: size), [])
+        return WorkspaceGeometry(frames: order.compactMap { frames[$0] }, size: size, dividers: dividers, dividerPaths: paths, dividerExtents: extents)
+    }
+}
+
 enum ChatSplitLayout {
     static func fraction(_ value: Double) -> Double { min(0.65, max(0.25, value)) }
     // Two readable 300-point panes plus the divider, independent of device idiom.
@@ -96,9 +203,11 @@ struct WorkspaceGeometry {
     var frames: [CGRect]
     var size: CGSize
     var dividers: [CGRect] = []
+    var dividerPaths: [[Bool]] = []
+    var dividerExtents: [CGFloat] = []
 
     static func make(size proposed: CGSize, count: Int, arrangement: WorkspaceArrangement,
-                     columnFraction: Double = 0.45, rowFraction: Double = 0.45, division: CGRect? = nil) -> Self {
+                     columnFraction: Double = 0.45, rowFraction: Double = 0.45, division: CGRect? = nil, docking: WorkspaceDockNode? = nil, order: [UUID] = []) -> Self {
         let width = max(1, proposed.width), height = max(1, proposed.height)
         let count = max(1, count), gap: CGFloat = 24
         // An active fold takes precedence over a saved arrangement. Keep the
@@ -106,6 +215,7 @@ struct WorkspaceGeometry {
         if let division, let folded = folded(size: CGSize(width: width, height: height), count: count, division: division) {
             return folded
         }
+        if let custom = docking?.geometry(size: CGSize(width: width, height: height), order: order) { return custom }
         if count == 1 { return Self(frames: [CGRect(x: 0, y: 0, width: width, height: height)], size: CGSize(width: width, height: height)) }
         if arrangement == .automatic, ChatSplitLayout.usesColumns(width: width), count <= 3 {
             let usableWidth = width - gap
@@ -192,7 +302,77 @@ struct WorkspaceGeometry {
 
 }
 
+struct PaneDropProposal: Equatable {
+    var target: UUID
+    var preview: CGRect
+    var docking: WorkspaceDockNode?
+
+    static func make(source: UUID, location: CGPoint, workspace: WorkspaceSnapshot,
+                     layout: WorkspaceGeometry, viewport: CGSize, division: CGRect?) -> Self? {
+        let order = workspace.orderedIDs
+        guard order.contains(source), let index = layout.frames.indices.first(where: {
+            order[$0] != source && layout.frames[$0].contains(location)
+        }) else { return nil }
+        let target = order[index], frame = layout.frames[index]
+        let x = (location.x - frame.minX) / frame.width
+        let y = (location.y - frame.minY) / frame.height
+        let centered = (0.3...0.7).contains(x) && (0.3...0.7).contains(y)
+        let fold = division?.intersection(CGRect(origin: .zero, size: viewport))
+        let activeFold = fold.map { !$0.isNull && !$0.isEmpty } ?? false
+        if !centered, !activeFold {
+            let edge = [(WorkspaceDockEdge.left, x), (.right, 1 - x), (.top, y), (.bottom, 1 - y)].min { $0.1 < $1.1 }!.0
+            let saved = workspace.docking.flatMap { $0.geometry(size: viewport, order: order) == nil ? nil : $0 }
+            if let root = saved ?? WorkspaceDockNode.matching(ids: order, frames: layout.frames),
+               let remaining = root.removing(source) {
+                let docked = remaining.inserting(source, at: target, edge: edge)
+                if let result = docked.geometry(size: viewport, order: order), let sourceIndex = order.firstIndex(of: source) {
+                    return Self(target: target, preview: result.frames[sourceIndex], docking: docked)
+                }
+            }
+        }
+        // Compact or folded areas can still reorder without creating tiny panes.
+        return Self(target: target, preview: frame)
+    }
+}
+
+private struct PaneDragHandle: View {
+    var changed: (DragGesture.Value) -> Void
+    var ended: () -> Void
+    var cancelled: () -> Void
+    @GestureState private var active = false
+    var body: some View {
+        Image(systemName: "line.3.horizontal").foregroundStyle(.secondary)
+            .frame(width: 40, height: 44).contentShape(Rectangle())
+            .gesture(DragGesture(minimumDistance: 6, coordinateSpace: .named("chatSplit"))
+                .updating($active) { _, state, _ in state = true }
+                .onChanged(changed).onEnded { _ in ended() })
+            .onChange(of: active) { _, value in if !value { cancelled() } }
+            .accessibilityLabel("Drag pane".localized)
+    }
+}
+
+private struct PaneLift: ViewModifier {
+    let active: Bool
+    let translation: CGSize
+    let reduceMotion: Bool
+    func body(content: Content) -> some View {
+        content
+            .shadow(color: .black.opacity(active ? 0.18 : 0), radius: active ? 14 : 0, y: active ? 6 : 0)
+            .opacity(active ? 0.86 : 1)
+            .offset(active && !reduceMotion ? translation : .zero)
+            .zIndex(active ? 3 : 0)
+            .animation(reduceMotion ? nil : .spring(response: 0.32, dampingFraction: 0.86), value: active)
+    }
+}
+
 struct WorkspaceCanvas<Primary: View>: View {
+    @Environment(\.appAccent) private var accent
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var draggedID: UUID?
+    @State private var dragTranslation = CGSize.zero
+    @State private var proposal: PaneDropProposal?
+    @State private var layoutRevision = 0
+    private var motion: Animation? { reduceMotion ? nil : .spring(response: 0.32, dampingFraction: 0.86) }
     @Binding var workspace: WorkspaceSnapshot
     let api: APIClient
     let botID: String
@@ -215,9 +395,9 @@ struct WorkspaceCanvas<Primary: View>: View {
     }
     private func surface(division: CGRect?) -> some View {
         GeometryReader { proxy in
-            let layout = WorkspaceGeometry.make(size: proxy.size, count: workspace.panes.count + 1, arrangement: workspace.arrangement,
-                                                columnFraction: workspace.columnFraction, rowFraction: workspace.rowFraction, division: division)
             let order = workspace.orderedIDs
+            let layout = WorkspaceGeometry.make(size: proxy.size, count: workspace.panes.count + 1, arrangement: workspace.arrangement,
+                                                columnFraction: workspace.columnFraction, rowFraction: workspace.rowFraction, division: division, docking: workspace.docking, order: order)
             let axes: Axis.Set = [layout.size.width > proxy.size.width + 1 ? .horizontal : [],
                                   layout.size.height > proxy.size.height + 1 ? .vertical : []]
             ScrollView(axes) {
@@ -225,7 +405,7 @@ struct WorkspaceCanvas<Primary: View>: View {
                     VStack(spacing: 0) {
                         if !workspace.panes.isEmpty {
                             HStack {
-                                paneHandle(workspace.primaryID)
+                                dragHandle(workspace.primaryID, layout: layout, viewport: proxy.size, division: division)
                                 Label("Chat".localized, systemImage: "bubble.left").font(.subheadline.weight(.medium))
                                 Spacer()
                                 Text(botName).font(.caption).foregroundStyle(.secondary).lineLimit(1)
@@ -234,43 +414,74 @@ struct WorkspaceCanvas<Primary: View>: View {
                         }
                         primary()
                     }.background(Theme.canvas)
-                        .dropDestination(for: String.self) { values, _ in drop(values, onto: workspace.primaryID) }
                         .paneFrame(layout.frames[order.firstIndex(of: workspace.primaryID) ?? 0])
+                        .modifier(PaneLift(active: draggedID == workspace.primaryID, translation: dragTranslation, reduceMotion: reduceMotion))
+                        .animation(motion, value: layoutRevision)
                     ForEach($workspace.panes) { $pane in
                         if let index = order.firstIndex(of: pane.id) {
                             ChatWorkspacePane(api: api, defaultBotID: botID, pane: $pane,
                                 move: { direction in
                                     let ids = workspace.orderedIDs
                                     if let current = ids.firstIndex(of: pane.id), ids.indices.contains(current + direction) {
-                                        workspace.move(pane.id, to: ids[current + direction])
+                                        withAnimation(motion) { workspace.move(pane.id, to: ids[current + direction]); layoutRevision += 1 }
                                     }
-                                }, close: { workspace.remove(pane.id) })
+                                }, close: { withAnimation(motion) { workspace.remove(pane.id); layoutRevision += 1 } },
+                                dragChanged: { updateDrag(pane.id, value: $0, layout: layout, viewport: proxy.size, division: division) },
+                                dragEnded: finishDrag, dragCancelled: cancelDrag)
                                 .id(pane.id.uuidString + pane.botID + pane.tool.rawValue)
-                                .dropDestination(for: String.self) { values, _ in drop(values, onto: pane.id) }
                                 .paneFrame(layout.frames[index])
+                                .modifier(PaneLift(active: draggedID == pane.id, translation: dragTranslation, reduceMotion: reduceMotion))
+                                .animation(motion, value: layoutRevision)
                         }
                     }
-                    ForEach(Array(layout.dividers.enumerated()), id: \.offset) { _, frame in
+                    ForEach(Array(layout.dividers.enumerated()), id: \.offset) { index, frame in
                         let vertical = frame.width == 24
-                        ChatPaneDivider(fraction: vertical ? $workspace.columnFraction : $workspace.rowFraction,
-                                        vertical: vertical, available: vertical ? layout.size.width - 24 : layout.size.height - 24)
+                        ChatPaneDivider(fraction: dividerBinding(index, vertical: vertical, layout: layout),
+                                        vertical: vertical, available: layout.dividerExtents.indices.contains(index) ? layout.dividerExtents[index] : (vertical ? layout.size.width - 24 : layout.size.height - 24))
                             .paneFrame(frame)
+                    }
+                    if let proposal {
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(accent.opacity(0.13))
+                            .overlay { RoundedRectangle(cornerRadius: 12).strokeBorder(accent, lineWidth: 2) }
+                            .paneFrame(proposal.preview.insetBy(dx: 3, dy: 3))
+                            .allowsHitTesting(false).accessibilityHidden(true).zIndex(2)
+                            .animation(motion, value: proposal.preview)
                     }
                 }.frame(width: layout.size.width, height: layout.size.height, alignment: .topLeading)
                     .coordinateSpace(name: "chatSplit")
             }.contentMargins(0, for: .scrollContent).scrollBounceBehavior(.basedOnSize)
         }.background(Theme.surface).clipped()
     }
-    private func drop(_ values: [String], onto target: UUID) -> Bool {
-        guard let value = values.first, value.hasPrefix("homem-pane:"),
-              let source = UUID(uuidString: String(value.dropFirst("homem-pane:".count))),
-              workspace.orderedIDs.contains(source), source != target else { return false }
-        workspace.move(source, to: target); return true
+    private func dividerBinding(_ index: Int, vertical: Bool, layout: WorkspaceGeometry) -> Binding<Double> {
+        if layout.dividerPaths.indices.contains(index) {
+            let path = layout.dividerPaths[index]
+            return Binding(get: { workspace.docking?.fraction(at: path) ?? 0.5 }, set: { workspace.docking?.setFraction($0, at: path) })
+        }
+        return vertical ? $workspace.columnFraction : $workspace.rowFraction
     }
-    private func paneHandle(_ id: UUID) -> some View {
-        Image(systemName: "line.3.horizontal").foregroundStyle(.secondary).frame(width: 40, height: 44)
-            .contentShape(Rectangle()).draggable("homem-pane:" + id.uuidString)
-            .accessibilityLabel("Drag pane".localized)
+    private func dragHandle(_ id: UUID, layout: WorkspaceGeometry, viewport: CGSize, division: CGRect?) -> some View {
+        PaneDragHandle(changed: { updateDrag(id, value: $0, layout: layout, viewport: viewport, division: division) },
+                       ended: finishDrag, cancelled: cancelDrag)
+    }
+    private func updateDrag(_ id: UUID, value: DragGesture.Value, layout: WorkspaceGeometry, viewport: CGSize, division: CGRect?) {
+        draggedID = id
+        dragTranslation = value.translation
+        proposal = PaneDropProposal.make(source: id, location: value.location, workspace: workspace,
+                                         layout: layout, viewport: viewport, division: division)
+    }
+    private func finishDrag() {
+        withAnimation(motion) {
+            if let id = draggedID, let proposal {
+                if let docking = proposal.docking { workspace.docking = docking }
+                else { workspace.move(id, to: proposal.target) }
+                layoutRevision += 1
+            }
+            draggedID = nil; dragTranslation = .zero; proposal = nil
+        }
+    }
+    private func cancelDrag() {
+        withAnimation(motion) { draggedID = nil; dragTranslation = .zero; proposal = nil }
     }
 }
 
@@ -311,11 +522,16 @@ struct ChatWorkspacePane: View {
     @Binding var pane: WorkspacePane
     let move: (Int) -> Void
     let close: () -> Void
+    let dragChanged: (DragGesture.Value) -> Void
+    let dragEnded: () -> Void
+    let dragCancelled: () -> Void
     @State private var desktop: DesktopModel
     @State private var terminalID = UUID()
     private var botID: String { pane.botID.nonEmpty ?? defaultBotID }
     private var tool: ChatWorkspaceTool { pane.tool }
-    init(api: APIClient, defaultBotID: String, pane: Binding<WorkspacePane>, move: @escaping (Int) -> Void, close: @escaping () -> Void) {
+    init(api: APIClient, defaultBotID: String, pane: Binding<WorkspacePane>, move: @escaping (Int) -> Void, close: @escaping () -> Void,
+         dragChanged: @escaping (DragGesture.Value) -> Void, dragEnded: @escaping () -> Void, dragCancelled: @escaping () -> Void) {
+        self.dragChanged = dragChanged; self.dragEnded = dragEnded; self.dragCancelled = dragCancelled
         self.api = api; self.defaultBotID = defaultBotID; _pane = pane; self.move = move; self.close = close
         let model = DesktopModel(api: api, botID: pane.wrappedValue.botID.nonEmpty ?? defaultBotID)
         model.setViewOnly(pane.wrappedValue.viewOnly)
@@ -324,9 +540,7 @@ struct ChatWorkspacePane: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 0) {
-                Image(systemName: "line.3.horizontal").foregroundStyle(.secondary).frame(width: 36, height: 44)
-                    .contentShape(Rectangle()).draggable("homem-pane:" + pane.id.uuidString)
-                    .accessibilityLabel("Drag pane".localized)
+                PaneDragHandle(changed: dragChanged, ended: dragEnded, cancelled: dragCancelled)
                 Menu {
                     Picker("Show".localized, selection: $pane.tool) {
                         ForEach(ChatWorkspaceTool.allCases) { item in Label(item.title.localized, systemImage: item.symbol).tag(item) }

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ConnectionView: View {
     var isAddingAccount = false
+    var onCancel: (() -> Void)?
     @Environment(\.dismiss) private var dismiss
     @State private var showAccounts = false
     @Environment(\.appAccent) private var accent
@@ -20,6 +21,16 @@ struct ConnectionView: View {
     @State private var connectionTask: Task<Void, Never>?
     @State private var error: String?
     var body: some View {
+        Group {
+            if isAddingAccount && showOfficialSignIn {
+                OfficialSignInView(onCancel: { showOfficialSignIn = false })
+            } else {
+                connectionForm.frame(idealWidth: isAddingAccount ? 480 : nil,
+                                     idealHeight: isAddingAccount ? (showCustomServer ? 620 : 260) : nil)
+            }
+        }.onDisappear { connectionTask?.cancel() }
+    }
+    private var connectionForm: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
@@ -69,10 +80,10 @@ struct ConnectionView: View {
                 }.padding(24).frame(maxWidth: 520)
                     .frame(maxWidth: .infinity)
             }.scrollDismissesKeyboard(.interactively).background(Color(.systemGroupedBackground)).navigationTitle(isAddingAccount ? "Add account".localized : "").navigationBarTitleDisplayMode(.inline)
-                .toolbar { if isAddingAccount { ToolbarItem(placement: .cancellationAction) { Button("Cancel".localized) { connectionTask?.cancel(); dismiss() } } } }
+                .toolbar { if isAddingAccount { ToolbarItem(placement: .cancellationAction) { Button("Cancel".localized) { connectionTask?.cancel(); if let onCancel { onCancel() } else { dismiss() } } } } }
                 .sheet(isPresented: $showAccounts) { AccountsView() }
                 .onChange(of: store.connectionID) { _, _ in if isAddingAccount { dismiss() } }
-                .sheet(isPresented: $showOfficialSignIn) { OfficialSignInView() }
+                .sheet(isPresented: Binding(get: { !isAddingAccount && showOfficialSignIn }, set: { showOfficialSignIn = $0 })) { OfficialSignInView() }
         }.onDisappear { connectionTask?.cancel() }
     }
     private func connect() async {

@@ -2,6 +2,7 @@ import SwiftUI
 import WebKit
 
 struct OfficialSignInView: View {
+    var onCancel: (() -> Void)?
     @Environment(\.appAccent) private var accent
     @Environment(AppStore.self) private var store
     @Environment(\.dismiss) private var dismiss
@@ -13,6 +14,7 @@ struct OfficialSignInView: View {
     @State private var browserLoading = false
     @State private var browserError: String?
     @State private var task: Task<Void, Never>?
+    @State private var formHeight: CGFloat = 320
 
     var body: some View {
         NavigationStack {
@@ -51,7 +53,7 @@ struct OfficialSignInView: View {
                     ToolbarItem(placement: .cancellationAction) {
                         Button("Cancel".localized) {
                             task?.cancel()
-                            dismiss()
+                            if let onCancel { onCancel() } else { dismiss() }
                         }
                     }
                     if browser != nil {
@@ -64,7 +66,9 @@ struct OfficialSignInView: View {
                     }
                 }
                 .interactiveDismissDisabled(login.busy)
-        }.onDisappear {
+        }
+        .modifier(SignInPresentation(browser: browser != nil, formHeight: formHeight))
+        .onDisappear {
             task?.cancel()
             browser?.stopLoading()
             if store.api !== login.client { login.client.session.invalidateAndCancel() }
@@ -133,8 +137,17 @@ struct OfficialSignInView: View {
                 if let error = login.error { ErrorBanner(message: error) }
                 Button(login.step == .workspaces ? "Open Memoh in browser".localized : "Continue in browser".localized) { openBrowser() }
                     .font(.subheadline).frame(maxWidth: .infinity).disabled(login.busy).accessibilityIdentifier("officialBrowser")
-            }.padding(24).frame(maxWidth: 440).frame(maxWidth: .infinity)
+            }.padding(24).frame(maxWidth: 440)
+                .background {
+                    GeometryReader { proxy in
+                        Color.clear.preference(key: SignInFormHeight.self, value: proxy.size.height)
+                    }
+                }
+                .frame(maxWidth: .infinity)
         }.background(Theme.canvas).scrollDismissesKeyboard(.interactively)
+            .onPreferenceChange(SignInFormHeight.self) { height in
+                if height > 0, abs(formHeight - height) > 1 { formHeight = height }
+            }
             .task { updateFocus() }.onChange(of: login.step) { _, _ in updateFocus() }
     }
     private func actionLabel(_ title: String) -> some View {
@@ -196,6 +209,28 @@ struct OfficialSignInView: View {
             view.allowsBackForwardNavigationGestures = true
             browser = view
         }
+    }
+}
+
+private struct SignInFormHeight: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}
+
+/// A short form gets a fitted sheet on expanded displays. The scroll view can
+/// still shrink above the keyboard, and the browser retains a full-page canvas.
+private struct SignInPresentation: ViewModifier {
+    let browser: Bool
+    let formHeight: CGFloat
+    @ViewBuilder func body(content: Content) -> some View {
+        if #available(iOS 18.0, *) {
+            if browser {
+                content.frame(idealWidth: 720, idealHeight: 680).presentationSizing(.page)
+            } else {
+                content.frame(idealWidth: 480, idealHeight: formHeight + 64)
+                    .presentationSizing(.fitted)
+            }
+        } else { content }
     }
 }
 

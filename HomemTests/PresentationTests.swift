@@ -262,3 +262,50 @@ final class WorkspaceGeometryTests: XCTestCase {
         XCTAssertEqual(layout.dividers.count, 2)
     }
 }
+
+final class WorkspaceDockingTests: XCTestCase {
+    func testEdgeDropsChooseHorizontalAndVerticalLayoutsWhenTheyFit() throws {
+        var workspace = WorkspaceSnapshot()
+        workspace.panes = [WorkspacePane(tool: .files)]
+        let order = workspace.orderedIDs, size = CGSize(width: 900, height: 650)
+        let layout = WorkspaceGeometry.make(size: size, count: 2, arrangement: .automatic)
+        let target = layout.frames[0], source = order[1]
+        let right = try XCTUnwrap(PaneDropProposal.make(source: source, location: CGPoint(x: target.maxX - 2, y: target.midY), workspace: workspace, layout: layout, viewport: size, division: nil)?.docking)
+        let horizontal = try XCTUnwrap(right.geometry(size: size, order: order))
+        XCTAssertGreaterThan(horizontal.frames[1].minX, horizontal.frames[0].maxX)
+        let top = try XCTUnwrap(PaneDropProposal.make(source: source, location: CGPoint(x: target.midX, y: target.minY + 2), workspace: workspace, layout: layout, viewport: size, division: nil)?.docking)
+        let vertical = try XCTUnwrap(top.geometry(size: size, order: order))
+        XCTAssertLessThan(vertical.frames[1].maxY, vertical.frames[0].minY)
+        XCTAssertNil(right.geometry(size: CGSize(width: 466, height: 650), order: order))
+        let fold = CGRect(x: 438, y: 0, width: 24, height: 650)
+        XCTAssertNil(PaneDropProposal.make(source: source, location: CGPoint(x: target.maxX - 2, y: target.midY), workspace: workspace, layout: layout, viewport: size, division: fold)?.docking)
+        XCTAssertNil(PaneDropProposal.make(source: source, location: CGPoint(x: -20, y: -20), workspace: workspace, layout: layout, viewport: size, division: nil))
+    }
+    func testNestedDockingResizesPersistsAndCollapsesWhenPaneCloses() throws {
+        var workspace = WorkspaceSnapshot()
+        workspace.panes = [WorkspacePane(tool: .files), WorkspacePane(tool: .terminal)]
+        let ids = workspace.orderedIDs, size = CGSize(width: 900, height: 650)
+        let initial = WorkspaceGeometry.make(size: size, count: 3, arrangement: .automatic)
+        let root = try XCTUnwrap(WorkspaceDockNode.matching(ids: ids, frames: initial.frames))
+        workspace.docking = try XCTUnwrap(root.removing(ids[2])).inserting(ids[2], at: ids[0], edge: .bottom)
+        let layout = try XCTUnwrap(workspace.docking?.geometry(size: size, order: ids))
+        XCTAssertEqual(Set(workspace.docking!.ids), Set(ids))
+        XCTAssertEqual(layout.frames[0].minX, layout.frames[2].minX)
+        XCTAssertLessThan(layout.frames[0].maxY, layout.frames[2].minY)
+        XCTAssertEqual(layout.frames[1].height, size.height)
+        workspace.docking?.setFraction(0.6, at: [false])
+        let resized = try XCTUnwrap(workspace.docking?.geometry(size: size, order: ids))
+        XCTAssertGreaterThan(resized.frames[0].height, layout.frames[0].height)
+        XCTAssertEqual(resized.frames[1], layout.frames[1])
+        let data = try JSONEncoder().encode(workspace)
+        XCTAssertEqual(try JSONDecoder().decode(WorkspaceSnapshot.self, from: data), workspace)
+        workspace.remove(ids[2])
+        XCTAssertEqual(workspace.docking?.ids.count, 2)
+        XCTAssertNotNil(workspace.docking?.geometry(size: size, order: workspace.orderedIDs))
+        workspace.arrangement = .rows
+        XCTAssertNil(workspace.docking)
+        var oldJSON = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        oldJSON.removeValue(forKey: "docking")
+        XCTAssertNil(try JSONDecoder().decode(WorkspaceSnapshot.self, from: JSONSerialization.data(withJSONObject: oldJSON)).docking)
+    }
+}

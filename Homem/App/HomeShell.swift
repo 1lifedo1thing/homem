@@ -327,6 +327,12 @@ struct AccountsView: View {
     @State private var error: String?
     @State private var removal: SavedAccount?
     var body: some View {
+        Group {
+            if add { ConnectionView(isAddingAccount: true, onCancel: { add = false }) }
+            else { accountList.frame(idealWidth: 480, idealHeight: 420) }
+        }.modifier(FittedAccountPresentation())
+    }
+    private var accountList: some View {
         NavigationStack {
             List {
                 ForEach(store.savedAccounts) { account in
@@ -358,7 +364,6 @@ struct AccountsView: View {
                 if let error { ErrorBanner(message: error) }
             }.navigationTitle("Accounts".localized).navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done".localized) { dismiss() } } }
-                .sheet(isPresented: $add) { ConnectionView(isAddingAccount: true) }
                 .alert("Remove account?".localized, isPresented: Binding(get: { removal != nil }, set: { if !$0 { removal = nil } }), presenting: removal) { account in
                     Button("Remove account".localized, role: .destructive) { store.removeAccount(account); removal = nil }
                     Button("Cancel".localized, role: .cancel) { removal = nil }
@@ -367,6 +372,13 @@ struct AccountsView: View {
     }
 }
 
+
+private struct FittedAccountPresentation: ViewModifier {
+    @ViewBuilder func body(content: Content) -> some View {
+        if #available(iOS 18.0, *) { content.presentationSizing(.fitted) }
+        else { content }
+    }
+}
 
 private struct SavedAccountAvatar: View {
     @Environment(AppStore.self) private var store
