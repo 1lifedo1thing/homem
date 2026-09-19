@@ -351,6 +351,51 @@ private struct PaneDragHandle: View {
     }
 }
 
+/// Keep the familiar header intact; content interaction tucks it away. A centered
+/// edge handle reveals all workspace controls without competing corner buttons.
+private struct WorkspacePaneSurface<Header: View, Content: View>: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Binding var titlesVisible: Bool
+    let enabled: Bool
+    let autoHide: Bool
+    @ViewBuilder var header: () -> Header
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header()
+                .frame(height: enabled && titlesVisible ? 44 : 0)
+                .clipped().opacity(enabled && titlesVisible ? 1 : 0)
+                .accessibilityHidden(!enabled || !titlesVisible)
+            content()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .simultaneousGesture(TapGesture().onEnded { focusContent() })
+                .simultaneousGesture(DragGesture(minimumDistance: 12).onEnded { _ in focusContent() })
+        }
+        .background(Theme.canvas)
+        .overlay(alignment: .top) {
+            if enabled && !titlesVisible {
+                Button { setVisible(true) } label: {
+                    Image(systemName: "chevron.compact.down")
+                        .font(.system(size: 18, weight: .semibold)).foregroundStyle(.secondary)
+                        .frame(width: 56, height: 24)
+                        .background(.regularMaterial, in: Capsule())
+                        .frame(width: 64, height: 44, alignment: .top).contentShape(Rectangle())
+                }.buttonStyle(.plain).padding(.top, 4)
+                    .accessibilityLabel("Show title bars".localized)
+                    .accessibilityIdentifier("showWorkspaceTitles")
+            }
+        }
+    }
+    private func focusContent() {
+        guard enabled, autoHide, titlesVisible else { return }
+        setVisible(false)
+    }
+    private func setVisible(_ visible: Bool) {
+        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) { titlesVisible = visible }
+    }
+}
+
 private struct PaneLift: ViewModifier {
     let active: Bool
     let translation: CGSize
@@ -374,6 +419,8 @@ struct WorkspaceCanvas<Primary: View>: View {
     @State private var layoutRevision = 0
     private var motion: Animation? { reduceMotion ? nil : .spring(response: 0.32, dampingFraction: 0.86) }
     @Binding var workspace: WorkspaceSnapshot
+    @Binding var titlesVisible: Bool
+    let autoHideTitles: Bool
     let api: APIClient
     let botID: String
     let botName: String
@@ -402,24 +449,22 @@ struct WorkspaceCanvas<Primary: View>: View {
                                   layout.size.height > proxy.size.height + 1 ? .vertical : []]
             ScrollView(axes) {
                 ZStack(alignment: .topLeading) {
-                    VStack(spacing: 0) {
-                        if !workspace.panes.isEmpty {
-                            HStack {
-                                dragHandle(workspace.primaryID, layout: layout, viewport: proxy.size, division: division)
-                                Label("Chat".localized, systemImage: "bubble.left").font(.subheadline.weight(.medium))
-                                Spacer()
-                                Text(botName).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                            }.padding(.trailing, 14).frame(height: 44).background(Theme.surface)
-                            Divider()
-                        }
+                    WorkspacePaneSurface(titlesVisible: $titlesVisible, enabled: !workspace.panes.isEmpty, autoHide: autoHideTitles) {
+                        HStack {
+                            dragHandle(workspace.primaryID, layout: layout, viewport: proxy.size, division: division)
+                            Label("Chat".localized, systemImage: "bubble.left").font(.subheadline.weight(.medium))
+                            Spacer()
+                            Text(botName).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                        }.padding(.trailing, 14).frame(height: 44).background(Theme.surface)
+                    } content: {
                         primary()
-                    }.background(Theme.canvas)
+                    }
                         .paneFrame(layout.frames[order.firstIndex(of: workspace.primaryID) ?? 0])
                         .modifier(PaneLift(active: draggedID == workspace.primaryID, translation: dragTranslation, reduceMotion: reduceMotion))
                         .animation(motion, value: layoutRevision)
                     ForEach($workspace.panes) { $pane in
                         if let index = order.firstIndex(of: pane.id) {
-                            ChatWorkspacePane(api: api, defaultBotID: botID, pane: $pane,
+                            ChatWorkspacePane(api: api, defaultBotID: botID, pane: $pane, titlesVisible: $titlesVisible, autoHideTitles: autoHideTitles,
                                 move: { direction in
                                     let ids = workspace.orderedIDs
                                     if let current = ids.firstIndex(of: pane.id), ids.indices.contains(current + direction) {
@@ -520,6 +565,8 @@ struct ChatWorkspacePane: View {
     let api: APIClient
     let defaultBotID: String
     @Binding var pane: WorkspacePane
+    @Binding var titlesVisible: Bool
+    let autoHideTitles: Bool
     let move: (Int) -> Void
     let close: () -> Void
     let dragChanged: (DragGesture.Value) -> Void
@@ -529,8 +576,9 @@ struct ChatWorkspacePane: View {
     @State private var terminalID = UUID()
     private var botID: String { pane.botID.nonEmpty ?? defaultBotID }
     private var tool: ChatWorkspaceTool { pane.tool }
-    init(api: APIClient, defaultBotID: String, pane: Binding<WorkspacePane>, move: @escaping (Int) -> Void, close: @escaping () -> Void,
+    init(api: APIClient, defaultBotID: String, pane: Binding<WorkspacePane>, titlesVisible: Binding<Bool>, autoHideTitles: Bool, move: @escaping (Int) -> Void, close: @escaping () -> Void,
          dragChanged: @escaping (DragGesture.Value) -> Void, dragEnded: @escaping () -> Void, dragCancelled: @escaping () -> Void) {
+        _titlesVisible = titlesVisible; self.autoHideTitles = autoHideTitles
         self.dragChanged = dragChanged; self.dragEnded = dragEnded; self.dragCancelled = dragCancelled
         self.api = api; self.defaultBotID = defaultBotID; _pane = pane; self.move = move; self.close = close
         let model = DesktopModel(api: api, botID: pane.wrappedValue.botID.nonEmpty ?? defaultBotID)
@@ -538,7 +586,7 @@ struct ChatWorkspacePane: View {
         _desktop = State(initialValue: model)
     }
     var body: some View {
-        VStack(spacing: 0) {
+        WorkspacePaneSurface(titlesVisible: $titlesVisible, enabled: true, autoHide: autoHideTitles) {
             HStack(spacing: 0) {
                 PaneDragHandle(changed: dragChanged, ended: dragEnded, cancelled: dragCancelled)
                 Menu {
@@ -567,7 +615,7 @@ struct ChatWorkspacePane: View {
                 }
                 Button(action: close) { Image(systemName: "xmark").frame(width: 40, height: 44) }.accessibilityLabel("Close pane".localized)
             }.buttonStyle(.plain).padding(.trailing, 4).frame(height: 44).background(Theme.surface)
-            Divider()
+        } content: {
             switch tool {
             case .desktop:
                 if api.isDemo { EmptyState(title: "Desktop unavailable", symbol: tool.symbol, detail: "Connect to a server to use this agent’s desktop.") }

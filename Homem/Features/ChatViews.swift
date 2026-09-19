@@ -180,9 +180,12 @@ private struct AgentChatWorkspace: View {
     let destination: ChatDestination
     let showsAgentSwitcher: Bool
     @State private var prepared = false
+    @State private var titlesVisible = true
+    @AppStorage("keepWorkspaceTitleBarsVisible") private var keepTitlesVisible = false
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     private var route: ChatDestination { workspace.snapshot.conversation ?? destination }
     var body: some View {
-        WorkspaceCanvas(workspace: $workspace.snapshot, api: api, botID: destination.botID, botName: destination.botName) {
+        WorkspaceCanvas(workspace: $workspace.snapshot, titlesVisible: $titlesVisible, autoHideTitles: !keepTitlesVisible && !voiceOverEnabled, api: api, botID: destination.botID, botName: destination.botName) {
             let currentRoute = route
             ChatContent(model: ChatModel(api: api, botID: currentRoute.botID, sessionID: currentRoute.sessionID), destination: currentRoute, allowsWorkspace: false,
                         onFirstMessageQueued: {
@@ -193,6 +196,10 @@ private struct AgentChatWorkspace: View {
         .navigationTitle(route.title).navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(Theme.canvas, for: .navigationBar).toolbarBackground(.visible, for: .navigationBar)
         .toolbar(workspace.snapshot.panes.isEmpty ? .visible : .hidden, for: .tabBar)
+        .toolbar(workspace.snapshot.panes.isEmpty || titlesVisible ? .visible : .hidden, for: .navigationBar)
+        .onChange(of: keepTitlesVisible) { _, pinned in if pinned { titlesVisible = true } }
+        .onChange(of: voiceOverEnabled) { _, enabled in if enabled { titlesVisible = true } }
+        .onChange(of: workspace.snapshot.panes.isEmpty) { _, _ in titlesVisible = true }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
@@ -205,6 +212,7 @@ private struct AgentChatWorkspace: View {
                         }
                     }
                     if !workspace.snapshot.panes.isEmpty {
+                        Toggle("Keep title bars visible".localized, isOn: $keepTitlesVisible)
                         Picker("Arrange panes".localized, selection: $workspace.snapshot.arrangement) {
                             ForEach(WorkspaceArrangement.allCases) { item in Text(item.title.localized).tag(item) }
                         }
