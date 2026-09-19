@@ -180,6 +180,8 @@ private struct AgentChatWorkspace: View {
     let destination: ChatDestination
     let showsAgentSwitcher: Bool
     @State private var prepared = false
+    @State private var workspaceControlsVisible = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private var route: ChatDestination { workspace.snapshot.conversation ?? destination }
     var body: some View {
         WorkspaceCanvas(workspace: $workspace.snapshot, api: api, botID: destination.botID, botName: destination.botName) {
@@ -193,6 +195,23 @@ private struct AgentChatWorkspace: View {
         .navigationTitle(route.title).navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(Theme.canvas, for: .navigationBar).toolbarBackground(.visible, for: .navigationBar)
         .toolbar(workspace.snapshot.panes.isEmpty ? .visible : .hidden, for: .tabBar)
+        .toolbar(workspace.snapshot.panes.isEmpty || workspaceControlsVisible ? .visible : .hidden, for: .navigationBar)
+        .overlay(alignment: .topLeading) {
+            if !workspace.snapshot.panes.isEmpty {
+                Button {
+                    withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) { workspaceControlsVisible.toggle() }
+                } label: {
+                    Image(systemName: workspaceControlsVisible ? "chevron.up" : "rectangle.3.group")
+                        .font(.system(size: 13, weight: .semibold))
+                        .frame(width: 30, height: 30).background(.regularMaterial, in: Circle())
+                        .frame(width: 44, height: 44).contentShape(Rectangle())
+                }.buttonStyle(.plain).padding(4)
+                    .accessibilityLabel("Workspace controls".localized)
+                    .accessibilityValue(workspaceControlsVisible ? "Expanded".localized : "Collapsed".localized)
+                    .accessibilityIdentifier("workspaceCornerControls")
+            }
+        }
+        .onChange(of: workspace.snapshot.panes.isEmpty) { _, _ in workspaceControlsVisible = false }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {

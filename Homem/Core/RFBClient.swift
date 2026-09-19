@@ -278,9 +278,8 @@ actor RuntimeDesktopConnection: DesktopTransport {
                     let deadline = Task { try await Task.sleep(for: pingTimeout); socket.cancel(with: .goingAway, reason: nil) }
                     defer { deadline.cancel() }
                     try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-                        socket.sendPing { error in
-                            if let error { continuation.resume(throwing: error) } else { continuation.resume() }
-                        }
+                        let completion = DesktopPingCompletion(continuation)
+                        socket.sendPing { error in completion.finish(error) }
                     }
                 } catch {
                     if !Task.isCancelled { socket.cancel(with: .goingAway, reason: nil) }
@@ -311,4 +310,20 @@ actor RuntimeDesktopConnection: DesktopTransport {
         try await next.value
     }
     func close() { heartbeat?.cancel(); heartbeat = nil; writes?.cancel(); writes = nil; socket.cancel(with: .goingAway, reason: nil) }
+}
+
+/// Some URLSession implementations deliver both the pong and a disconnect error
+/// to an outstanding ping callback. Only the first completion owns the waiter.
+final class DesktopPingCompletion: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<Void, Error>?
+    init(_ continuation: CheckedContinuation<Void, Error>) { self.continuation = continuation }
+    func finish(_ error: Error?) {
+        lock.lock()
+        let waiter = continuation
+        continuation = nil
+        lock.unlock()
+        guard let waiter else { return }
+        if let error { waiter.resume(throwing: error) } else { waiter.resume() }
+    }
 }

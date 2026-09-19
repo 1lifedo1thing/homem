@@ -127,3 +127,24 @@ final class RFBClientTests: XCTestCase {
 private extension Data {
     mutating func be<T: FixedWidthInteger>(_ value: T) { var n = value.bigEndian; Swift.withUnsafeBytes(of: &n) { append(contentsOf: $0) } }
 }
+
+final class DesktopPingCompletionTests: XCTestCase {
+    func testPongFollowedByDisconnectCompletesOnlyOnce() async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            let completion = DesktopPingCompletion(continuation)
+            completion.finish(nil)
+            completion.finish(URLError(.networkConnectionLost))
+            completion.finish(nil)
+        }
+    }
+    func testDisconnectFollowedByPongPreservesOriginalError() async {
+        do {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                let completion = DesktopPingCompletion(continuation)
+                completion.finish(URLError(.networkConnectionLost))
+                completion.finish(nil)
+            }
+            XCTFail("The disconnect must reach the connection recovery path")
+        } catch { XCTAssertEqual((error as? URLError)?.code, .networkConnectionLost) }
+    }
+}

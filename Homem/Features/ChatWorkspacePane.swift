@@ -335,19 +335,36 @@ struct PaneDropProposal: Equatable {
     }
 }
 
-private struct PaneDragHandle: View {
+/// Controls float over the corner instead of reserving a header row in every
+/// pane. The same button remains a drag grip without first opening the popover.
+private struct PaneCornerControls<Controls: View>: View {
+    let title: String
+    let symbol: String
     var changed: (DragGesture.Value) -> Void
     var ended: () -> Void
     var cancelled: () -> Void
-    @GestureState private var active = false
+    @ViewBuilder var controls: () -> Controls
+    @State private var presented = false
+    @GestureState private var dragging = false
+
     var body: some View {
-        Image(systemName: "line.3.horizontal").foregroundStyle(.secondary)
-            .frame(width: 40, height: 44).contentShape(Rectangle())
-            .gesture(DragGesture(minimumDistance: 6, coordinateSpace: .named("chatSplit"))
-                .updating($active) { _, state, _ in state = true }
-                .onChanged(changed).onEnded { _ in ended() })
-            .onChange(of: active) { _, value in if !value { cancelled() } }
-            .accessibilityLabel("Drag pane".localized)
+        Button { presented.toggle() } label: {
+            Image(systemName: symbol).font(.system(size: 13, weight: .semibold))
+                .frame(width: 30, height: 30).background(.regularMaterial, in: Circle())
+                .frame(width: 44, height: 44).contentShape(Rectangle())
+        }.buttonStyle(.plain)
+            .accessibilityLabel(title + ", " + "Pane controls".localized)
+            .accessibilityHint("Drag pane".localized)
+            .accessibilityIdentifier("paneCornerControls")
+            .highPriorityGesture(DragGesture(minimumDistance: 6, coordinateSpace: .named("chatSplit"))
+                .updating($dragging) { _, active, _ in active = true }
+                .onChanged { value in presented = false; changed(value) }
+                .onEnded { _ in ended() })
+            .onChange(of: dragging) { _, active in if !active { cancelled() } }
+            .popover(isPresented: $presented, attachmentAnchor: .rect(.bounds)) {
+                controls().padding(12).frame(width: 320)
+                    .presentationCompactAdaptation(.popover)
+            }
     }
 }
 
@@ -402,18 +419,20 @@ struct WorkspaceCanvas<Primary: View>: View {
                                   layout.size.height > proxy.size.height + 1 ? .vertical : []]
             ScrollView(axes) {
                 ZStack(alignment: .topLeading) {
-                    VStack(spacing: 0) {
-                        if !workspace.panes.isEmpty {
-                            HStack {
-                                dragHandle(workspace.primaryID, layout: layout, viewport: proxy.size, division: division)
-                                Label("Chat".localized, systemImage: "bubble.left").font(.subheadline.weight(.medium))
-                                Spacer()
-                                Text(botName).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                            }.padding(.trailing, 14).frame(height: 44).background(Theme.surface)
-                            Divider()
+                    primary().background(Theme.canvas)
+                        .overlay(alignment: .topTrailing) {
+                            if !workspace.panes.isEmpty {
+                                PaneCornerControls(title: "Chat".localized, symbol: "bubble.left",
+                                    changed: { updateDrag(workspace.primaryID, value: $0, layout: layout, viewport: proxy.size, division: division) },
+                                    ended: finishDrag, cancelled: cancelDrag) {
+                                    HStack(spacing: 12) {
+                                        Label("Chat".localized, systemImage: "bubble.left").font(.headline)
+                                        Spacer()
+                                        Text(botName).font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
+                                    }
+                                }.padding(4)
+                            }
                         }
-                        primary()
-                    }.background(Theme.canvas)
                         .paneFrame(layout.frames[order.firstIndex(of: workspace.primaryID) ?? 0])
                         .modifier(PaneLift(active: draggedID == workspace.primaryID, translation: dragTranslation, reduceMotion: reduceMotion))
                         .animation(motion, value: layoutRevision)
@@ -459,10 +478,6 @@ struct WorkspaceCanvas<Primary: View>: View {
             return Binding(get: { workspace.docking?.fraction(at: path) ?? 0.5 }, set: { workspace.docking?.setFraction($0, at: path) })
         }
         return vertical ? $workspace.columnFraction : $workspace.rowFraction
-    }
-    private func dragHandle(_ id: UUID, layout: WorkspaceGeometry, viewport: CGSize, division: CGRect?) -> some View {
-        PaneDragHandle(changed: { updateDrag(id, value: $0, layout: layout, viewport: viewport, division: division) },
-                       ended: finishDrag, cancelled: cancelDrag)
     }
     private func updateDrag(_ id: UUID, value: DragGesture.Value, layout: WorkspaceGeometry, viewport: CGSize, division: CGRect?) {
         draggedID = id
@@ -539,35 +554,6 @@ struct ChatWorkspacePane: View {
     }
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 0) {
-                PaneDragHandle(changed: dragChanged, ended: dragEnded, cancelled: dragCancelled)
-                Menu {
-                    Picker("Show".localized, selection: $pane.tool) {
-                        ForEach(ChatWorkspaceTool.allCases) { item in Label(item.title.localized, systemImage: item.symbol).tag(item) }
-                    }
-                    Picker("Agent".localized, selection: Binding(get: { botID }, set: { pane.botID = $0; pane.conversation = nil; pane.directory = "/data" })) {
-                        ForEach(store.bots) { bot in Text(bot.title).tag(bot.id) }
-                    }
-                    Button("Move earlier".localized, systemImage: "arrow.up") { move(-1) }
-                    Button("Move later".localized, systemImage: "arrow.down") { move(1) }
-                } label: {
-                    VStack(alignment: .leading, spacing: 1) {
-                        Label(tool.title.localized, systemImage: tool.symbol).font(.subheadline.weight(.medium)).lineLimit(1)
-                        Text(store.bots.first { $0.id == botID }?.title ?? "Agent".localized).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
-                    }
-                }.accessibilityLabel("Switch pane".localized)
-                Spacer(minLength: 4)
-                if tool == .desktop { DesktopModeButton(model: desktop) }
-                if tool == .desktop || tool == .terminal {
-                    Button {
-                        if tool == .desktop { Task { desktop.disconnect(); await desktop.connect() } }
-                        else { terminalID = UUID() }
-                    } label: { Image(systemName: "arrow.clockwise").frame(width: 40, height: 44) }
-                        .accessibilityLabel((tool == .desktop ? "Reconnect desktop" : "Reconnect terminal").localized)
-                }
-                Button(action: close) { Image(systemName: "xmark").frame(width: 40, height: 44) }.accessibilityLabel("Close pane".localized)
-            }.buttonStyle(.plain).padding(.trailing, 4).frame(height: 44).background(Theme.surface)
-            Divider()
             switch tool {
             case .desktop:
                 if api.isDemo { EmptyState(title: "Desktop unavailable", symbol: tool.symbol, detail: "Connect to a server to use this agent’s desktop.") }
@@ -576,9 +562,44 @@ struct ChatWorkspacePane: View {
             case .files: PaneFiles(botID: botID, path: $pane.directory)
             case .chat: PaneConversationPicker(initialBotID: botID, selection: $pane.conversation)
             }
-        }.background(Theme.canvas).clipped()
+        }.frame(maxWidth: .infinity, maxHeight: .infinity).background(Theme.canvas).clipped()
+            .overlay(alignment: .topTrailing) {
+                PaneCornerControls(title: tool.title.localized, symbol: tool.symbol,
+                                   changed: dragChanged, ended: dragEnded, cancelled: dragCancelled) { paneControls }
+                    .padding(4)
+            }
             .onChange(of: desktop.viewOnly) { _, value in pane.viewOnly = value }
     }
+    private var paneControls: some View {
+        HStack(spacing: 0) {
+            Menu {
+                Picker("Show".localized, selection: $pane.tool) {
+                    ForEach(ChatWorkspaceTool.allCases) { item in Label(item.title.localized, systemImage: item.symbol).tag(item) }
+                }
+                Picker("Agent".localized, selection: Binding(get: { botID }, set: { pane.botID = $0; pane.conversation = nil; pane.directory = "/data" })) {
+                    ForEach(store.bots) { bot in Text(bot.title).tag(bot.id) }
+                }
+                Button("Move earlier".localized, systemImage: "arrow.up") { move(-1) }
+                Button("Move later".localized, systemImage: "arrow.down") { move(1) }
+            } label: {
+                VStack(alignment: .leading, spacing: 1) {
+                    Label(tool.title.localized, systemImage: tool.symbol).font(.subheadline.weight(.medium)).lineLimit(1)
+                    Text(store.bots.first { $0.id == botID }?.title ?? "Agent".localized).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                }
+            }.accessibilityLabel("Switch pane".localized)
+            Spacer(minLength: 4)
+            if tool == .desktop { DesktopModeButton(model: desktop) }
+            if tool == .desktop || tool == .terminal {
+                Button {
+                    if tool == .desktop { Task { desktop.disconnect(); await desktop.connect() } }
+                    else { terminalID = UUID() }
+                } label: { Image(systemName: "arrow.clockwise").frame(width: 40, height: 44) }
+                    .accessibilityLabel((tool == .desktop ? "Reconnect desktop" : "Reconnect terminal").localized)
+            }
+            Button(action: close) { Image(systemName: "xmark").frame(width: 40, height: 44) }.accessibilityLabel("Close pane".localized)
+        }.buttonStyle(.plain).frame(minHeight: 44)
+    }
+
 }
 
 private struct PaneFiles: View {
