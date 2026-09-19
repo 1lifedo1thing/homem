@@ -15443,48 +15443,48 @@
         }
       }
     },
-    "Show title bars": {
+    "Show pane bars": {
       "extractionState": "manual",
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "显示标题栏"
+            "value": "显示窗格栏"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Mostrar barras de título"
+            "value": "Mostrar barras de panel"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "タイトルバーを表示"
+            "value": "ペインバーを表示"
           }
         }
       }
     },
-    "Keep title bars visible": {
+    "Keep pane bars visible": {
       "extractionState": "manual",
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "保持显示标题栏"
+            "value": "保持显示窗格栏"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Mantener barras de título visibles"
+            "value": "Mantener barras de panel visibles"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "タイトルバーを常に表示"
+            "value": "ペインバーを常に表示"
           }
         }
       }

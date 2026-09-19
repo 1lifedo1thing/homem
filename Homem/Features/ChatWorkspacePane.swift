@@ -352,7 +352,7 @@ private struct PaneDragHandle: View {
 }
 
 /// Keep the familiar header intact; content interaction tucks it away. A centered
-/// edge handle reveals all workspace controls without competing corner buttons.
+/// edge handle reveals pane controls without competing corner buttons.
 private struct WorkspacePaneSurface<Header: View, Content: View>: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Binding var titlesVisible: Bool
@@ -382,7 +382,7 @@ private struct WorkspacePaneSurface<Header: View, Content: View>: View {
                         .background(.regularMaterial, in: Capsule())
                         .frame(width: 64, height: 44, alignment: .top).contentShape(Rectangle())
                 }.buttonStyle(.plain).padding(.top, 4)
-                    .accessibilityLabel("Show title bars".localized)
+                    .accessibilityLabel("Show pane bars".localized)
                     .accessibilityIdentifier("showWorkspaceTitles")
             }
         }

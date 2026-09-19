@@ -196,7 +196,7 @@ private struct AgentChatWorkspace: View {
         .navigationTitle(route.title).navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(Theme.canvas, for: .navigationBar).toolbarBackground(.visible, for: .navigationBar)
         .toolbar(workspace.snapshot.panes.isEmpty ? .visible : .hidden, for: .tabBar)
-        .toolbar(workspace.snapshot.panes.isEmpty || titlesVisible ? .visible : .hidden, for: .navigationBar)
+        .toolbar(.visible, for: .navigationBar)
         .onChange(of: keepTitlesVisible) { _, pinned in if pinned { titlesVisible = true } }
         .onChange(of: voiceOverEnabled) { _, enabled in if enabled { titlesVisible = true } }
         .onChange(of: workspace.snapshot.panes.isEmpty) { _, _ in titlesVisible = true }
@@ -212,7 +212,7 @@ private struct AgentChatWorkspace: View {
                         }
                     }
                     if !workspace.snapshot.panes.isEmpty {
-                        Toggle("Keep title bars visible".localized, isOn: $keepTitlesVisible)
+                        Toggle("Keep pane bars visible".localized, isOn: $keepTitlesVisible)
                         Picker("Arrange panes".localized, selection: $workspace.snapshot.arrangement) {
                             ForEach(WorkspaceArrangement.allCases) { item in Text(item.title.localized).tag(item) }
                         }
