@@ -181,6 +181,7 @@ final class ChatSplitLayoutTests: XCTestCase {
     func testIPadColumnsKeepBothPanesUsableAndNarrowWindowsStack() {
         XCTAssertFalse(ChatSplitLayout.usesColumns(width: 430))
         XCTAssertFalse(ChatSplitLayout.usesColumns(width: 600))
+        XCTAssertTrue(ChatSplitLayout.usesColumns(width: 669))
         XCTAssertTrue(ChatSplitLayout.usesColumns(width: 700))
         XCTAssertTrue(ChatSplitLayout.usesColumns(width: 1032))
         for width: CGFloat in [676, 1008, 1352] {
@@ -206,8 +207,37 @@ final class ChatSplitLayoutTests: XCTestCase {
 }
 
 final class WorkspaceGeometryTests: XCTestCase {
+    func testActiveFoldKeepsPanesClearAndUnfoldingRestoresLayout() {
+        let size = CGSize(width: 900, height: 650)
+        for fold in [CGRect(x: 438, y: 0, width: 24, height: 650), CGRect(x: 0, y: 310, width: 900, height: 30)] {
+            for count in 1...4 {
+                for arrangement in WorkspaceArrangement.allCases {
+                    let layout = WorkspaceGeometry.make(size: size, count: count, arrangement: arrangement, division: fold)
+                    XCTAssertEqual(layout.frames.count, count)
+                    for frame in layout.frames {
+                        XCTAssertFalse(frame.intersects(fold))
+                        XCTAssertTrue(CGRect(origin: .zero, size: size).contains(frame))
+                    }
+                }
+            }
+        }
+        let flat = WorkspaceGeometry.make(size: size, count: 3, arrangement: .automatic)
+        let unfolded = WorkspaceGeometry.make(size: size, count: 3, arrangement: .automatic, division: .zero)
+        XCTAssertEqual(flat.frames, unfolded.frames)
+        let croppedFold = WorkspaceGeometry.make(size: size, count: 3, arrangement: .automatic, division: CGRect(x: 0, y: -100, width: 900, height: 30))
+        XCTAssertEqual(flat.frames, croppedFold.frames)
+    }
+    func testLaptopPoseKeepsChatBelowFoldAndToolsAbove() {
+        let fold = CGRect(x: 0, y: 320, width: 900, height: 24)
+        let layout = WorkspaceGeometry.make(size: CGSize(width: 900, height: 680), count: 3, arrangement: .automatic, division: fold)
+        XCTAssertGreaterThan(layout.frames[0].minY, fold.maxY)
+        XCTAssertLessThan(layout.frames[1].maxY, fold.minY)
+        XCTAssertLessThan(layout.frames[2].maxY, fold.minY)
+        XCTAssertLessThan(layout.frames[1].maxX, layout.frames[2].minX)
+        XCTAssertTrue(layout.dividers.isEmpty)
+    }
     func testDynamicArrangementsKeepEveryPaneInsideCanvasWithoutOverlap() {
-        for size in [CGSize(width: 430, height: 320), CGSize(width: 430, height: 740), CGSize(width: 1032, height: 700)] {
+        for size in [CGSize(width: 430, height: 320), CGSize(width: 430, height: 740), CGSize(width: 466, height: 600), CGSize(width: 669, height: 850), CGSize(width: 951, height: 570), CGSize(width: 1032, height: 700)] {
             for count in 1...8 {
                 for arrangement in WorkspaceArrangement.allCases {
                     let layout = WorkspaceGeometry.make(size: size, count: count, arrangement: arrangement)

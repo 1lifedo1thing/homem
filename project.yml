@@ -6,6 +6,8 @@ options:
 settings:
   base:
     SWIFT_VERSION: '5.0'
+    # Keep older Xcode Cloud SDKs buildable; Duo APIs are present in 27.1.
+    'SWIFT_ACTIVE_COMPILATION_CONDITIONS[sdk=iphone*27.1*]': '$(inherited) HOMEM_DUO_SDK'
     MACOSX_DEPLOYMENT_TARGET: '14.0'
     MARKETING_VERSION: '1.0.0'
     CURRENT_PROJECT_VERSION: '1'

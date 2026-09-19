@@ -64,12 +64,12 @@ struct ConversationsView: View {
                 .navigationBarTitleDisplayMode(sizeClass == .regular ? .inline : .large)
                 .searchable(text: $search, placement: sizeClass == .regular ? .sidebar : .navigationBarDrawer(displayMode: .automatic), prompt: Text("Find a conversation".localized))
                 .toolbar {
-                    ToolbarItem(placement: .topBarLeading) { WorkspacePickerMenu() }
-                    ToolbarItemGroup(placement: .topBarTrailing) {
-                        composeButton
-                        if sizeClass != .regular {
+                    ToolbarItem(placement: .topBarLeading) { WorkspacePickerMenu() }.adaptiveAvatarPlacement()
+                    ToolbarItem(placement: .topBarTrailing) { composeButton }
+                    if sizeClass != .regular {
+                        ToolbarItem(placement: .topBarTrailing) {
                             AgentPickerMenu(selection: Binding(get: { store.selectedBot?.id ?? "" }, set: { store.selectedBotID = $0 }))
-                        }
+                        }.adaptiveAvatarPlacement()
                     }
                 }
                 .refreshable { await store.reload(); await load() }
@@ -100,7 +100,7 @@ struct ConversationsView: View {
                         if sizeClass == .regular {
                             ToolbarItem(placement: .topBarTrailing) {
                                 AgentPickerMenu(selection: Binding(get: { store.selectedBot?.id ?? "" }, set: { store.selectedBotID = $0 }))
-                            }
+                            }.adaptiveAvatarPlacement()
                         }
                     }
             }
@@ -216,7 +216,7 @@ private struct AgentChatWorkspace: View {
             if showsAgentSwitcher {
                 ToolbarItem(placement: .topBarTrailing) {
                     AgentPickerMenu(selection: Binding(get: { destination.botID }, set: { store.selectedBotID = $0 }))
-                }
+                }.adaptiveAvatarPlacement()
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {

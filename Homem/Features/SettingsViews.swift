@@ -46,7 +46,7 @@ struct SettingsView: View {
                 Button(store.isDemo ? "Connect your server".localized : "Sign out".localized, role: store.isDemo ? nil : .destructive) { if store.isDemo { store.signOut() } else { signOut = true } }
             } footer: { Text("Homem 1.0 · Native Swift client for Memoh".localized) }
         }.navigationTitle("Settings".localized)
-            .toolbar { ToolbarItem(placement: .topBarLeading) { WorkspacePickerMenu() } }
+            .toolbar { ToolbarItem(placement: .topBarLeading) { WorkspacePickerMenu() }.adaptiveAvatarPlacement() }
             .sheet(isPresented: $accounts) { AccountsView() }
             .alert("Sign out of Memoh?".localized, isPresented: $signOut) { Button("Sign out".localized, role: .destructive) { store.signOut() } }
     }

@@ -11,9 +11,9 @@ struct HomeShell: View {
             NavigationStack { LibraryView() }.environment(\.horizontalSizeClass, sizeClass).tabItem { Label("Library".localized, systemImage: "books.vertical") }
             NavigationStack { SettingsView() }.environment(\.horizontalSizeClass, sizeClass).tabItem { Label("Settings".localized, systemImage: "slider.horizontal.3") }
         }
-        // Keep app navigation below the workspace on iPad. Restore the real size
-        // class inside each tab so split views and adaptive grids remain native.
-        .environment(\.horizontalSizeClass, .compact)
+        // iOS 27.1 arranges the system bars for each Duo display and pose.
+        // Preserve the established bottom-tab presentation on older systems.
+        .modifier(AdaptiveTabLayout())
         .task { await store.reload() }
         .onChange(of: scenePhase) { _, value in if value == .active { Task { await store.reload() } } }
         .alert("Sign in again".localized, isPresented: Binding(get: { store.api?.unauthorized == true }, set: { _ in })) {
@@ -21,6 +21,67 @@ struct HomeShell: View {
         } message: { Text("Your Memoh session has expired. Sign in to reconnect to your server.".localized) }
     }
 }
+
+private struct AdaptiveTabLayout: ViewModifier {
+    @ViewBuilder func body(content: Content) -> some View {
+        #if HOMEM_DUO_SDK
+        if #available(iOS 27.1, *) { content }
+        else { content.environment(\.horizontalSizeClass, .compact) }
+        #else
+        content.environment(\.horizontalSizeClass, .compact)
+        #endif
+    }
+}
+
+extension ToolbarContent {
+    @ToolbarContentBuilder func adaptiveAvatarPlacement() -> some ToolbarContent {
+        #if HOMEM_DUO_SDK
+        if #available(iOS 27.1, *) { self.axisBehavior(.verticalPreferred) }
+        else { self }
+        #else
+        self
+        #endif
+    }
+}
+
+/// Side toolbars need one centered avatar; a horizontal chevron squeezes it.
+private struct AvatarToolbarLabel<Avatar: View>: View {
+    @ViewBuilder var avatar: (CGFloat) -> Avatar
+
+    @ViewBuilder var body: some View {
+        #if HOMEM_DUO_SDK
+        if #available(iOS 27.1, *) {
+            AxisAwareAvatarToolbarLabel(avatar: avatar)
+        } else { horizontal }
+        #else
+        horizontal
+        #endif
+    }
+
+    private var horizontal: some View {
+        HStack(spacing: 5) {
+            avatar(28)
+            Image(systemName: "chevron.down").font(.system(size: 9, weight: .bold)).foregroundStyle(.secondary)
+        }.frame(minWidth: 44, minHeight: 44)
+    }
+}
+
+#if HOMEM_DUO_SDK
+@available(iOS 27.1, *)
+private struct AxisAwareAvatarToolbarLabel<Avatar: View>: View {
+    @Environment(\.toolbarVerticalEdge) private var verticalEdge
+    @ViewBuilder var avatar: (CGFloat) -> Avatar
+
+    var body: some View {
+        HStack(spacing: 5) {
+            avatar(verticalEdge == nil ? 28 : 32)
+            if verticalEdge == nil {
+                Image(systemName: "chevron.down").font(.system(size: 9, weight: .bold)).foregroundStyle(.secondary)
+            }
+        }.frame(width: 44, height: 44)
+    }
+}
+#endif
 
 struct LibraryView: View {
     @Environment(\.appAccent) private var accent
@@ -62,10 +123,10 @@ struct LibraryView: View {
                 .frame(maxWidth: 760).frame(maxWidth: .infinity)
         }.background(Theme.canvas).navigationTitle("Library".localized)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) { WorkspacePickerMenu() }
+                ToolbarItem(placement: .topBarLeading) { WorkspacePickerMenu() }.adaptiveAvatarPlacement()
                 ToolbarItem(placement: .topBarTrailing) {
                     AgentPickerMenu(selection: Binding(get: { store.selectedBot?.id ?? "" }, set: { store.selectedBotID = $0 }))
-                }
+                }.adaptiveAvatarPlacement()
             }
     }
     private func shortcut(_ title: String, icon: String, spec: ResourceSpec) -> some View {
@@ -193,10 +254,9 @@ struct AgentPickerMenu: View {
         #endif
     }
     private var pickerLabel: some View {
-        HStack(spacing: 5) {
-            AgentAvatar(name: selected?.title ?? "Agent", avatarURL: selected?.value.avatarURL ?? "", size: 28)
-            Image(systemName: "chevron.down").font(.system(size: 9, weight: .bold)).foregroundStyle(.secondary)
-        }.frame(minWidth: 44, minHeight: 44)
+        AvatarToolbarLabel { size in
+            AgentAvatar(name: selected?.title ?? "Agent", avatarURL: selected?.value.avatarURL ?? "", size: size)
+        }
     }
 }
 
@@ -232,11 +292,10 @@ struct WorkspacePickerMenu: View {
             if !store.workspaces.isEmpty { Divider() }
             Button("Accounts".localized, systemImage: "person.crop.circle") { accounts = true }
         } label: {
-            HStack(spacing: 5) {
-                if busy { ProgressView() }
-                else { AgentAvatar(name: store.workspaceName, avatarURL: store.workspace.avatarURL, size: 28) }
-                Image(systemName: "chevron.down").font(.system(size: 9, weight: .bold)).foregroundStyle(.secondary)
-            }.frame(minWidth: 44, minHeight: 44)
+            AvatarToolbarLabel { size in
+                if busy { ProgressView().frame(width: size, height: size) }
+                else { AgentAvatar(name: store.workspaceName, avatarURL: store.workspace.avatarURL, size: size) }
+            }
         }
         .accessibilityLabel("Workspace".localized).accessibilityValue(store.workspaceName)
         .accessibilityIdentifier("workspacePicker")

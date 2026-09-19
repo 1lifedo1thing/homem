@@ -78,7 +78,8 @@ enum WorkspaceArrangement: String, CaseIterable, Identifiable, Codable {
 
 enum ChatSplitLayout {
     static func fraction(_ value: Double) -> Double { min(0.65, max(0.25, value)) }
-    static func usesColumns(width: CGFloat) -> Bool { width >= 700 }
+    // Two readable 300-point panes plus the divider, independent of device idiom.
+    static func usesColumns(width: CGFloat) -> Bool { width >= 624 }
     static func columnFraction(_ value: Double, available: CGFloat) -> Double {
         let minimum = min(0.5, 300 / max(available, 1))
         return min(1 - minimum, max(minimum, value))
@@ -97,11 +98,16 @@ struct WorkspaceGeometry {
     var dividers: [CGRect] = []
 
     static func make(size proposed: CGSize, count: Int, arrangement: WorkspaceArrangement,
-                     columnFraction: Double = 0.45, rowFraction: Double = 0.45) -> Self {
+                     columnFraction: Double = 0.45, rowFraction: Double = 0.45, division: CGRect? = nil) -> Self {
         let width = max(1, proposed.width), height = max(1, proposed.height)
         let count = max(1, count), gap: CGFloat = 24
+        // An active fold takes precedence over a saved arrangement. Keep the
+        // preference intact so unfolding restores it without recreating panes.
+        if let division, let folded = folded(size: CGSize(width: width, height: height), count: count, division: division) {
+            return folded
+        }
         if count == 1 { return Self(frames: [CGRect(x: 0, y: 0, width: width, height: height)], size: CGSize(width: width, height: height)) }
-        if arrangement == .automatic, width >= 700, count <= 3 {
+        if arrangement == .automatic, ChatSplitLayout.usesColumns(width: width), count <= 3 {
             let usableWidth = width - gap
             let left = usableWidth * ChatSplitLayout.columnFraction(columnFraction, available: usableWidth)
             let right = usableWidth - left
@@ -118,7 +124,7 @@ struct WorkspaceGeometry {
             }
             return Self(frames: frames, size: CGSize(width: width, height: totalHeight), dividers: dividers)
         }
-        if arrangement == .automatic, width < 700, count == 2 {
+        if arrangement == .automatic, !ChatSplitLayout.usesColumns(width: width), count == 2 {
             let totalHeight = max(300, height)
             let top = ChatSplitLayout.paneHeight(available: totalHeight - gap, fraction: rowFraction)
             return Self(frames: [CGRect(x: 0, y: top + gap, width: width, height: totalHeight - top - gap),
@@ -130,7 +136,7 @@ struct WorkspaceGeometry {
         switch arrangement {
         case .columns: columns = count
         case .rows: columns = 1
-        case .automatic, .grid: columns = width >= 700 ? 2 : 1
+        case .automatic, .grid: columns = ChatSplitLayout.usesColumns(width: width) ? 2 : 1
         }
         let rows = (count + columns - 1) / columns
         let cellWidth = max(min(width, 320), (width - CGFloat(columns - 1) * gap) / CGFloat(columns))
@@ -141,6 +147,49 @@ struct WorkspaceGeometry {
         return Self(frames: frames, size: CGSize(width: CGFloat(columns) * (cellWidth + gap) - gap,
                                                 height: CGFloat(rows) * (cellHeight + gap) - gap))
     }
+    private static func folded(size: CGSize, count: Int, division: CGRect) -> Self? {
+        let bounds = CGRect(origin: .zero, size: size)
+        let fold = division.intersection(bounds)
+        guard !fold.isNull, !fold.isEmpty else { return nil }
+        let vertical = division.height >= division.width
+        let margin: CGFloat = 12
+        let first: CGRect
+        let second: CGRect
+        if vertical {
+            guard fold.height >= size.height * 0.5 else { return nil }
+            first = CGRect(x: 0, y: 0, width: max(0, fold.minX - margin), height: size.height)
+            second = CGRect(x: min(size.width, fold.maxX + margin), y: 0, width: max(0, size.width - fold.maxX - margin), height: size.height)
+        } else {
+            guard fold.width >= size.width * 0.5 else { return nil }
+            first = CGRect(x: 0, y: 0, width: size.width, height: max(0, fold.minY - margin))
+            second = CGRect(x: 0, y: min(size.height, fold.maxY + margin), width: size.width, height: max(0, size.height - fold.maxY - margin))
+        }
+        // A fold outside the useful viewport (for example above the keyboard)
+        // must not force a tiny, unusable pane.
+        guard min(first.width, second.width) >= 170, min(first.height, second.height) >= 140 else { return nil }
+        if count == 1 {
+            // Keep the composer reachable on the lower half in a laptop pose.
+            return Self(frames: [vertical ? first : second], size: size)
+        }
+        let leadingCount = (count + 1) / 2
+        func tiles(in region: CGRect, count: Int) -> [CGRect] {
+            let gap: CGFloat = 12
+            let extent = vertical ? region.height : region.width
+            let length = max(1, (extent - CGFloat(count - 1) * gap) / CGFloat(count))
+            return (0..<count).map { index in
+                if vertical { return CGRect(x: region.minX, y: region.minY + CGFloat(index) * (length + gap), width: region.width, height: length) }
+                return CGRect(x: region.minX + CGFloat(index) * (length + gap), y: region.minY, width: length, height: region.height)
+            }
+        }
+        // Put the primary chat below a horizontal fold, with remote content above.
+        let primaryRegion = vertical ? first : second
+        let secondaryRegion = vertical ? second : first
+        // For three panes retain the familiar chat + two tools arrangement.
+        let primaryCount = count <= 3 ? 1 : leadingCount
+        let secondaryCount = count - primaryCount
+        return Self(frames: tiles(in: primaryRegion, count: primaryCount) + tiles(in: secondaryRegion, count: secondaryCount), size: size)
+    }
+
 }
 
 struct WorkspaceCanvas<Primary: View>: View {
@@ -150,11 +199,24 @@ struct WorkspaceCanvas<Primary: View>: View {
     let botName: String
     @ViewBuilder let primary: () -> Primary
 
-    var body: some View { PaneSurfaceHost { surface } }
-    private var surface: some View {
+    var body: some View {
+        GeometryReader { proxy in
+            // Read reserved regions before crossing the UIKit hosting boundary.
+            PaneSurfaceHost { surface(division: activeDivision(in: proxy)) }
+        }
+    }
+    private func activeDivision(in proxy: GeometryProxy) -> CGRect? {
+        #if HOMEM_DUO_SDK
+        if #available(iOS 27.1, *) {
+            return proxy.reservedRegions(kind: .division, layoutDirectionBehavior: .fixed).first?.frame
+        }
+        #endif
+        return nil
+    }
+    private func surface(division: CGRect?) -> some View {
         GeometryReader { proxy in
             let layout = WorkspaceGeometry.make(size: proxy.size, count: workspace.panes.count + 1, arrangement: workspace.arrangement,
-                                                columnFraction: workspace.columnFraction, rowFraction: workspace.rowFraction)
+                                                columnFraction: workspace.columnFraction, rowFraction: workspace.rowFraction, division: division)
             let order = workspace.orderedIDs
             let axes: Axis.Set = [layout.size.width > proxy.size.width + 1 ? .horizontal : [],
                                   layout.size.height > proxy.size.height + 1 ? .vertical : []]

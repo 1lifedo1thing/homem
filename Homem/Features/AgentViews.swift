@@ -35,7 +35,7 @@ struct AgentsView: View {
         }.background(Theme.canvas).navigationTitle("Agents".localized)
             .searchable(text: $search, prompt: "Find an agent")
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) { WorkspacePickerMenu() }
+                ToolbarItem(placement: .topBarLeading) { WorkspacePickerMenu() }.adaptiveAvatarPlacement()
                 ToolbarItem(placement: .topBarTrailing) { Button { create = true } label: { Image(systemName: "plus") }.accessibilityLabel("Create agent".localized) }
             }
             .refreshable { await store.reload() }
