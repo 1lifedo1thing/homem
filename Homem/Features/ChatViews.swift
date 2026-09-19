@@ -322,8 +322,10 @@ struct ChatContent: View {
             }
         }
     }
+    private var hasComposerInput: Bool { !model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachments.isEmpty }
     private var composer: some View {
         VStack(spacing: 10) {
+            if !model.queue.items.isEmpty || model.queue.error != nil { ChatQueueView(queue: model.queue) }
             if voice.recording {
                 HStack { Label("Recording · up to 5 minutes".localized, systemImage: "record.circle").font(.caption).foregroundStyle(.red); Spacer(); Button("Cancel".localized) { voice.cancel() }; Button("Attach".localized) { if let url = voice.finish() { do { try attach(url); try? FileManager.default.removeItem(at: url) } catch { model.error = error.localizedDescription } } } }.font(.caption)
             }
@@ -340,14 +342,28 @@ struct ChatContent: View {
                 if model.active {
                     Menu {
                         Button("Stop response".localized, role: .destructive) { Task { await model.control("abort") } }
-                        if !model.draft.isEmpty {
-                            Button("Send as follow-up".localized) { Task { await queue("follow-up-queue") } }
-                            Button("Steer current response".localized) { Task { await queue("steer-queue") } }
+                        if hasComposerInput, model.queue.steerSupported {
+                            Button("Steer current response".localized) { Task { _ = await model.enqueue(kind: .steer, attachments: attachments) } }
+                                .disabled(model.queue.submitting)
                         }
-                    } label: { Image(systemName: "stop.circle.fill").font(.title).frame(width: 42, height: 42) }.accessibilityLabel("Response controls".localized)
-                } else {
-                    Button { Task { if await model.send(attachments: attachments) { attachments = []; composerFocused = false } } } label: { Image(systemName: "arrow.up").font(.body.weight(.semibold)).foregroundStyle(.white).frame(width: 40, height: 40).background(accent, in: Circle()) }
-                        .disabled(model.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && attachments.isEmpty).accessibilityLabel("Send message".localized).accessibilityIdentifier("sendMessage")
+                    } label: { Image(systemName: "stop.circle").font(.title2).frame(width: 36, height: 42) }.accessibilityLabel("Response controls".localized)
+                }
+                if !model.active || hasComposerInput {
+                    Button {
+                        let sentAttachments = attachments
+                        Task {
+                            if await model.send(attachments: sentAttachments) {
+                                if attachments == sentAttachments { attachments = [] }
+                                if model.draft.isEmpty { composerFocused = false }
+                            }
+                        }
+                    } label: {
+                        Group {
+                            if model.queue.submitting { ProgressView().tint(.white) }
+                            else { Image(systemName: model.active ? "text.badge.plus" : "arrow.up").font(.body.weight(.semibold)) }
+                        }.foregroundStyle(.white).frame(width: 40, height: 40).background(accent, in: Circle())
+                    }.disabled(!hasComposerInput || model.queue.submitting)
+                        .accessibilityLabel((model.active ? "Queue message" : "Send message").localized).accessibilityIdentifier("sendMessage")
                 }
             }.padding(.horizontal, 10).padding(.vertical, 5).background(Theme.surface, in: RoundedRectangle(cornerRadius: 24)).overlay(RoundedRectangle(cornerRadius: 24).stroke(Theme.separator, lineWidth: 0.5))
             HStack {
@@ -371,9 +387,6 @@ struct ChatContent: View {
         attachments.append(try ChatAttachment.read(url, existingCount: attachments.count))
     }
 
-    func queue(_ kind: String) async {
-        do { _ = try await model.api.call(model.sessionPath + "/" + kind, method: "POST", body: ["text": .string(model.draft), "invocation_id": .string(UUID().uuidString.lowercased())]); model.draft = "" } catch { model.error = error.localizedDescription }
-    }
     func fork(_ turn: JSONValue) async {
         do { let value = try await model.api.call(model.sessionPath + "/fork", method: "POST", body: ["turn_id": turn["turn_id"]]); forked = .init(botID: destination.botID, sessionID: value["id"].string, title: value["title"].string, botName: destination.botName) } catch { model.error = error.localizedDescription }
     }

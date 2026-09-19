@@ -6,7 +6,7 @@ Connect to [official Memoh](https://app.memoh.net) or your own [Memoh server](ht
 
 ## Features
 
-- Chat with your agents, share attachments, and view formatted code and tool activity.
+- Chat with your agents, queue follow-ups, share attachments, and view formatted code and tool activity.
 - Browse files, use an interactive terminal, and control your remote desktop—or keep it view-only.
 - Arrange chat, terminal, files, and desktop panes together in a flexible workspace.
 - Switch between accounts, servers, and workspaces.

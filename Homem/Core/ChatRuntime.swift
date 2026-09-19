@@ -61,6 +61,7 @@ struct RuntimeState {
     let api: APIClient
     let botID: String
     let sessionID: String
+    let queue: ChatQueue
     var history: [JSONValue] = []
     var runtime = RuntimeState()
     var pending: [JSONValue] = []
@@ -83,11 +84,13 @@ struct RuntimeState {
     var sessionPath: String { prefix + "/sessions/\(sessionID.pathComponent)" }
     init(api: APIClient, botID: String, sessionID: String) {
         self.api = api; self.botID = botID; self.sessionID = sessionID
-        if !api.isDemo { draft = Keychain.read("draft|\(api.draftScope)|\(botID)|\(sessionID)") ?? "" }
+        queue = ChatQueue(api: api, path: "/bots/\(botID.pathComponent)/sessions/\(sessionID.pathComponent)")
+        if !api.isDemo { draft = Keychain.read("draft|\(api.draftScope)|\(botID)|\(sessionID)") ?? queue.unconfirmedText ?? "" }
     }
     func saveDraft() { if !api.isDemo && !api.signedOut { try? Keychain.save(draft.isEmpty ? nil : draft, account: "draft|\(api.draftScope)|\(botID)|\(sessionID)") } }
     func start() async {
         isStopped = false
+        queue.start()
         await loadHistory()
         await loadModels()
         guard !api.isDemo else { connection = "Demo"; return }
@@ -100,7 +103,7 @@ struct RuntimeState {
         } catch { /* Keep the bot default usable without model-list permission. */ }
     }
     func stop() {
-        saveDraft()
+        saveDraft(); queue.stop()
         isStopped = true; receiveTask?.cancel(); pingTask?.cancel(); socket?.cancel(with: .goingAway, reason: nil); socket = nil
     }
     func connect() {
@@ -171,6 +174,9 @@ struct RuntimeState {
     func send(attachments: [JSONValue] = []) async -> Bool {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty || !attachments.isEmpty else { return false }
+        if !api.isDemo, active || queue.retryKind(for: text) != nil {
+            return await enqueue(kind: queue.retryKind(for: text) ?? .followUp, attachments: attachments)
+        }
         let invocation = UUID().uuidString.lowercased()
         let turn: JSONValue = ["turn_id": .string(invocation), "role": "user", "text": .string(text), "attachments": .array(attachments)]
         if api.isDemo {
@@ -190,6 +196,12 @@ struct RuntimeState {
         do { try await reliableSend(request); return true }
         catch { self.error = "Connection interrupted. Your message is queued for reconnection."; return true }
     }
+    func enqueue(kind: ChatQueueKind, attachments: [JSONValue] = []) async -> Bool {
+        let sentDraft = draft
+        guard await queue.enqueue(text: sentDraft, kind: kind, attachments: attachments) else { return false }
+        if draft == sentDraft { draft = ""; saveDraft() }
+        return true
+    }
     func handle(_ event: JSONValue) async {
         let type = event["type"].string
         if !event["session_id"].string.isEmpty && event["session_id"].string != sessionID { return }
@@ -207,8 +219,12 @@ struct RuntimeState {
             if !event["applied"].bool { error = event["code"].string.nonEmpty ?? "The control could not be applied." }
         } else if type.hasPrefix("runtime_") {
             let wasActive = runtime.active
+            let previousSteers = runtime.run["steer_turns"]
+            let previousUsers = runtime.run["user_turns"]
+            let previousRun = runtime.run["run_id"]
             runtime.apply(event)
             if runtime.needsSnapshot { try? await write(["type": "runtime_subscribe", "session_id": .string(sessionID)]); return }
+            if type == "runtime_snapshot" || wasActive != runtime.active || previousRun != runtime.run["run_id"] || previousSteers != runtime.run["steer_turns"] || previousUsers != runtime.run["user_turns"] { queue.scheduleRefresh() }
             let userIDs = Set((runtime.run["user_turns"].array + [runtime.run["request_user_turn"]]).map { $0["turn_id"].string })
             pending.removeAll { userIDs.contains($0["turn_id"].string) }
             if wasActive && !runtime.active || type == "runtime_snapshot" && !runtime.active {
