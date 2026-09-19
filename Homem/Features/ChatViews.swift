@@ -23,6 +23,12 @@ struct ConversationsView: View {
     @State private var deletion: Record?
     @State private var columnVisibility: NavigationSplitViewVisibility = .automatic
     @State private var compactColumn: NavigationSplitViewColumn = .sidebar
+    private var needsCompactBackControl: Bool {
+        #if HOMEM_DUO_SDK
+        if #available(iOS 27.1, *) { return sizeClass != .regular }
+        #endif
+        return false
+    }
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility, preferredCompactColumn: $compactColumn) {
             List(selection: $selection) {
@@ -93,7 +99,23 @@ struct ConversationsView: View {
                     Text(AppLocalization.format("“%@” will be permanently deleted.", record.title))
                 }
         } detail: {
-            if let selection { ChatScreen(destination: selection, showsAgentSwitcher: true).id(selection.botID) }
+            if let selection {
+                ChatScreen(destination: selection, showsAgentSwitcher: true).id(selection.botID)
+                    .navigationBarBackButtonHidden(needsCompactBackControl)
+                    .toolbar {
+                        if needsCompactBackControl {
+                            ToolbarItem(placement: .topBarLeading) {
+                                Button {
+                                    self.selection = nil
+                                    compactColumn = .sidebar
+                                    columnVisibility = .all
+                                } label: { Image(systemName: "chevron.backward") }
+                                    .accessibilityLabel("Chats".localized)
+                                    .accessibilityIdentifier("backToConversations")
+                            }.adaptiveAvatarPlacement()
+                        }
+                    }
+            }
             else {
                 EmptyState(title: "Choose a conversation", symbol: "bubble.left.and.bubble.right", detail: "Choose a conversation or start a new one.")
                     .toolbar {
@@ -107,7 +129,19 @@ struct ConversationsView: View {
         }
         .navigationSplitViewStyle(.balanced)
         .environment(\.expandChatWorkspace, { columnVisibility = .detailOnly })
-        .onChange(of: selection) { _, value in compactColumn = value == nil ? .sidebar : .detail }
+        .onChange(of: selection) { _, value in
+            if sizeClass != .regular { compactColumn = value == nil ? .sidebar : .detail }
+            if value == nil { columnVisibility = .all }
+        }
+        .onChange(of: compactColumn) { _, column in
+            // Back on a compact display must also restore the list when the
+            // window expands. A previous pane expansion can leave it detail-only.
+            if column == .sidebar { columnVisibility = .all }
+        }
+        .onChange(of: sizeClass) { _, value in
+            // Expanded column visibility must not suppress compact Back navigation.
+            if value == .compact { columnVisibility = .automatic }
+        }
         .task(id: store.selectedBot?.id) {
             sessions = []; cursor = ""; error = nil
             if let bot = store.selectedBot, selection?.botID != bot.id {

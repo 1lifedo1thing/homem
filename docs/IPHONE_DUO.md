@@ -3,6 +3,7 @@
 Build with Xcode 27.1 and its iOS 27.1 SDK to enable the native Duo presentation.
 
 - System tab and navigation bars use the real size class on iOS 27.1, allowing vertical bars on Duo and expanded navigation on its inner display.
+- The outer display uses a single conversation stack with right-edge controls. Returning to Chats restores the sidebar for the next expansion. An explicit compact Back control on iOS 27.1 remains available when folding an inner-display conversation, where the system button can disappear.
 - Workspace and agent controls use a centered 32-point avatar in vertical toolbars. Horizontal toolbars retain the avatar and dropdown chevron. Compose remains a separate toolbar item.
 - The workspace queries active division regions before crossing its UIKit hosting boundary. Panes avoid the fold, with chat on the lower half in a laptop pose and tools above. Side-by-side folds keep chat and tools on opposite sides.
 - Drag a pane by its header grip. Drop near an edge to place it beside, above, or below another pane; the tinted preview shows the destination. A center drop reorders. Edge placement requires at least 300 points of width and 180 points of height per pane. Custom splits support divider resizing and are saved with the workspace. Smaller viewports temporarily use the compact layout, and active folds keep their reserved space.
@@ -23,5 +24,7 @@ Validation (2026-09-19):
 - Also built with Xcode 27.0 to verify the older-SDK fallback.
 
 Simulator UI checks used the demo workspace. They validate presentation and state continuity, not live remote-desktop or terminal transport.
+
+Navigation follow-up (2026-09-20): built with Xcode 27.1 and checked Back → unfold → select conversation → fold → Back on the signed-in Duo simulator. The list stays available, and the saved chat/desktop panes survive the transition. No messages were sent.
 
 Apple references: [Prepare your app](https://developer.apple.com/videos/play/tech-talks/111461/), [Adaptive layouts and reserved regions](https://developer.apple.com/videos/play/tech-talks/111463/), [Vertical toolbars](https://developer.apple.com/videos/play/tech-talks/111462/).
