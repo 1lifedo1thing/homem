@@ -291,6 +291,8 @@ enum RemoteKeyInput {
     private var runtime: (any DesktopTransport)?
     typealias RuntimeFactory = @MainActor (APIClient, String) async throws -> any DesktopTransport
     private let runtimeFactory: RuntimeFactory
+    private let waitForNetwork: @Sendable () async throws -> Void
+    private let recoveryDelay: @Sendable (Int) -> Duration
     private var runtimeTask: Task<Void, Never>?
     private var inputTask: Task<Void, Never>?
     var hasVideo = false
@@ -308,8 +310,12 @@ enum RemoteKeyInput {
         return RTCPeerConnectionFactory(encoderFactory: RTCDefaultVideoEncoderFactory(), decoderFactory: RTCDefaultVideoDecoderFactory())
     }()
     var base: String { "/bots/\(botID.pathComponent)/container/display" }
-    init(api: APIClient, botID: String, runtimeFactory: RuntimeFactory? = nil) {
+    init(api: APIClient, botID: String,
+         waitForNetwork: @escaping @Sendable () async throws -> Void = { try await DesktopRecovery.waitForNetwork() },
+         recoveryDelay: @escaping @Sendable (Int) -> Duration = { DesktopRecovery.delay(attempt: $0) },
+         runtimeFactory: RuntimeFactory? = nil) {
         self.api = api; self.botID = botID
+        self.waitForNetwork = waitForNetwork; self.recoveryDelay = recoveryDelay
         self.runtimeFactory = runtimeFactory ?? { api, base in
             let session = try await api.call(base + "/runtime-session", method: "POST")
             let socket = try await api.runtimeDisplaySocket(sessionID: session["session_id"].string, token: session["token"].string)
@@ -404,15 +410,19 @@ enum RemoteKeyInput {
     private func connectionFailed(_ failure: Error) {
         let frame = runtimeImage
         disconnect()
-        guard api.isOfficial, DesktopRecovery.canRetry(failure), retries < 3 else {
+        let networkFailure = DesktopRecovery.isNetworkFailure(failure)
+        guard api.isOfficial, DesktopRecovery.canRetry(failure), networkFailure || retries < 3 else {
             error = failure is ClientError ? failure.localizedDescription : "The desktop connection was lost. Try reconnecting.".localized
             return
         }
-        retries += 1
-        runtimeImage = frame; status = "Reconnecting"; error = nil
-        let attempt = generation, delay = 1 << (retries - 1)
+        retries = min(retries + 1, 6)
+        runtimeImage = frame; status = DesktopRecovery.isOffline(failure) ? "Waiting for network" : "Reconnecting"; error = nil
+        let attempt = generation, delay = recoveryDelay(retries), waitForNetwork = waitForNetwork
         recovery = Task { [weak self] in
-            do { try await Task.sleep(for: .seconds(delay)) } catch { return }
+            do {
+                if networkFailure { try await waitForNetwork() }
+                try await Task.sleep(for: delay)
+            } catch { return }
             guard let self, self.generation == attempt, !Task.isCancelled else { return }
             self.recovery = nil
             await self.connect(retrying: true)

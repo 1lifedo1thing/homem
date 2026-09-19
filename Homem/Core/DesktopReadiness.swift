@@ -1,10 +1,14 @@
 import Foundation
+import Network
 
 enum DesktopRecovery {
     static func canRetry(_ failure: Error) -> Bool {
         if let client = failure as? ClientError, case .http(let status, _) = client { return status >= 500 }
         let error = failure as NSError
-        if error.domain == NSURLErrorDomain { return true }
+        if error.domain == NSURLErrorDomain {
+            return [URLError.timedOut, .cannotFindHost, .cannotConnectToHost, .networkConnectionLost,
+                    .dnsLookupFailed, .notConnectedToInternet, .resourceUnavailable].contains { $0.rawValue == error.code }
+        }
         // URLSession WebSockets can expose BSD socket failures directly instead
         // of wrapping them as URLError.networkConnectionLost.
         if error.domain == NSPOSIXErrorDomain {
@@ -14,6 +18,33 @@ enum DesktopRecovery {
         }
         return false
     }
+    static func isNetworkFailure(_ failure: Error) -> Bool {
+        let error = failure as NSError
+        return (error.domain == NSURLErrorDomain || error.domain == NSPOSIXErrorDomain) && canRetry(failure)
+    }
+    static func isOffline(_ failure: Error) -> Bool {
+        (failure as? URLError)?.code == .notConnectedToInternet
+    }
+    static func delay(attempt: Int) -> Duration {
+        .seconds(min(30, 1 << min(max(0, attempt - 1), 5)))
+    }
+    /// A missing route must not burn through the retry budget. Cancellation on
+    /// pane dismissal also stops this monitor, so it cannot reopen a closed pane.
+    static func waitForNetwork() async throws {
+        let monitor = NWPathMonitor()
+        let updates = AsyncStream<Bool> { continuation in
+            monitor.pathUpdateHandler = { continuation.yield($0.status == .satisfied) }
+            continuation.onTermination = { _ in monitor.cancel() }
+            monitor.start(queue: DispatchQueue.global(qos: .utility))
+        }
+        defer { monitor.cancel() }
+        for await available in updates {
+            try Task.checkCancellation()
+            if available { return }
+        }
+        throw CancellationError()
+    }
+
 }
 
 /// Follows Memoh's prepare → poll → offer sequence, including older hosted responses.

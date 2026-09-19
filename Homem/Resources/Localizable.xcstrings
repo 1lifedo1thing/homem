@@ -15419,6 +15419,29 @@
           }
         }
       }
+    },
+    "Waiting for network": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "等待网络连接"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esperando conexión"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ネットワークを待機中"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

@@ -8,7 +8,7 @@ import CoreGraphics
     func testViewOnlyBlocksRemoteInputAndReleasesHeldPointer() async throws {
         let api = APIClient(baseURL: OfficialServer.apiURL, officialSession: OfficialSession(cookies: []))
         let connection = RecoverableDesktopFixture()
-        let model = DesktopModel(api: api, botID: "fixture") { _, _ in connection }
+        let model = DesktopModel(api: api, botID: "fixture", waitForNetwork: {}) { _, _ in connection }
         model.setViewOnly(true)
         await model.connect()
         try await waitUntil { model.hasVideo }
@@ -34,7 +34,7 @@ import CoreGraphics
     func testRapidTypingPreservesRepeatedKeysAndShortcutOrdering() async throws {
         let api = APIClient(baseURL: OfficialServer.apiURL, officialSession: OfficialSession(cookies: []))
         let connection = RecoverableDesktopFixture(sendDelay: .milliseconds(2))
-        let model = DesktopModel(api: api, botID: "fixture") { _, _ in connection }
+        let model = DesktopModel(api: api, botID: "fixture", waitForNetwork: {}) { _, _ in connection }
         await model.connect()
         try await waitUntil { model.hasVideo }
         let text = "bookkeeper 114514!!\r\n中文\t日本語 café"
@@ -78,7 +78,7 @@ import CoreGraphics
     func testOfficialDesktopRecoversAfterNetworkDropAndStopsWhenDismissed() async throws {
         let api = APIClient(baseURL: OfficialServer.apiURL, officialSession: OfficialSession(cookies: []))
         var connections = [RecoverableDesktopFixture]()
-        let model = DesktopModel(api: api, botID: "fixture") { _, _ in
+        let model = DesktopModel(api: api, botID: "fixture", waitForNetwork: {}) { _, _ in
             let connection = RecoverableDesktopFixture()
             connections.append(connection)
             return connection
@@ -99,7 +99,7 @@ import CoreGraphics
     func testOfficialDesktopCancelsPendingRecoveryOnDismissal() async throws {
         let api = APIClient(baseURL: OfficialServer.apiURL, officialSession: OfficialSession(cookies: []))
         var count = 0
-        let model = DesktopModel(api: api, botID: "fixture") { _, _ in count += 1; throw URLError(.networkConnectionLost) }
+        let model = DesktopModel(api: api, botID: "fixture", waitForNetwork: {}) { _, _ in count += 1; throw URLError(.networkConnectionLost) }
         await model.connect()
         XCTAssertEqual(model.status, "Reconnecting")
         model.disconnect()
@@ -110,7 +110,7 @@ import CoreGraphics
     func testOfficialDesktopRecoversFromUnwrappedSocketDisconnect() async throws {
         let api = APIClient(baseURL: OfficialServer.apiURL, officialSession: OfficialSession(cookies: []))
         var attempts = 0
-        let model = DesktopModel(api: api, botID: "fixture") { _, _ in
+        let model = DesktopModel(api: api, botID: "fixture", waitForNetwork: {}) { _, _ in
             attempts += 1
             if attempts == 1 { throw NSError(domain: NSPOSIXErrorDomain, code: Int(POSIXErrorCode.ENOTCONN.rawValue)) }
             return RecoverableDesktopFixture()
@@ -123,6 +123,70 @@ import CoreGraphics
         model.disconnect()
         XCTAssertFalse(DesktopRecovery.canRetry(ClientError.http(401, "Unauthorized")))
         XCTAssertFalse(DesktopRecovery.canRetry(RFBClient.Failure.unsupported))
+    }
+    func testOfflineDesktopWaitsForConnectivityBeforeReconnecting() async throws {
+        let api = APIClient(baseURL: OfficialServer.apiURL, officialSession: OfficialSession(cookies: []))
+        let (updates, continuation) = AsyncStream<Bool>.makeStream()
+        defer { continuation.finish() }
+        var attempts = 0
+        let model = DesktopModel(api: api, botID: "fixture", waitForNetwork: {
+            for await online in updates {
+                try Task.checkCancellation()
+                if online { return }
+            }
+            throw CancellationError()
+        }, recoveryDelay: { _ in .milliseconds(10) }) { _, _ in
+            attempts += 1
+            if attempts == 1 { throw URLError(.notConnectedToInternet) }
+            return RecoverableDesktopFixture()
+        }
+        await model.connect()
+        XCTAssertEqual(model.status, "Waiting for network")
+        try await Task.sleep(for: .milliseconds(150))
+        XCTAssertEqual(attempts, 1)
+        continuation.yield(true)
+        try await waitUntil { model.status == "Connected" }
+        XCTAssertEqual(attempts, 2)
+        XCTAssertNil(model.error)
+        model.disconnect()
+    }
+    func testNetworkOutageDoesNotExhaustRecoveryBudget() async throws {
+        let api = APIClient(baseURL: OfficialServer.apiURL, officialSession: OfficialSession(cookies: []))
+        var attempts = 0
+        let model = DesktopModel(api: api, botID: "fixture", waitForNetwork: {},
+                                 recoveryDelay: { _ in .milliseconds(10) }) { _, _ in
+            attempts += 1
+            if attempts <= 5 { throw URLError(.notConnectedToInternet) }
+            return RecoverableDesktopFixture()
+        }
+        await model.connect()
+        try await waitUntil { model.status == "Connected" }
+        XCTAssertEqual(attempts, 6)
+        XCTAssertNil(model.error)
+        model.disconnect()
+        XCTAssertEqual(DesktopRecovery.delay(attempt: 100), .seconds(30))
+        XCTAssertFalse(DesktopRecovery.canRetry(URLError(.serverCertificateUntrusted)))
+        XCTAssertFalse(DesktopRecovery.canRetry(URLError(.cancelled)))
+    }
+    func testClosingOfflinePaneCancelsNetworkWait() async throws {
+        let api = APIClient(baseURL: OfficialServer.apiURL, officialSession: OfficialSession(cookies: []))
+        let (updates, continuation) = AsyncStream<Bool>.makeStream()
+        defer { continuation.finish() }
+        var attempts = 0
+        let model = DesktopModel(api: api, botID: "fixture", waitForNetwork: {
+            for await _ in updates { try Task.checkCancellation(); return }
+            throw CancellationError()
+        }, recoveryDelay: { _ in .milliseconds(10) }) { _, _ in
+            attempts += 1
+            throw URLError(.notConnectedToInternet)
+        }
+        await model.connect()
+        try await Task.sleep(for: .milliseconds(30))
+        model.disconnect()
+        continuation.yield(true)
+        try await Task.sleep(for: .milliseconds(100))
+        XCTAssertEqual(attempts, 1)
+        XCTAssertEqual(model.status, "Disconnected")
     }
     private func waitUntil(_ condition: () -> Bool) async throws {
         let deadline = Date().addingTimeInterval(5)
