@@ -40,7 +40,7 @@ struct WorkspaceView: View {
                     }
                     Divider().padding(.leading, 54)
                     workspaceLink("Snapshots", icon: "camera") {
-                        ResourceListView(spec: .bot(botID, "container/snapshots", title: "Snapshots"))
+                        SnapshotsView(botID: botID)
                     }
                     Divider().padding(.leading, 54)
                     workspaceLink("Dependencies", icon: "shippingbox") { DependenciesView(botID: botID) }
@@ -66,7 +66,7 @@ struct WorkspaceView: View {
                             } else {
                                 Button("Start workspace".localized, systemImage: "play.circle") { Task { await action("start") } }
                             }
-                            Button("Restore snapshot".localized, systemImage: "clock.arrow.circlepath") { operation = SchemaCatalog.shared.operation("/bots/{bot_id}/container/snapshots/rollback", "POST") }
+                            NavigationLink("Restore snapshot".localized, systemImage: "clock.arrow.circlepath") { SnapshotsView(botID: botID) }
                         }
                         Button("Refresh".localized, systemImage: "arrow.clockwise") { Task { await load() } }
                     } label: {
@@ -75,7 +75,7 @@ struct WorkspaceView: View {
                 }
             }
             .sheet(item: $operation, onDismiss: { Task { await load() } }) { op in
-                OperationView(operation: op, substitutions: ["bot_id": botID])
+                SchemaEditor(title: "Create workspace", path: base + "/container", operation: op, submitTitle: "Create")
             }
             .alert("Stop workspace?".localized, isPresented: $confirmStop) {
                 Button("Stop workspace".localized, role: .destructive) { Task { await action("stop") } }
@@ -200,7 +200,7 @@ struct FileBrowserView: View {
     var body: some View {
         presentedList
             .overlay { if loading { ProgressView() } else if files.isEmpty && error == nil { EmptyState(title: "No files", symbol: "folder", detail: "Upload a file or create something new.") } }
-            .sheet(isPresented: $archive) { NavigationStack { OperationBrowser(prefix: "/bots/{bot_id}/container/fs", substitutions: ["bot_id": botID, "path": path]).toolbar { ToolbarItem(placement: .topBarLeading) { Button("Done".localized) { archive = false } } } } }
+            .sheet(isPresented: $archive, onDismiss: { Task { await load() } }) { NavigationStack { ArchiveToolsView(botID: botID, files: files).toolbar { ToolbarItem(placement: .topBarLeading) { Button("Done".localized) { archive = false } } } } }
             .task { await load() }.refreshable { await load() }
             .fileImporter(isPresented: $importFile, allowedContentTypes: [.data]) { result in Task { do { let url = try result.get(); _ = try await store.api?.upload(path: base + "/upload", fileURL: url, destination: child(url.lastPathComponent)); await load() } catch { self.error = error.localizedDescription } } }
             .alert("New folder".localized, isPresented: $newFolder) { TextField("Folder name".localized, text: $name); Button("Create".localized) { Task { await operation("mkdir", body: ["path": .string(child(name))]) } }; Button("Cancel".localized, role: .cancel) {} }
@@ -312,10 +312,7 @@ struct DependenciesView: View {
         List {
             ForEach(records) { record in
                 NavigationLink(record.title) {
-                    List {
-                        JSONDetails(value: record.value)
-                        NavigationLink("Manage dependency".localized) { OperationBrowser(prefix: "/bots/{bot_id}/dependencies/{dep_id}", substitutions: ["bot_id": botID, "dep_id": record.id]) }
-                    }.navigationTitle(record.title)
+                    DependencyDetailView(botID: botID, record: record)
                 }
             }
             OperationButton(title: "Check for updates", path: "/bots/\(botID.pathComponent)/dependencies/check-updates", template: "/bots/{bot_id}/dependencies/check-updates", method: "POST")

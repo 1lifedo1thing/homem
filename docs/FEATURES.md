@@ -7,22 +7,22 @@ Audited against `apps/desktop`, the shared `apps/web` routes/components, and `sp
 | Desktop area | Native implementation | Additional controls |
 |---|---|---|
 | Server connection and login | Official Memoh first: native email-code/MFA, isolated browser sign-in, workspace selection, cookie sessions and WebSocket tickets. Custom API-base URL, username/password or token, Keychain, bearer refresh, expired-session recovery | Official platform paths are based on the deployed app.memoh.net client; OAuth providers may reject embedded browsers. Native email remains available, with code autofill/automatic verification and automatic entry for a single workspace. |
-| Agent management | List/create/edit/pause/resume/delete, health, usage, settings, access | Ownership, ACL rules, hooks, connectors and workspace target policies use advanced forms |
-| Chat sessions | Message-first creation with attachments and named run locations; list/page/rename/delete, Markdown/code, history, reasoning/model choices | ACP session configuration and runtime commands use session controls |
+| Agent management | List/create/edit/pause/resume/delete, health, usage, settings, access | Access & permissions, Computers, Connected accounts, and Automation provide contextual actions and named selections |
+| Chat sessions | Message-first creation with attachments and named run locations; list/page/rename/delete, Markdown/code, history, reasoning/model choices | Conversation settings provides rename, summarization, context usage, and capability-gated goal controls; arbitrary ACP commands are not exposed |
 | Live chat | WebSocket admission, stable invocation IDs, snapshot/delta sequencing, reconnect, resend, abort | Foreground sockets reconnect after app suspension; server work continues independently |
 | Interactive decisions | Tool approval options, agent questions, single/multiple choices and free text | Server permissions govern whether the user can respond |
-| Message operations | Retry, edit, fork when server marks the turn forkable, queue follow-up/steer | Queue inspect/edit/reorder/delete and goals use session controls |
+| Message operations | Retry, edit, fork when server marks the turn forkable, queue follow-up/steer | Follow-up/steer sending remains in the composer; queue reordering and editing do not yet have dedicated screens |
 | Voice | Microphone recording as audio attachment, native read-aloud; provider/model configuration | The backend must support the selected input modality; recording stops when leaving chat |
-| Memory | List/add/edit/delete, semantic search form, topic graph, usage, compact | Rebuild/ingest/status use advanced forms; graph displays at most 60 visual nodes and lists all topics |
+| Memory | List/add/edit/delete, semantic search form, topic graph, usage, compact | Memory maintenance provides retention choices, age, import and rebuild controls; graph displays at most 60 visual nodes and lists all topics |
 | Schedules | Create/edit/delete, enabled flag, cron pattern, agent/model/reasoning/session/workdir settings, logs | Uses the server’s scheduler; no local iOS scheduling substitute |
-| Files | Navigate/create/read/edit/preview/rename/delete, import/export/share | Archive/extract forms; file writes use `expectedRevision`; explicit discard confirmation |
+| Files | Navigate/create/read/edit/preview/rename/delete, import/export/share | Archives uses file selection and native sharing; extract selects an existing archive; file writes use `expectedRevision` |
 | Terminal | SwiftTerm ANSI/VT terminal, binary input/output, resize, reconnect | Requires a running workspace; no shell is executed on iOS |
 | Desktop | Native RFB through the official runtime gateway; native WebRTC for third-party servers; pointer drag/click, scroll, right-click, text and control keys | Official Catalyst rendering/input/reconnect verified; third-party WebRTC requires working ICE/network reachability; no browser-engine embedding |
-| Workspace lifecycle | Create/start/stop, metrics, workdirs, snapshot list/create/rollback | Runtime-specific options, remote targets and data restore use advanced forms |
-| Dependencies and apps | Inspect/manage dependencies, app catalogue/detail/install with immutable revision, streamed operation progress | Preflight/install/update/rollback/resume and connector auth use advanced forms |
-| Channels | Discover adapters and edit native fields from their config schema, enable/disable | Adapter-specific QR login, send actions, webhook endpoints and routing use advanced forms |
-| MCP | CRUD, probe, OAuth authorization through system browser, status | Provider must accept the `homem://oauth/mcp/callback` redirect; discovery/client setup/import/export use advanced forms |
-| Providers and models | CRUD, connection tests, OAuth/device-code sign-in and status | Import models and provider-specific settings use advanced forms |
+| Workspace lifecycle | Create/start/stop, metrics, workdirs, snapshot list/create/rollback | Snapshots has named creation and restore confirmation; Computers selects connected runtimes and tool-approval policies |
+| Dependencies and apps | Inspect/manage dependencies, app catalogue/detail/install with immutable revision, streamed operation progress | Dependency details runs preflight, selects a version, and shows progress; app details offers update/resume; Connected accounts opens provider authorization and refreshes on return |
+| Channels | Discover adapters and edit native fields from their config schema, enable/disable | Enabled is a native toggle; adapter-specific QR login, send actions, webhook endpoints and routing do not yet have dedicated screens |
+| MCP | CRUD, probe, OAuth authorization through system browser, status | Provider must accept the `homem://oauth/mcp/callback` redirect; Transfer connections imports/exports standard MCP files through Files and system sharing |
+| Providers and models | CRUD, connection tests, OAuth/device-code sign-in and status | Refresh models is a provider action; provider settings use typed fields and named references |
 | Voice/video/search/memory services | Provider/model configuration and bindings | Browser OAuth callback handling depends on provider/server configuration |
 | People and profile | Admin-only people entry, user access, profile/password | Backend remains the permission authority |
 | Backups | Export/share ZIP with optional passphrase; import ZIP as a new agent | Selective overwrite/merge import is not exposed as a dedicated flow |
@@ -30,7 +30,7 @@ Audited against `apps/desktop`, the shared `apps/web` routes/components, and `sp
 
 ## Deliberate limits and release checks
 
-- This implementation has no APNs service, background chat execution, Home Screen widgets, share extension, or offline server-data cache. Server work keeps running while the iOS app is suspended.
+- This implementation has no APNs service, background chat execution, Home Screen widgets, or offline server-data cache. Server work keeps running while the iOS app is suspended.
 - Rich Markdown text and fenced code render natively. Mermaid diagrams, KaTeX equations, interactive HTML artifacts, and desktop-style patch editors are not rendered as their desktop widgets. Diffs are readable as text.
 - Attachments are limited to five files of 10 MB each in the composer. Workspace uploads are limited to 50 MB. Downloads/backups currently buffer the response in memory; very large workspaces should use server-side backup tooling.
 - Demo mode is clearly labeled, has in-memory sample data, and explicitly rejects unavailable remote actions. It never silently substitutes sample data after a server error.
@@ -38,3 +38,5 @@ Audited against `apps/desktop`, the shared `apps/web` routes/components, and `sp
 - Full desktop parity is therefore **not certified**. The API coverage is broad, but the specialized desktop renderers and workflows listed above remain limits. Review these before treating this as an App Store release.
 
 Built-in bot email providers, bindings, outbox, and backup selection are removed in line with [Memoh PR #1321](https://github.com/felinics/Memoh/pull/1321). Account email addresses and email sign-in remain supported.
+
+Management controls follow the client’s resource hierarchy rather than exposing HTTP methods, URL paths, and request bodies. See [native control locations](CONTROLS.md) for navigation and upstream references.

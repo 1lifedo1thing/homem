@@ -117,7 +117,9 @@ struct AgentDetailView: View {
                     ResourceLink(title: "Connected tools", icon: "point.3.connected.trianglepath.dotted", spec: .mcp(bot.id))
                     ResourceLink(title: "Skills", icon: "sparkles", spec: .skills(bot.id))
                     ResourceLink(title: "Apps", icon: "square.stack.3d.up", spec: .apps(bot.id))
-                    ResourceLink(title: "Workspace access", icon: "person.2", spec: .bot(bot.id, "user-access", title: "Workspace access", detail: "/bots/{bot_id}/user-access/{grant_id}"))
+                    NavigationLink("Computers".localized, systemImage: "desktopcomputer") { WorkspaceComputersView(botID: bot.id) }
+                    ResourceLink(title: "Connected accounts", icon: "link", spec: .bot(bot.id, "connectors", title: "Connected accounts", detail: "/bots/{bot_id}/connectors/{connection_id}"))
+                    NavigationLink("Automation".localized, systemImage: "bolt") { AgentAutomationView(botID: bot.id) }
                 }
             }
             Section("Insights".localized) {
@@ -130,7 +132,7 @@ struct AgentDetailView: View {
                 Section {
                     NavigationLink("Backups".localized, systemImage: "externaldrive") { BackupView(botID: bot.id) }
                     NavigationLink { WorkspaceView(botID: bot.id, name: current.title) } label: { Label("Workspace settings".localized, systemImage: "shippingbox") }
-                    NavigationLink("Advanced controls".localized, systemImage: "wrench.and.screwdriver") { OperationBrowser(prefix: "/bots/{bot_id}", substitutions: ["bot_id": bot.id, "id": bot.id]) }
+                    NavigationLink("Access & permissions".localized, systemImage: "lock.shield") { AccessSettingsView(botID: bot.id) }
                     Button(current.value["is_active"].bool ? "Pause agent".localized : "Resume agent".localized) { Task { await toggle() } }
                     Button("Delete agent".localized, role: .destructive) { delete = true }
                 }
@@ -190,15 +192,21 @@ struct ChannelDetailView: View {
     @State private var config: JSONValue = [:]
     @State private var error: String?
     @State private var edit = false
+    @State private var busy = false
     var path: String { "/bots/\(botID.pathComponent)/channel/\(platform.pathComponent)" }
     var body: some View {
         List {
             Section("Channel".localized) { JSONDetails(value: metadata) }
             if !config.object.isEmpty { Section("Configuration".localized) { JSONDetails(value: config) } }
             if let error { ErrorBanner(message: error) }
-            Section { Button("Configure channel".localized) { edit = true }; OperationButton(title: "Enable or disable", path: path + "/status", template: "/bots/{id}/channel/{platform}/status", method: "PATCH") }
+            Section { Button("Configure channel".localized) { edit = true }; Toggle("Enabled".localized, isOn: Binding(get: { !config["disabled"].bool }, set: { enabled in Task { await setEnabled(enabled) } })).disabled(busy || config.object.isEmpty) }
         }.navigationTitle(platform.fieldLabel).task { await load() }
             .sheet(isPresented: $edit, onDismiss: { Task { await load() } }) { ChannelConfigEditor(path: path, platform: platform, metadata: metadata, initial: config) }
+    }
+    func setEnabled(_ enabled: Bool) async {
+        busy = true; defer { busy = false }
+        do { _ = try await store.api?.call(path + "/status", method: "PATCH", body: ["disabled": .bool(!enabled)]); await load() }
+        catch { self.error = error.localizedDescription }
     }
     func load() async { do { config = try await store.api?.call(path) ?? [:]; error = nil } catch { self.error = error.localizedDescription } }
 }

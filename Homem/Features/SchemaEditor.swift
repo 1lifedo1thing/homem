@@ -9,6 +9,7 @@ struct SchemaEditor: View {
     var initial: JSONValue = .object([:])
     var query: [String: String] = [:]
     var onSaved: ((JSONValue) -> Void)? = nil
+    var submitTitle: String = "Save"
     @State private var draft: JSONValue = .object([:])
     @State private var busy = false
     @State private var error: String?
@@ -19,9 +20,8 @@ struct SchemaEditor: View {
     var body: some View {
         NavigationStack {
             Form {
-                if !operation.definition["description"].string.isEmpty { Section { Text(operation.definition["description"].string).font(.subheadline).foregroundStyle(.secondary) } }
                 if fields.isEmpty && !operation.bodySchema.isNull {
-                    Section("Configuration".localized) { JSONInput(value: $draft) }
+                    Section("Configuration".localized) { ResourceFormField(name: "Configuration", schema: schema, required: true, value: $draft, path: path) }
                 } else {
                     Section {
                         ForEach(Array(fields.prefix(10)), id: \.self) { key in field(key) }
@@ -36,7 +36,7 @@ struct SchemaEditor: View {
             }.navigationTitle(title.localized).navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) { Button("Cancel".localized) { dismiss() }.disabled(busy) }
-                    ToolbarItem(placement: .confirmationAction) { Button { Task { await save() } } label: { if busy { ProgressView() } else { Text(operation.method == "DELETE" ? "Delete".localized : "Save".localized).fontWeight(.semibold) } }.disabled(busy) }
+                    ToolbarItem(placement: .confirmationAction) { Button { Task { await save() } } label: { if busy { ProgressView() } else { Text(operation.method == "DELETE" ? "Delete".localized : submitTitle.localized).fontWeight(.semibold) } }.disabled(busy) }
                 }
                 .onAppear {
                     let allowed = Set(fields)
@@ -50,7 +50,7 @@ struct SchemaEditor: View {
     @ViewBuilder private func field(_ key: String) -> some View {
         let s = SchemaCatalog.shared.resolve(schema["properties"][key])
         let binding = Binding<JSONValue>(get: { draft[key] }, set: { draft[key] = $0 })
-        SchemaField(name: key, schema: s, required: schema["required"].array.contains(.string(key)), value: binding)
+        ResourceFormField(name: key, schema: s, required: schema["required"].array.contains(.string(key)), value: binding, path: path)
     }
     private func save() async {
         busy = true; error = nil; defer { busy = false }
@@ -88,7 +88,7 @@ struct SchemaField: View {
             if !schema["enum"].array.isEmpty {
                 Picker(label, selection: stringBinding) {
                     Text("Default".localized).tag("")
-                    ForEach(schema["enum"].array, id: \.self) { v in Text(v.scalar).tag(v.scalar) }
+                    ForEach(schema["enum"].array, id: \.self) { v in Text(v.scalar.fieldLabel.localized).tag(v.scalar) }
                 }
             } else if schema["type"].string == "boolean" {
                 Toggle(label, isOn: Binding(get: { value.bool }, set: { value = .bool($0) }))
@@ -144,79 +144,13 @@ struct OperationButton: View {
     @State private var show = false
     var body: some View {
         if let op = SchemaCatalog.shared.operation(template, method) {
-            Button(title.localized) { show = true }.sheet(isPresented: $show) { OperationView(operation: op, suppliedPath: path) }
+            if op.bodySchema.isNull {
+                ResourceActionButton(title: title, path: path, method: method,
+                                     destructive: method == "DELETE", streaming: op.definition["produces"].array.contains("text/event-stream"))
+            } else {
+                Button(title.localized) { show = true }
+                    .sheet(isPresented: $show) { SchemaEditor(title: title, path: path, operation: op, submitTitle: title) }
+            }
         }
-    }
-}
-
-struct OperationBrowser: View {
-    var prefix = ""
-    var substitutions: [String: String] = [:]
-    @State private var search = ""
-    private var operations: [APIOperation] { SchemaCatalog.shared.operations.filter { $0.path.hasPrefix(prefix) && (search.isEmpty || ($0.title + $0.path).localizedCaseInsensitiveContains(search)) } }
-    var body: some View {
-        List {
-            Section { Text("Advanced server controls. Forms follow the API version bundled with Homem. Your server enforces permissions and feature availability.".localized).font(.caption).foregroundStyle(.secondary) }
-            ForEach(operations) { op in
-                NavigationLink { OperationView(operation: op, substitutions: substitutions) } label: {
-                    VStack(alignment: .leading, spacing: 5) {
-                        Text(op.title)
-                        Text(op.method + " " + op.path).font(.caption2.monospaced()).foregroundStyle(.secondary).lineLimit(2)
-                    }
-                }
-            }
-        }.navigationTitle("Advanced controls".localized).searchable(text: $search)
-    }
-}
-
-struct OperationView: View {
-    @Environment(AppStore.self) private var store
-    var operation: APIOperation
-    var substitutions: [String: String] = [:]
-    var suppliedPath: String? = nil
-    @State private var values: [String: String] = [:]
-    @State private var result: JSONValue = .null
-    @State private var error: String?
-    @State private var busy = false
-    @State private var edit = false
-    @State private var confirm = false
-    private var parameters: [JSONValue] { operation.parameters.filter { ["path", "query"].contains($0["in"].string) && !(suppliedPath != nil && $0["in"].string == "path") } }
-    private var path: String {
-        if let suppliedPath { return suppliedPath }
-        return values.reduce(operation.path) { $0.replacingOccurrences(of: "{\($1.key)}", with: $1.value.pathComponent) }
-    }
-    private var query: [String: String] { Dictionary(uniqueKeysWithValues: parameters.filter { $0["in"].string == "query" }.compactMap { p in let k = p["name"].string; guard let v = values[k], !v.isEmpty else { return nil }; return (k, v) }) }
-    var body: some View {
-        Form {
-            Section { Text(operation.definition["description"].string.nonEmpty ?? operation.title).font(.subheadline).foregroundStyle(.secondary) }
-            if !parameters.isEmpty { Section("Parameters".localized) { ForEach(parameters, id: \.self) { p in
-                TextField(p["name"].string.fieldLabel + (p["required"].bool ? " *" : ""), text: Binding(get: { values[p["name"].string] ?? "" }, set: { values[p["name"].string] = $0 })).textInputAutocapitalization(.never).autocorrectionDisabled()
-            } } }
-            Section {
-                if operation.parameters.contains(where: { $0["type"].string == "file" }) || operation.path.hasSuffix("/ws") || operation.method == "GET" && operation.definition["produces"].array.contains("text/event-stream") {
-                    Text("Use the dedicated workspace, chat, or backup screen for this streaming or file operation.".localized).foregroundStyle(.secondary)
-                } else {
-                    Button(operation.method == "GET" ? "Load".localized : operation.bodySchema.isNull ? "Run action".localized : "Configure action".localized, role: operation.method == "DELETE" ? .destructive : nil) {
-                        if operation.method == "DELETE" { confirm = true }
-                        else if !operation.bodySchema.isNull { edit = true }
-                        else { Task { await run() } }
-                    }.disabled(busy || path.contains("{") || parameters.contains { $0["required"].bool && (values[$0["name"].string] ?? "").isEmpty })
-                }
-                if busy { ProgressView() }
-            }
-            if let error { ErrorBanner(message: error) }
-            if !result.isNull { Section("Result".localized) { JSONDetails(value: result) } }
-        }.navigationTitle(operation.title).navigationBarTitleDisplayMode(.inline)
-            .onAppear { values = substitutions }
-            .sheet(isPresented: $edit) { SchemaEditor(title: operation.title, path: path, operation: operation, query: query, onSaved: { result = $0 }) }
-            .confirmationDialog("\(operation.title)?", isPresented: $confirm, titleVisibility: .visible) { Button("Delete".localized, role: .destructive) { Task { await run() } } } message: { Text("This action changes data on your server and may not be reversible.".localized) }
-    }
-    func run() async {
-        busy = true; defer { busy = false }
-        do {
-            if operation.definition["produces"].array.contains("text/event-stream"), let api = store.api { result = try await api.streamOperation(path, method: operation.method, query: query, body: nil) { result = $0 } }
-            else { result = try await store.api?.call(path, method: operation.method, query: query) ?? .null }
-            error = nil
-        } catch { self.error = error.localizedDescription }
     }
 }

@@ -112,8 +112,13 @@ private struct ModelsContent: View {
                 }
             }
             .sheet(item: $importProvider, onDismiss: { Task { await catalog.load(); catalog.changed?() } }) { provider in
-                if let operation = SchemaCatalog.shared.operation("/providers/{id}/import-models", "POST") {
-                    OperationView(operation: operation, suppliedPath: "/providers/" + provider.id.pathComponent + "/import-models")
+                NavigationStack {
+                    Form {
+                        Section(provider.title) {
+                            ResourceActionButton(title: "Refresh models", path: "/providers/" + provider.id.pathComponent + "/import-models")
+                        }
+                    }.navigationTitle("Refresh models".localized).navigationBarTitleDisplayMode(.inline)
+                        .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done".localized) { importProvider = nil } } }
                 }
             }
             .alert(AppLocalization.format("Delete %@?", deletion?.title ?? "Model".localized), isPresented: Binding(get: { deletion != nil }, set: { if !$0 { deletion = nil } })) {

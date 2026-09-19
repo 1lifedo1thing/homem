@@ -221,7 +221,7 @@ private struct AgentChatWorkspace: View {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     NavigationLink("Workspace".localized, systemImage: "folder") { WorkspaceView(botID: destination.botID, name: destination.botName) }
-                    NavigationLink("Session controls".localized, systemImage: "slider.horizontal.3") { OperationBrowser(prefix: "/bots/{bot_id}/sessions/{session_id}", substitutions: ["bot_id": route.botID, "session_id": route.sessionID]) }
+                    NavigationLink("Conversation settings".localized, systemImage: "slider.horizontal.3") { ConversationSettingsView(botID: route.botID, sessionID: route.sessionID) }
                 } label: { Image(systemName: "ellipsis.circle") }
             }
         }

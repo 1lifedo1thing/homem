@@ -39,7 +39,7 @@ struct SettingsView: View {
                 Button { if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) } } label: {
                     HStack { Text("App language".localized); Spacer(); Text(Locale.current.localizedString(forLanguageCode: Bundle.main.preferredLocalizations.first ?? "en") ?? "").foregroundStyle(.secondary) }
                 }.accessibilityHint("Change the app language in iOS Settings.".localized)
-                NavigationLink("Advanced server controls".localized, systemImage: "wrench.and.screwdriver") { OperationBrowser() }
+                NavigationLink("More connections".localized, systemImage: "link") { ServerConnectionsView() }
                 NavigationLink("About Homem".localized, systemImage: "info.circle") { AboutView() }
             }
             Section {

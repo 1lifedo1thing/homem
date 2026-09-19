@@ -2,6 +2,30 @@ import XCTest
 @testable import Homem
 
 final class PresentationTests: XCTestCase {
+    func testManagementRecordsKeepWireIdentifiersAndHumanNames() {
+        let connectors = ResourceSpec.bot("b", "connectors", title: "Connected accounts")
+        let account = connectors.record(["connection_id": "connection-42", "alias": "Personal calendar", "connector_type": "calendar"])
+        XCTAssertEqual(account.id, "connection-42")
+        XCTAssertEqual(account.title, "Personal calendar")
+        let managers = ResourceSpec.bot("b", "channel-managers", title: "Channel managers")
+        let manager = managers.record(["channel_identity_id": "identity-17", "channel_identity_display_name": "Review user"])
+        XCTAssertEqual(manager.id, "identity-17")
+        XCTAssertEqual(manager.title, "Review user")
+        let grants = ResourceSpec.bot("b", "user-access", title: "Workspace access")
+        let grant = grants.record(["id": "grant-9", "user_id": "user-7", "user_display_name": "Alice"])
+        XCTAssertEqual(grant.id, "grant-9")
+        XCTAssertEqual(grant.title, "Alice")
+        let providerModels = ResourceSpec(title: "Models", path: "/speech-providers/provider/models", template: "/speech-providers/{id}/models", detailTemplate: "/speech-models/{id}", detailCollectionPath: "/speech-models")
+        XCTAssertEqual(providerModels.itemPath(Record(value: ["id": "voice-model"])), "/speech-models/voice-model")
+    }
+    func testManagementReferencesUseTheOwningAgentAndProviderType() {
+        XCTAssertEqual(ResourceFormReferences.source(for: "owner_user_id", path: "/bots/review/owner"), "/bots/review/user-access/candidates")
+        XCTAssertEqual(ResourceFormReferences.source(for: "target_id", path: "/bots/review/workspace-targets/primary"), "/bots/review/workspace-targets")
+        XCTAssertEqual(ResourceFormReferences.source(for: "provider_id", path: "/speech-models"), "/speech-providers")
+        XCTAssertEqual(ResourceFormReferences.source(for: "tts_model_id", path: "/bots/review/settings"), "/speech-models")
+        XCTAssertEqual(ResourceFormReferences.source(for: "default_bot_agent_id", path: "/bots/review/settings"), "/bots/review/agents")
+        XCTAssertNil(ResourceFormReferences.source(for: "message", path: "/bots/review/hooks/test"))
+    }
     func testActivityGroupingPreservesOrderAndPendingRequests() {
         let messages: [JSONValue] = [
             ["type": "tool", "name": "read_file"],
