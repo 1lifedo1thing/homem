@@ -70,6 +70,8 @@ struct ConversationsView: View {
                                 }
                             }.padding(.vertical, sizeClass == .regular ? 4 : 8)
                         }
+                        .alignmentGuide(.listRowSeparatorLeading) { _ in 0 }
+                        .alignmentGuide(.listRowSeparatorTrailing) { dimensions in dimensions.width }
                         .accessibilityIdentifier("conversation_" + session.id)
                         .contextMenu { Button("Rename".localized, systemImage: "pencil") { rename = session; newTitle = session.title }; Button("Delete".localized, systemImage: "trash", role: .destructive) { deletion = session } }
                         .swipeActions(allowsFullSwipe: false) { Button("Delete".localized) { deletion = session }.tint(.red) }
@@ -164,9 +166,14 @@ struct ConversationsView: View {
                                  botID: store.selectedBot?.id ?? "", sessionIDs: sessions.map(\.id))
         }
         .task(id: store.selectedBot?.id) {
-            sessions = []; cursor = ""; error = nil
-            if let bot = store.selectedBot, selection?.botID != bot.id {
-                selection = store.chatWorkspace(for: bot.id).snapshot.conversation
+            sessions = []; cursor = ""; error = nil; search = ""
+            if selection?.botID != store.selectedBot?.id {
+                // Preserve the saved pane layout without automatically opening its chat.
+                // A newly created conversation already selects its matching bot and
+                // should still open immediately after sending the first message.
+                selection = nil
+                compactColumn = .sidebar
+                columnVisibility = .all
             }
             await load()
         }
