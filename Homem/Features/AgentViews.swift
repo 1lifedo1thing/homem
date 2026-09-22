@@ -17,7 +17,7 @@ struct AgentsView: View {
                 }
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 300), spacing: 16, alignment: .top)], alignment: .leading, spacing: 16) {
                     ForEach(store.bots.filter { search.isEmpty || $0.title.localizedCaseInsensitiveContains(search) }) { bot in
-                        NavigationLink { AgentDetailView(bot: bot) } label: { AgentCard(bot: bot, height: cardHeight) }.buttonStyle(.plain)
+                        AgentCard(bot: bot, height: cardHeight)
                     }
                     Button { create = true } label: {
                         HStack(spacing: 12) {
@@ -46,31 +46,43 @@ struct AgentsView: View {
 }
 
 struct AgentCard: View {
+    @Environment(\.appAccent) private var accent
     let bot: Record
     let height: CGFloat
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .top, spacing: 14) {
-                AgentAvatar(name: bot.title, avatarURL: bot.value.avatarURL, size: 52)
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(bot.title).font(.title3.weight(.semibold)).lineLimit(2, reservesSpace: true).fixedSize(horizontal: false, vertical: true)
-                    StatusIndicator(text: bot.value["is_active"].bool ? "Active" : "Paused", color: bot.value["is_active"].bool ? .green : .secondary)
+        VStack(spacing: 0) {
+            NavigationLink { AgentDetailView(bot: bot) } label: {
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack(alignment: .top, spacing: 14) {
+                        AgentAvatar(name: bot.title, avatarURL: bot.value.avatarURL, size: 52)
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(bot.title).font(.title3.weight(.semibold)).lineLimit(2, reservesSpace: true).fixedSize(horizontal: false, vertical: true)
+                            StatusIndicator(text: bot.value["is_active"].bool ? "Active" : "Paused", color: bot.value["is_active"].bool ? .green : .secondary)
+                        }
+                        Spacer(minLength: 4)
+                        AgentResourceSummary(botID: bot.id)
+                    }
+                    if let description = bot.value["metadata"]["description"].string.nonEmpty {
+                        Text(description).font(.subheadline).foregroundStyle(.secondary).lineLimit(2).padding(.top, 12)
+                    }
+                    Spacer(minLength: 0)
+                }.padding(.horizontal, Theme.gutter).padding(.top, Theme.gutter).padding(.bottom, 12)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .contentShape(Rectangle())
+            }.buttonStyle(.plain).accessibilityIdentifier("agentDetails_" + bot.id)
+            Divider().padding(.horizontal, Theme.gutter)
+            HStack(spacing: 4) {
+                ForEach([WorkspaceTool.files, .terminal, .desktop]) { tool in
+                    NavigationLink { WorkspaceToolDestination(tool: tool, botID: bot.id) } label: {
+                        VStack(spacing: 5) {
+                            Image(systemName: tool.symbol).font(.system(size: 17))
+                            Text(tool.title.localized).font(.caption.weight(.medium)).lineLimit(1)
+                        }.frame(maxWidth: .infinity, minHeight: 44).contentShape(Rectangle())
+                    }.buttonStyle(.plain).foregroundStyle(accent)
+                        .accessibilityIdentifier("agentTool_" + bot.id + "_" + tool.rawValue)
                 }
-                Spacer(minLength: 4)
-                AgentResourceSummary(botID: bot.id)
-            }
-            if let description = bot.value["metadata"]["description"].string.nonEmpty {
-                Text(description).font(.subheadline).foregroundStyle(.secondary).lineLimit(2).padding(.top, 12)
-            }
-            Spacer(minLength: 12)
-            Divider()
-            HStack {
-                Label("Workspace & tools".localized, systemImage: "shippingbox")
-                Spacer()
-                Image(systemName: "arrow.up.right").fontWeight(.semibold)
-            }.font(.caption).foregroundStyle(.secondary).padding(.top, 14)
-        }.padding(Theme.gutter).frame(maxWidth: .infinity).frame(height: height, alignment: .top).modifier(DetailSurface())
-
+            }.padding(.horizontal, 12).padding(.vertical, 8)
+        }.frame(maxWidth: .infinity).frame(height: height, alignment: .top).modifier(DetailSurface())
     }
 }
 
