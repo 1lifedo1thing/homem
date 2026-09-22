@@ -22,7 +22,9 @@ struct DesktopViewport: UIViewRepresentable {
     func makeUIView(context: Context) -> DesktopViewportView { DesktopViewportView() }
     func updateUIView(_ view: DesktopViewportView, context: Context) {
         view.onPointer = onPointer
-        view.configure(surface: model.pictureInPicture.surface, remoteSize: model.videoSize,
+        view.configure(surface: model.pictureInPicture.surface,
+                       duplicate: model.pictureInPicture.duplicatesInline ? model.pictureInPicture.duplicateSurface : nil,
+                       remoteSize: model.videoSize,
                        canControl: !model.viewOnly && model.status == "Connected", resetID: resetID)
     }
     static func dismantleUIView(_ view: DesktopViewportView, coordinator: ()) { view.stop() }
@@ -32,6 +34,7 @@ final class DesktopViewportView: UIView, UIScrollViewDelegate, UIGestureRecogniz
     let scrollView = UIScrollView()
     private let canvas = UIView()
     private var videoSurface: DesktopVideoSurface?
+    private var duplicateSurface: DesktopVideoSurface?
     private var remoteSize = CGSize.zero
     private var layoutSize = CGSize.zero
     private var layoutRemoteSize = CGSize.zero
@@ -71,7 +74,7 @@ final class DesktopViewportView: UIView, UIScrollViewDelegate, UIGestureRecogniz
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
-    func configure(surface: DesktopVideoSurface? = nil, remoteSize: CGSize, canControl: Bool, resetID: Int) {
+    func configure(surface: DesktopVideoSurface? = nil, duplicate: DesktopVideoSurface? = nil, remoteSize: CGSize, canControl: Bool, resetID: Int) {
         if self.canControl != canControl {
             releasePointer()
             self.canControl = canControl
@@ -83,6 +86,15 @@ final class DesktopViewportView: UIView, UIScrollViewDelegate, UIGestureRecogniz
             videoSurface = surface
             canvas.addSubview(surface)
             surface.frame = canvas.bounds
+        }
+        if duplicateSurface !== duplicate {
+            // A fullscreen viewer may already own the shared surfaces.
+            if duplicateSurface?.superview === canvas { duplicateSurface?.removeFromSuperview() }
+            duplicateSurface = duplicate
+        }
+        if let duplicate, duplicate.superview !== canvas {
+            canvas.addSubview(duplicate)
+            duplicate.frame = canvas.bounds
         }
         self.remoteSize = remoteSize
         if self.resetID != resetID {
@@ -109,6 +121,7 @@ final class DesktopViewportView: UIView, UIScrollViewDelegate, UIGestureRecogniz
         let fit = min(bounds.width / remoteSize.width, bounds.height / remoteSize.height)
         canvas.frame = CGRect(origin: .zero, size: CGSize(width: remoteSize.width * fit, height: remoteSize.height * fit))
         if videoSurface?.superview === canvas { videoSurface?.frame = canvas.bounds }
+        if duplicateSurface?.superview === canvas { duplicateSurface?.frame = canvas.bounds }
         scrollView.contentSize = canvas.bounds.size
         layoutSize = bounds.size
         layoutRemoteSize = remoteSize

@@ -619,7 +619,7 @@ struct ChatWorkspacePane: View {
             switch tool {
             case .desktop:
                 if api.isDemo { EmptyState(title: "Desktop unavailable", symbol: tool.symbol, detail: "Connect to a server to use this agent’s desktop.") }
-                else { DesktopContent(model: desktop, embedded: true) }
+                else { DesktopContent(model: desktop, embedded: true, onClosePane: close) }
             case .terminal: TerminalScreen(botID: botID, embedded: true).id(terminalID)
             case .files: PaneFiles(botID: botID, path: $pane.directory)
             case .chat: PaneConversationPicker(initialBotID: botID, selection: $pane.conversation)

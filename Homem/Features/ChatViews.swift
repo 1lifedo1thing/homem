@@ -428,12 +428,29 @@ struct ChatContent: View {
 
 struct TurnView: View {
     @Environment(\.appAccent) private var accent
+    @Environment(AppStore.self) private var store
     let turn: JSONValue
     let agentName: String
     let model: ChatModel
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(turn["role"] == "user" ? "You".localized : turn["role"] == "system" ? "Workspace".localized : agentName).font(.caption2.weight(.bold)).tracking(1.5).foregroundStyle(.secondary)
+            HStack(spacing: 8) {
+                if turn["role"] == "user" {
+                    Spacer(minLength: 0)
+                    AgentAvatar(name: store.accountName, avatarURL: store.accountAvatarURL, size: 30)
+                        .accessibilityHidden(false)
+                        .accessibilityLabel("You".localized)
+                } else if turn["role"] == "system" {
+                    Label("Workspace".localized, systemImage: "square.stack.3d.up")
+                        .font(.subheadline.weight(.medium)).foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
+                } else {
+                    AgentAvatar(name: agentName, avatarURL: store.bots.first { $0.id == model.botID }?.value.avatarURL ?? "", size: 30)
+                        .accessibilityHidden(true)
+                    Text(agentName).font(.subheadline.weight(.semibold))
+                    Spacer(minLength: 0)
+                }
+            }
             if turn["role"] == "user" { MarkdownContent(text: turn["text"].string).frame(maxWidth: .infinity, alignment: .leading).padding(16).background(accent.opacity(0.07), in: RoundedRectangle(cornerRadius: 18)) }
             ForEach(Array(turn["attachments"].array.enumerated()), id: \.offset) { _, item in AttachmentView(item: item, model: model) }
             MessageSequence(messages: turn["messages"].array, model: model)

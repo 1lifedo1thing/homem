@@ -15,6 +15,7 @@ struct DesktopContent: View {
     @State var model: DesktopModel
     var embedded = false
     var isFullscreen = false
+    var onClosePane: (() -> Void)? = nil
     @State private var keyboardVisible = false
     @State private var fullscreen = false
     @State private var modifiers = Set<UInt32>()
@@ -24,6 +25,7 @@ struct DesktopContent: View {
     @ScaledMetric(relativeTo: .body) private var controlRailWidth: CGFloat = 56
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
+    private var showsPiPChoice: Bool { model.pictureInPicture.isActive && !model.pictureInPicture.duplicatesInline }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -57,8 +59,10 @@ struct DesktopContent: View {
                             .frame(width: side ? controlRailWidth : nil, height: side ? nil : 44)
                             .frame(maxHeight: side ? .infinity : nil)
                     }
+                    .allowsHitTesting(!showsPiPChoice)
+                    .overlay { if showsPiPChoice { pictureInPictureChoice } }
             }
-            if !model.viewOnly, model.status == "Connected", !fullscreen {
+            if !model.viewOnly, model.status == "Connected", !fullscreen, !showsPiPChoice {
                 RemoteKeyboard(isActive: $keyboardVisible, onText: { text in
                     model.type(text, modifiers: modifiers.sorted()); modifiers.removeAll()
                 }, onKey: { code, hardwareModifiers in
@@ -69,7 +73,7 @@ struct DesktopContent: View {
         }
         .background(Color(uiColor: .systemBackground))
         .fullScreenCover(isPresented: $fullscreen) {
-            DesktopContent(model: model, isFullscreen: true)
+            DesktopContent(model: model, isFullscreen: true, onClosePane: onClosePane)
         }
         .toolbar(embedded ? .automatic : .hidden, for: .tabBar)
         .task { if !isFullscreen { await model.connect() } }
@@ -85,6 +89,9 @@ struct DesktopContent: View {
         .onChange(of: model.viewOnly) { _, viewOnly in
             if viewOnly { keyboardVisible = false; modifiers.removeAll(); dragging = false }
         }
+        .onChange(of: showsPiPChoice) { _, showing in
+            if showing { keyboardVisible = false; modifiers.removeAll(); releasePointer() }
+        }
         .onChange(of: model.status) { _, status in
             if status != "Connected" { keyboardVisible = false; modifiers.removeAll(); dragging = false }
         }
@@ -94,6 +101,28 @@ struct DesktopContent: View {
             if phase == .background, !model.pictureInPicture.keepsConnectionAlive { model.disconnect() }
             if phase == .active { Task { await model.connect() } }
         }
+    }
+
+    private var pictureInPictureChoice: some View {
+        GeometryReader { geometry in
+            ScrollView {
+                VStack(spacing: 12) {
+                    Label("Desktop is in Picture in Picture".localized, systemImage: "pip")
+                        .font(.headline).multilineTextAlignment(.center)
+                    Button((onClosePane == nil ? "Close view, keep PiP" : "Close pane, keep PiP").localized) {
+                        if let onClosePane {
+                            if isFullscreen { dismiss() }
+                            onClosePane()
+                        } else { dismiss() }
+                    }.buttonStyle(.borderedProminent)
+                        .accessibilityIdentifier("closePaneKeepPiP")
+                    Button("Show in both".localized) { model.pictureInPicture.showInBoth() }
+                        .buttonStyle(.bordered)
+                        .accessibilityIdentifier("duplicateDesktopPiP")
+                }.frame(maxWidth: .infinity).padding(20)
+                    .frame(minHeight: geometry.size.height)
+            }
+        }.background(Theme.canvas)
     }
 
     private var desktopSurface: some View {

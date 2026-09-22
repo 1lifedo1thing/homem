@@ -2,6 +2,28 @@ import XCTest
 @testable import Homem
 
 @MainActor final class DesktopViewportTests: XCTestCase {
+    func testDuplicateKeepsPiPSourceAttachedAcrossFullscreenTransfer() throws {
+        let original = DesktopVideoSurface()
+        let duplicate = DesktopVideoSurface()
+        let inline = viewport()
+        let fullscreen = viewport(size: CGSize(width: 900, height: 600))
+        let remote = CGSize(width: 1280, height: 720)
+        inline.configure(surface: original, duplicate: duplicate, remoteSize: remote, canControl: true, resetID: 0)
+        XCTAssertTrue(original.superview === duplicate.superview)
+        XCTAssertEqual(original.frame, duplicate.frame)
+        XCTAssertTrue(original !== duplicate)
+
+        fullscreen.configure(surface: original, duplicate: duplicate, remoteSize: remote, canControl: true, resetID: 0)
+        let fullscreenCanvas = try XCTUnwrap(duplicate.superview)
+        // Updating the old inline host must not detach the fullscreen duplicate.
+        inline.configure(remoteSize: remote, canControl: false, resetID: 0)
+        XCTAssertTrue(duplicate.superview === fullscreenCanvas)
+        XCTAssertTrue(original.superview === fullscreenCanvas)
+        fullscreen.configure(surface: original, remoteSize: remote, canControl: true, resetID: 0)
+        XCTAssertNil(duplicate.superview)
+        XCTAssertTrue(original.superview === fullscreenCanvas)
+    }
+
     func testControlsUseSideSpaceOnlyWhenDesktopAndTouchTargetsStillFit() {
         let remote = CGSize(width: 1280, height: 960)
         XCTAssertTrue(DesktopControlLayout.usesSideRail(viewport: CGSize(width: 900, height: 500), remote: remote, railWidth: 56))

@@ -25,10 +25,12 @@ final class DesktopVideoSurface: UIView {
 @MainActor @Observable final class DesktopPictureInPicture: NSObject, AVPictureInPictureControllerDelegate, AVPictureInPictureSampleBufferPlaybackDelegate {
     private(set) var isActive = false
     private(set) var isStarting = false
+    private(set) var duplicatesInline = false
     var error: String?
     var keepsConnectionAlive: Bool { isActive || isStarting }
     var isSupported: Bool { AVPictureInPictureController.isPictureInPictureSupported() }
     @ObservationIgnored let surface = DesktopVideoSurface()
+    @ObservationIgnored let duplicateSurface = DesktopVideoSurface()
     @ObservationIgnored private weak var model: DesktopModel?
     @ObservationIgnored private var retainedModel: DesktopModel?
     @ObservationIgnored private var controller: AVPictureInPictureController?
@@ -84,11 +86,21 @@ final class DesktopVideoSurface: UIView {
     }
     func display(_ buffer: CVPixelBuffer) {
         lastBuffer = buffer
+        // PiP owns its playback state. An interactive duplicate keeps receiving
+        // live frames even when the user pauses the floating video player.
+        if duplicatesInline { enqueue(buffer, on: duplicateSurface.displayLayer) }
         guard !paused else { return }
-        let layer = surface.displayLayer
+        enqueue(buffer, on: surface.displayLayer)
+    }
+    private func enqueue(_ buffer: CVPixelBuffer, on layer: AVSampleBufferDisplayLayer) {
         if layer.status == .failed { layer.flush() }
         guard layer.isReadyForMoreMediaData, let sample = DesktopVideoSamples.sample(buffer) else { return }
         layer.enqueue(sample)
+    }
+    func showInBoth() {
+        guard isActive else { return }
+        duplicatesInline = true
+        if let lastBuffer { enqueue(lastBuffer, on: duplicateSurface.displayLayer) }
     }
     func received(_ frame: RTCVideoFrame, from renderer: DesktopPiPRenderer) {
         guard self.renderer === renderer, let buffer = DesktopVideoSamples.pixelBuffer(frame: frame) else { return }
@@ -108,6 +120,7 @@ final class DesktopVideoSurface: UIView {
         Self.active = self
         retainedModel = model
         isStarting = true
+        duplicatesInline = false
         startRequested = false
         paused = false
         controller?.invalidatePlaybackState()
@@ -138,11 +151,14 @@ final class DesktopVideoSurface: UIView {
             current.model?.disconnect()
             current.lastBuffer = nil
             current.surface.displayLayer.flushAndRemoveImage()
+            current.duplicateSurface.displayLayer.flushAndRemoveImage()
         }
     }
     private func finish() {
         startTimeout?.cancel(); startTimeout = nil
         isActive = false; isStarting = false; startRequested = false; paused = false
+        duplicatesInline = false
+        duplicateSurface.displayLayer.flushAndRemoveImage()
         if Self.active === self {
             Self.active = nil
             try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
