@@ -2,6 +2,16 @@ import XCTest
 @testable import Homem
 
 @MainActor final class DesktopViewportTests: XCTestCase {
+    func testControlsUseSideSpaceOnlyWhenDesktopAndTouchTargetsStillFit() {
+        let remote = CGSize(width: 1280, height: 960)
+        XCTAssertTrue(DesktopControlLayout.usesSideRail(viewport: CGSize(width: 900, height: 500), remote: remote, railWidth: 56))
+        XCTAssertFalse(DesktopControlLayout.usesSideRail(viewport: CGSize(width: 390, height: 700), remote: remote, railWidth: 56))
+        XCTAssertFalse(DesktopControlLayout.usesSideRail(viewport: CGSize(width: 700, height: 500), remote: remote, railWidth: 56))
+        XCTAssertFalse(DesktopControlLayout.usesSideRail(viewport: CGSize(width: 900, height: 220), remote: remote, railWidth: 56))
+        XCTAssertFalse(DesktopControlLayout.usesSideRail(viewport: CGSize(width: 800, height: 500), remote: remote, railWidth: 96))
+        XCTAssertFalse(DesktopControlLayout.usesSideRail(viewport: CGSize(width: 900, height: 500), remote: .zero, railWidth: 56))
+    }
+
     private func viewport(size: CGSize = CGSize(width: 400, height: 800), control: Bool = false) -> DesktopViewportView {
         let view = DesktopViewportView(frame: CGRect(origin: .zero, size: size))
         view.configure(image: nil, track: nil, remoteSize: CGSize(width: 1280, height: 720), canControl: control, resetID: 0)

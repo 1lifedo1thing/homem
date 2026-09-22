@@ -1,6 +1,18 @@
 import SwiftUI
 import WebRTC
 
+enum DesktopControlLayout {
+    /// Use existing pillarbox space, without making the fitted desktop smaller.
+    /// Base this on fit geometry, not the current zoom, to keep controls stationary.
+    static func usesSideRail(viewport: CGSize, remote: CGSize, railWidth: CGFloat) -> Bool {
+        guard viewport.width.isFinite, viewport.height.isFinite,
+              remote.width.isFinite, remote.height.isFinite,
+              viewport.height >= 240, remote.width > 0, remote.height > 0 else { return false }
+        let fittedWidth = min(viewport.width, viewport.height * remote.width / remote.height)
+        return (viewport.width - fittedWidth) / 2 >= railWidth + 8
+    }
+}
+
 /// Local canvas gestures never become remote mouse events. UIKit keeps the
 /// content beneath the pinch centroid and bounds panning to the enlarged image.
 struct DesktopViewport: UIViewRepresentable {

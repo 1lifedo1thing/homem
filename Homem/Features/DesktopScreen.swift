@@ -21,6 +21,7 @@ struct DesktopContent: View {
     @State private var dragging = false
     @State private var pointer = CGPoint.zero
     @State private var zoomResetID = 0
+    @ScaledMetric(relativeTo: .body) private var controlRailWidth: CGFloat = 56
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
 
@@ -45,24 +46,18 @@ struct DesktopContent: View {
             if let error = model.error {
                 ErrorBanner(message: error) { Task { model.disconnect(); await model.connect() } }.padding()
             }
-            ZStack {
-                Color.black
-                if fullscreen { Color.clear }
-                else if model.runtimeImage != nil || model.track != nil {
-                    DesktopViewport(model: model, resetID: zoomResetID) { point, mask in
-                        pointer = point; dragging = mask != 0
-                        model.pointer(point, mask: mask)
+            GeometryReader { geometry in
+                let side = DesktopControlLayout.usesSideRail(viewport: geometry.size, remote: model.videoSize,
+                                                           railWidth: controlRailWidth)
+                desktopSurface
+                    .padding(.trailing, side ? controlRailWidth : 0)
+                    .padding(.bottom, side ? 0 : 44)
+                    .overlay(alignment: side ? .trailing : .bottom) {
+                        controls(vertical: side)
+                            .frame(width: side ? controlRailWidth : nil, height: side ? nil : 44)
+                            .frame(maxHeight: side ? .infinity : nil)
                     }
-                    .overlay { if !model.hasVideo { ProgressView().tint(.white).allowsHitTesting(false) } }
-                } else {
-                    VStack(spacing: 16) {
-                        Image(systemName: "desktopcomputer").font(.largeTitle)
-                        Text(model.status.localized)
-                        if model.error == nil { ProgressView().tint(.white) }
-                    }.foregroundStyle(.white.opacity(0.7))
-                }
-            }.clipped()
-            controls
+            }
             if !model.viewOnly, model.status == "Connected", !fullscreen {
                 RemoteKeyboard(isActive: $keyboardVisible, onText: { text in
                     model.type(text, modifiers: modifiers.sorted()); modifiers.removeAll()
@@ -96,8 +91,29 @@ struct DesktopContent: View {
         }
     }
 
-    private var controls: some View {
-        HStack(spacing: 4) {
+    private var desktopSurface: some View {
+        ZStack {
+            Color.black
+            if fullscreen { Color.clear }
+            else if model.runtimeImage != nil || model.track != nil {
+                DesktopViewport(model: model, resetID: zoomResetID) { point, mask in
+                    pointer = point; dragging = mask != 0
+                    model.pointer(point, mask: mask)
+                }
+                .overlay { if !model.hasVideo { ProgressView().tint(.white).allowsHitTesting(false) } }
+            } else {
+                VStack(spacing: 16) {
+                    Image(systemName: "desktopcomputer").font(.largeTitle)
+                    Text(model.status.localized)
+                    if model.error == nil { ProgressView().tint(.white) }
+                }.foregroundStyle(.white.opacity(0.7))
+            }
+        }.clipped()
+    }
+
+    private func controls(vertical: Bool) -> some View {
+        let layout = vertical ? AnyLayout(VStackLayout(spacing: 4)) : AnyLayout(HStackLayout(spacing: 4))
+        return layout {
             Button { keyboardVisible.toggle() } label: {
                 Image(systemName: keyboardVisible ? "keyboard.chevron.compact.down" : "keyboard")
                     .frame(width: 44, height: 44)
@@ -105,8 +121,8 @@ struct DesktopContent: View {
             .accessibilityLabel((keyboardVisible ? "Hide keyboard" : "Show keyboard").localized)
             .disabled(model.viewOnly || model.status != "Connected")
             if !model.viewOnly {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 4) {
+                ScrollView(vertical ? .vertical : .horizontal, showsIndicators: false) {
+                    layout {
                         keyButton("Esc", 0xff1b)
                         keyButton("Tab", 0xff09)
                         modifierButton("Ctrl", 0xffe3)
@@ -151,7 +167,7 @@ struct DesktopContent: View {
                     Image(systemName: "arrow.up.left.and.arrow.down.right").frame(width: 44, height: 44)
                 }.accessibilityLabel("Fullscreen".localized)
             }
-        }.buttonStyle(.plain).padding(.horizontal, 6).background(.bar)
+        }.buttonStyle(.plain).padding(vertical ? .vertical : .horizontal, 6).background(.bar)
     }
     private func keyButton(_ title: String, _ code: UInt32, label: String? = nil) -> some View {
         Button { sendKey(code) } label: { Text(title).font(.system(.caption, design: .monospaced)).frame(minWidth: 40, minHeight: 44) }
