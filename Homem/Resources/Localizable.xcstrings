@@ -15626,6 +15626,52 @@
           }
         }
       }
+    },
+    "Fit to screen": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "适合屏幕"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajustar a la pantalla"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "画面に合わせる"
+          }
+        }
+      }
+    },
+    "Pinch to zoom. Drag with two fingers to move the desktop.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "双指捏合缩放，双指拖动移动桌面。"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pellizca para ampliar. Arrastra con dos dedos para mover el escritorio."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ピンチで拡大・縮小、2本指のドラッグでデスクトップを移動します。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

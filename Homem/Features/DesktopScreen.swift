@@ -20,6 +20,7 @@ struct DesktopContent: View {
     @State private var modifiers = Set<UInt32>()
     @State private var dragging = false
     @State private var pointer = CGPoint.zero
+    @State private var zoomResetID = 0
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
 
@@ -44,28 +45,23 @@ struct DesktopContent: View {
             if let error = model.error {
                 ErrorBanner(message: error) { Task { model.disconnect(); await model.connect() } }.padding()
             }
-            GeometryReader { geometry in
-                ZStack {
-                    Color.black
-                    if fullscreen { Color.clear }
-                    else if let image = model.runtimeImage {
-                        Image(uiImage: image).resizable().scaledToFit().frame(maxWidth: .infinity, maxHeight: .infinity)
-                    } else if let track = model.track {
-                        RemoteVideo(track: track, model: model).overlay { if !model.hasVideo { ProgressView().tint(.white) } }
-                    } else {
-                        VStack(spacing: 16) {
-                            Image(systemName: "desktopcomputer").font(.largeTitle)
-                            Text(model.status.localized)
-                            if model.error == nil { ProgressView().tint(.white) }
-                        }.foregroundStyle(.white.opacity(0.7))
+            ZStack {
+                Color.black
+                if fullscreen { Color.clear }
+                else if model.runtimeImage != nil || model.track != nil {
+                    DesktopViewport(model: model, resetID: zoomResetID) { point, mask in
+                        pointer = point; dragging = mask != 0
+                        model.pointer(point, mask: mask)
                     }
+                    .overlay { if !model.hasVideo { ProgressView().tint(.white).allowsHitTesting(false) } }
+                } else {
+                    VStack(spacing: 16) {
+                        Image(systemName: "desktopcomputer").font(.largeTitle)
+                        Text(model.status.localized)
+                        if model.error == nil { ProgressView().tint(.white) }
+                    }.foregroundStyle(.white.opacity(0.7))
                 }
-                .contentShape(Rectangle())
-                .gesture(DragGesture(minimumDistance: 0).onChanged { value in
-                    guard !model.viewOnly, model.status == "Connected", let point = model.point(value.location, in: geometry.size) else { return }
-                    dragging = true; pointer = point; model.pointer(point, mask: 1)
-                }.onEnded { _ in releasePointer() })
-            }
+            }.clipped()
             controls
             if !model.viewOnly, model.status == "Connected", !fullscreen {
                 RemoteKeyboard(isActive: $keyboardVisible, onText: { text in
@@ -146,6 +142,7 @@ struct DesktopContent: View {
                     .disabled(model.viewOnly || model.status != "Connected")
                 Button("Scroll down".localized) { model.pointer(pointer, mask: 16); model.pointer(pointer, mask: 0) }
                     .disabled(model.viewOnly || model.status != "Connected")
+                Button("Fit to screen".localized, systemImage: "arrow.down.right.and.arrow.up.left") { zoomResetID += 1 }
                 Button("Reconnect desktop".localized) { Task { model.disconnect(); await model.connect() } }
             } label: { Image(systemName: "computermouse").frame(width: 44, height: 44) }
             .accessibilityLabel("Desktop controls".localized)
@@ -505,22 +502,4 @@ extension DesktopModel: RTCPeerConnectionDelegate {
     nonisolated func peerConnection(_ peerConnection: RTCPeerConnection, didRemove candidates: [RTCIceCandidate]) {}
     nonisolated func peerConnection(_ peerConnection: RTCPeerConnection, didOpen dataChannel: RTCDataChannel) {}
     nonisolated func peerConnection(_ peerConnection: RTCPeerConnection, didAdd rtpReceiver: RTCRtpReceiver, streams: [RTCMediaStream]) { Task { @MainActor in if self.peer === peerConnection { self.track = rtpReceiver.track as? RTCVideoTrack } } }
-}
-
-struct RemoteVideo: UIViewRepresentable {
-    let track: RTCVideoTrack
-    let model: DesktopModel
-    func makeCoordinator() -> Coordinator { Coordinator(model: model) }
-    func makeUIView(context: Context) -> RTCMTLVideoView {
-        let view = RTCMTLVideoView(frame: .zero); view.videoContentMode = .scaleAspectFit; view.delegate = context.coordinator
-        track.add(view); context.coordinator.track = track; return view
-    }
-    func updateUIView(_ view: RTCMTLVideoView, context: Context) { if context.coordinator.track !== track { context.coordinator.track?.remove(view); track.add(view); context.coordinator.track = track } }
-    static func dismantleUIView(_ view: RTCMTLVideoView, coordinator: Coordinator) { coordinator.track?.remove(view) }
-    final class Coordinator: NSObject, RTCVideoViewDelegate {
-        var track: RTCVideoTrack?
-        let model: DesktopModel
-        init(model: DesktopModel) { self.model = model }
-        func videoView(_ videoView: RTCVideoRenderer, didChangeVideoSize size: CGSize) { Task { @MainActor in if size.width > 0 && size.height > 0 { model.videoSize = size; model.hasVideo = true; DebugDiagnostics.record("Desktop frame size: \(size)") } } }
-    }
 }
