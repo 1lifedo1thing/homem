@@ -57,8 +57,10 @@ struct ConversationsView: View {
                                         }
                                     }
                                     HStack(spacing: 6) {
-                                        Image(systemName: session.value["type"] == "schedule" ? "clock" : "bubble.left")
-                                        Text(session.value["type"].string.fieldLabel.localized.nonEmpty ?? "Chat".localized)
+                                        ChatAgentIndicator(type: .session(session.value))
+                                        if session.value["session_mode"] == "schedule" || session.value["type"] == "schedule" {
+                                            Image(systemName: "clock").accessibilityLabel("Schedule".localized)
+                                        }
                                         if let date = session.value["updated_at"].string.wireDate {
                                             Spacer(minLength: 4)
                                             Text(date, format: .dateTime.month(.abbreviated).day()).monospacedDigit()

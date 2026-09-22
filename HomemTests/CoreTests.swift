@@ -2,6 +2,36 @@ import XCTest
 @testable import Homem
 
 final class CoreTests: XCTestCase {
+    func testConversationAgentIdentitySupportsCurrentAndLegacySessions() {
+        XCTAssertEqual(ChatAgentType.session(["type": "chat"]), .memoh)
+        XCTAssertEqual(ChatAgentType.session(["runtime_type": "codex"]), .codex)
+        XCTAssertEqual(ChatAgentType.session(["runtime_type": "claude-code"]), .claudeCode)
+        XCTAssertEqual(ChatAgentType.session(["type": "acp_agent", "metadata": ["acp_agent_id": "codex"]]), .codex)
+        XCTAssertEqual(ChatAgentType.session(["runtime_type": "acp_agent", "runtime_metadata": ["acp_agent_id": "custom-agent"]]), .acp)
+    }
+    func testNewConversationUsesEnabledAgentIDAndRuntimeContract() {
+        let catalog: JSONValue = ["items": [
+            ["id": "codex-1", "name": "Coding", "runtime": "codex", "enabled": true],
+            ["id": "claude-1", "name": "Review", "runtime": "claude-code", "enabled": true],
+            ["id": "acp-1", "name": "Research", "runtime": "acp", "metadata": ["provider": "custom-acp"]],
+            ["id": "disabled", "runtime": "codex", "enabled": false],
+            ["id": "future", "runtime": "unknown", "enabled": true]
+        ]]
+        let agents = ConversationAgent.enabled(in: catalog)
+        XCTAssertEqual(agents.map(\.id), ["codex-1", "claude-1", "acp-1"])
+        XCTAssertEqual(agents[0].sessionBody(title: "Hello")["bot_agent_id"], "codex-1")
+        XCTAssertEqual(agents[0].sessionBody(title: "Hello")["runtime_type"], "codex")
+        XCTAssertEqual(agents[1].sessionBody(title: "Hello")["runtime_type"], "claude-code")
+        let acp = agents[2].sessionBody(title: "Hello", settings: ["default_bot_agent_id": "acp-1", "chat_acp_project_path": "/data/project"])
+        XCTAssertEqual(acp["runtime_type"], "acp_agent")
+        XCTAssertEqual(acp["runtime_metadata"]["acp_agent_id"], "custom-acp")
+        XCTAssertEqual(acp["runtime_metadata"]["project_path"], "/data/project")
+        XCTAssertEqual(acp["runtime_metadata"]["acp_project_mode"], "project")
+        let native = ConversationAgent.memoh.sessionBody(title: "Hello")
+        XCTAssertEqual(native["runtime_type"], "model")
+        XCTAssertTrue(native["bot_agent_id"].isNull)
+        XCTAssertEqual(native["type"], "chat")
+    }
     func testAgentSettingsChangesPreserveFalseAndExplicitClears() {
         let original: JSONValue = ["search_provider_id": "old-provider", "display_enabled": true, "language": "en", "read_only_id": "unchanged"]
         let draft: JSONValue = ["search_provider_id": "", "display_enabled": false, "language": "en", "read_only_id": "changed", "chat_model_id": .null]

@@ -15856,6 +15856,52 @@
           }
         }
       }
+    },
+    "Conversation agent": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "对话智能体"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agente de conversación"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "会話エージェント"
+          }
+        }
+      }
+    },
+    "Couldn’t load agents. You can still chat with Memoh.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法加载智能体，你仍可使用 Memoh 聊天。"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudieron cargar los agentes. Puedes seguir chateando con Memoh."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "エージェントを読み込めませんでした。Memohとのチャットは利用できます。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
