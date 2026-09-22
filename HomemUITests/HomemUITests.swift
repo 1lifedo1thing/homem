@@ -6,7 +6,7 @@ final class HomemUITests: XCTestCase {
         let workspace = app.buttons["workspacePicker"]
         XCTAssertTrue(workspace.waitForExistence(timeout: 10))
         workspace.tap()
-        app.buttons["Accounts"].tap()
+        app.buttons["manageAccounts"].tap()
         XCTAssertTrue(app.buttons["addAccount"].waitForExistence(timeout: 5))
         app.buttons["addAccount"].tap()
         XCTAssertTrue(app.buttons["officialSignIn"].waitForExistence(timeout: 5))

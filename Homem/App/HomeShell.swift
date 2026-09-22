@@ -263,59 +263,123 @@ struct AgentPickerMenu: View {
 
 struct WorkspacePickerMenu: View {
     @Environment(AppStore.self) private var store
+    @Environment(\.appAccent) private var accent
+    @State private var presented = false
     @State private var accounts = false
+    @State private var openAccountsAfterDismiss = false
     @State private var busy = false
     @State private var error: String?
-    @State private var menuImages: [String: UIImage] = [:]
+
     var body: some View {
-        Menu {
-            if !store.workspaces.isEmpty {
-                Picker("Workspace".localized, selection: Binding(get: { store.api?.officialSession?.teamID ?? "" }, set: { id in
-                    guard let team = store.workspaces.first(where: { $0["team_id"].string == id }) else { return }
-                    busy = true
-                    Task {
-                        defer { busy = false }
-                        do { try await store.switchWorkspace(team) }
-                        catch { self.error = error.localizedDescription }
-                    }
-                })) {
-                    ForEach(store.workspaces, id: \.self) { team in
-                        Label {
-                            Text(team.text("name", "slug"))
-                        } icon: {
-                            if let image = menuImages[team["team_id"].string] { Image(uiImage: image).renderingMode(.original) }
-                            else { Image(systemName: "square.stack") }
-                        }.tag(team["team_id"].string)
-                    }
-                }.pickerStyle(.inline).disabled(busy)
-            }
-            if !store.workspaces.isEmpty { Divider() }
-            Button("Accounts".localized, systemImage: "person.crop.circle") { accounts = true }
-        } label: {
+        Button { presented.toggle() } label: {
             AvatarToolbarLabel { size in
                 if busy { ProgressView().frame(width: size, height: size) }
-                else { AgentAvatar(name: store.workspaceName, avatarURL: store.workspace.avatarURL, size: size) }
+                else if store.workspace != .null {
+                    AgentAvatar(name: store.workspaceName, avatarURL: store.workspace.avatarURL, size: size)
+                } else {
+                    AgentAvatar(name: store.accountName, avatarURL: store.accountAvatarURL, size: size)
+                }
             }
         }
         .accessibilityLabel("Workspace".localized).accessibilityValue(store.workspaceName)
         .accessibilityIdentifier("workspacePicker")
+        .disabled(busy)
+        .popover(isPresented: $presented, attachmentAnchor: .rect(.bounds)) {
+            VStack(spacing: 0) {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 2) {
+                        if !store.workspaces.isEmpty {
+                            sectionTitle("Workspace")
+                            ForEach(store.workspaces, id: \.self) { team in
+                                let selected = team["team_id"].string == store.api?.officialSession?.teamID
+                                Button {
+                                    switchTo { try await store.switchWorkspace(team) }
+                                } label: {
+                                    HStack(spacing: 12) {
+                                        AgentAvatar(name: team.text("name", "slug"), avatarURL: team.avatarURL, size: 36)
+                                        Text(team.text("name", "slug")).font(.subheadline.weight(.medium))
+                                            .foregroundStyle(.primary).lineLimit(2)
+                                        Spacer(minLength: 8)
+                                        selectionMark(selected)
+                                    }.modifier(SwitcherRowStyle(selected: selected, accent: accent))
+                                }.buttonStyle(.plain)
+                                    .accessibilityValue(selected ? "Selected".localized : "")
+                            }
+                        }
+                        if !store.savedAccounts.isEmpty {
+                            if !store.workspaces.isEmpty { Divider().padding(.vertical, 8) }
+                            sectionTitle("Accounts")
+                            ForEach(store.savedAccounts) { account in
+                                let selected = account.id == store.activeAccountID
+                                Button {
+                                    switchTo { try await store.switchAccount(account) }
+                                } label: {
+                                    HStack(spacing: 12) {
+                                        SavedAccountAvatar(account: account)
+                                        VStack(alignment: .leading, spacing: 3) {
+                                            Text(account.name).font(.subheadline.weight(.medium)).foregroundStyle(.primary).lineLimit(2)
+                                            Text(account.host).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                                        }
+                                        Spacer(minLength: 8)
+                                        selectionMark(selected)
+                                    }.modifier(SwitcherRowStyle(selected: selected, accent: accent))
+                                }.buttonStyle(.plain)
+                                    .accessibilityValue(selected ? "Selected".localized : "")
+                                    .accessibilityIdentifier("switchAccount_" + account.id)
+                            }
+                        }
+                    }.padding(6)
+                }.frame(maxHeight: 360)
+                Divider()
+                Button {
+                    openAccountsAfterDismiss = true
+                    presented = false
+                } label: {
+                    Label("Manage accounts".localized, systemImage: "person.crop.circle")
+                        .font(.subheadline).frame(maxWidth: .infinity, alignment: .leading).padding(16)
+                        .contentShape(Rectangle())
+                }.buttonStyle(.plain).foregroundStyle(accent)
+                    .accessibilityIdentifier("manageAccounts")
+            }.frame(width: 300).fixedSize(horizontal: false, vertical: true)
+                .presentationCompactAdaptation(.popover)
+                .onDisappear {
+                    if openAccountsAfterDismiss {
+                        openAccountsAfterDismiss = false
+                        accounts = true
+                    }
+                }
+        }
         .sheet(isPresented: $accounts) { AccountsView() }
         .alert("Workspace".localized, isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
             Button("OK".localized) { error = nil }
         } message: { Text(error ?? "") }
-        .task(id: store.workspaces) {
-            for team in store.workspaces {
-                guard let url = AvatarSource.url(team.avatarURL, baseURL: store.api?.baseURL),
-                      let data = try? await AvatarImages.data(url, request: try? store.api?.avatarRequest(url)),
-                      let image = AvatarImages.decode(data), !Task.isCancelled else { continue }
-                menuImages[team["team_id"].string] = UIGraphicsImageRenderer(size: CGSize(width: 22, height: 22)).image { _ in
-                    UIBezierPath(roundedRect: CGRect(x: 0, y: 0, width: 22, height: 22), cornerRadius: 5).addClip()
-                    let scale = max(22 / image.size.width, 22 / image.size.height)
-                    let width = image.size.width * scale, height = image.size.height * scale
-                    image.draw(in: CGRect(x: (22 - width) / 2, y: (22 - height) / 2, width: width, height: height))
-                }
-            }
+    }
+
+    private func sectionTitle(_ title: String) -> some View {
+        Text(title.localized).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            .padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 6)
+    }
+    @ViewBuilder private func selectionMark(_ selected: Bool) -> some View {
+        if selected { Image(systemName: "checkmark").font(.subheadline.weight(.semibold)).foregroundStyle(accent) }
+    }
+    private func switchTo(_ action: @escaping @MainActor () async throws -> Void) {
+        presented = false
+        busy = true
+        Task { @MainActor in
+            defer { busy = false }
+            do { try await action() }
+            catch { self.error = error.localizedDescription }
         }
+    }
+}
+
+private struct SwitcherRowStyle: ViewModifier {
+    let selected: Bool
+    let accent: Color
+    func body(content: Content) -> some View {
+        content.padding(12).frame(maxWidth: .infinity, alignment: .leading)
+            .background(selected ? accent.opacity(0.08) : .clear, in: RoundedRectangle(cornerRadius: 12))
+            .contentShape(Rectangle())
     }
 }
 

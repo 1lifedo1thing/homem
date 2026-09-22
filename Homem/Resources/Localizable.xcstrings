@@ -15833,6 +15833,29 @@
           }
         }
       }
+    },
+    "Manage accounts": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "管理账户"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gestionar cuentas"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アカウントを管理"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
