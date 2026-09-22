@@ -7,7 +7,8 @@ struct RuntimeState {
     var run: JSONValue = .null
     var needsSnapshot = false
     var messages: [JSONValue] { run["messages"].array }
-    var active: Bool { ["admitting", "running", "waiting_decision", "aborting", "finishing"].contains(run["status"].string) }
+    var active: Bool { Self.isActive(run["status"].string) }
+    static func isActive(_ status: String) -> Bool { ["admitting", "running", "waiting_decision", "aborting", "finishing"].contains(status) }
     mutating func apply(_ event: JSONValue) {
         if event["type"] == "runtime_dropped" { needsSnapshot = true; return }
         if event["type"] == "runtime_snapshot" {
@@ -311,5 +312,110 @@ struct UserInputDraft {
             answers.append(answer)
         }
         return answers
+    }
+}
+
+/// The list only needs run status, never a second copy of each transcript.
+struct ConversationRunState {
+    private var epoch = ""
+    private var sequence: Double = 0
+    private var hasSnapshot = false
+    private var needsSnapshot = false
+    private(set) var active = false
+
+    /// Returns true once when a lost frame requires a fresh subscription snapshot.
+    mutating func apply(_ event: JSONValue) -> Bool {
+        let type = event["type"].string
+        if type == "runtime_snapshot" {
+            let snapshot = event["snapshot"]
+            epoch = snapshot["epoch"].string.nonEmpty ?? event["epoch"].string
+            sequence = snapshot["seq"].isNull ? event["seq"].number : snapshot["seq"].number
+            active = RuntimeState.isActive(snapshot["current_run_view"]["status"].string)
+            hasSnapshot = true; needsSnapshot = false
+            return false
+        }
+        guard !needsSnapshot else { return false }
+        if type == "runtime_dropped" { needsSnapshot = true; return true }
+        guard type == "runtime_delta" else { return false }
+        guard hasSnapshot, event["epoch"].string == epoch else { needsSnapshot = true; return true }
+        let next = event["seq"].number
+        guard next > sequence else { return false }
+        guard next == sequence + 1 else { needsSnapshot = true; return true }
+        sequence = next
+        let delta = event["delta"]
+        if delta.object.keys.contains("current_run_view") {
+            active = RuntimeState.isActive(delta["current_run_view"]["status"].string)
+        }
+        if delta["run"].object.keys.contains("status") {
+            active = RuntimeState.isActive(delta["run"]["status"].string)
+        }
+        return false
+    }
+}
+
+@MainActor @Observable final class ConversationActivity {
+    private(set) var running: Set<String> = []
+    @ObservationIgnored private var generation = UUID()
+
+    /// One read-only socket for the listed sessions. Cancelling it never aborts a run.
+    func watch(api: APIClient?, botID: String, sessionIDs: [String]) async {
+        let generation = UUID()
+        self.generation = generation
+        running = []
+        guard let api, !api.isDemo, !botID.isEmpty, !sessionIDs.isEmpty else { return }
+        let ids = Set(sessionIDs)
+        var backoff = 1
+        while !Task.isCancelled, self.generation == generation, !api.signedOut {
+            do {
+                let socket = try await api.socket("/bots/\(botID.pathComponent)/web/ws")
+                defer { socket.cancel(with: .goingAway, reason: nil) }
+                try await withTaskCancellationHandler {
+                    try Task.checkCancellation()
+                    for id in ids { try await subscribe(id, on: socket) }
+                    let heartbeat = Task {
+                        while !Task.isCancelled {
+                            do { try await Task.sleep(for: .seconds(20)); try Task.checkCancellation() }
+                            catch { return }
+                            socket.sendPing { error in if error != nil { socket.cancel(with: .goingAway, reason: nil) } }
+                        }
+                    }
+                    defer { heartbeat.cancel() }
+                    var states: [String: ConversationRunState] = [:]
+                    while !Task.isCancelled {
+                        let frame = try await socket.receive()
+                        let data: Data
+                        switch frame {
+                        case .data(let value): data = value
+                        case .string(let value): data = Data(value.utf8)
+                        @unknown default: continue
+                        }
+                        guard self.generation == generation else { return }
+                        let event = try JSONDecoder().decode(JSONValue.self, from: data)
+                        let id = event["session_id"].string
+                        guard ids.contains(id) else { continue }
+                        var state = states[id] ?? ConversationRunState()
+                        let refresh = state.apply(event)
+                        states[id] = state
+                        if state.active != running.contains(id) {
+                            if state.active { running.insert(id) } else { running.remove(id) }
+                        }
+                        if event["type"] == "runtime_snapshot" { backoff = 1 }
+                        if refresh { try await subscribe(id, on: socket) }
+                    }
+                } onCancel: { socket.cancel(with: .goingAway, reason: nil) }
+            } catch {
+                guard !Task.isCancelled, self.generation == generation, !api.signedOut else { break }
+                // Don't leave a stale spinner behind while the connection is offline.
+                running = []
+                do { try await Task.sleep(for: .seconds(backoff)) } catch { break }
+                backoff = min(backoff * 2, 30)
+            }
+        }
+        if self.generation == generation { running = [] }
+    }
+
+    private func subscribe(_ id: String, on socket: URLSessionWebSocketTask) async throws {
+        let message: JSONValue = ["type": "runtime_subscribe", "session_id": .string(id)]
+        try await socket.send(.string(String(decoding: try message.encoded, as: UTF8.self)))
     }
 }

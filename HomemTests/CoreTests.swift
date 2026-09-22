@@ -89,6 +89,33 @@ final class CoreTests: XCTestCase {
         state.apply(snapshot); XCTAssertFalse(state.needsSnapshot)
         XCTAssertEqual(state.messages[0]["content"], "Hello")
     }
+    func testConversationSpinnerFollowsRunLifecycle() {
+        var state = ConversationRunState()
+        XCTAssertFalse(state.active)
+        XCTAssertFalse(state.apply(["type": "runtime_snapshot", "snapshot": ["epoch": "e", "seq": 1, "current_run_view": ["status": "running"]]]))
+        XCTAssertTrue(state.active)
+        for (index, status) in ["waiting_decision", "aborting", "finishing", "completed"].enumerated() {
+            XCTAssertFalse(state.apply(["type": "runtime_delta", "epoch": "e", "seq": .number(Double(index + 2)), "delta": ["run": ["status": .string(status)]]]))
+            XCTAssertEqual(state.active, status != "completed")
+        }
+        XCTAssertFalse(state.apply(["type": "runtime_delta", "epoch": "e", "seq": 6, "delta": ["current_run_view": ["status": "admitting"]]]))
+        XCTAssertTrue(state.active)
+        XCTAssertFalse(state.apply(["type": "runtime_delta", "epoch": "e", "seq": 7, "delta": ["current_run_view": .null]]))
+        XCTAssertFalse(state.active)
+    }
+    func testConversationSpinnerRecoversFromGapsAndIgnoresReplay() {
+        var state = ConversationRunState()
+        let initial: JSONValue = ["type": "runtime_snapshot", "snapshot": ["epoch": "e", "seq": 2, "current_run_view": ["status": "running"]]]
+        _ = state.apply(initial)
+        XCTAssertFalse(state.apply(["type": "runtime_delta", "epoch": "e", "seq": 1, "delta": ["current_run_view": .null]]))
+        XCTAssertTrue(state.active)
+        XCTAssertTrue(state.apply(["type": "runtime_delta", "epoch": "e", "seq": 4, "delta": ["current_run_view": .null]]))
+        XCTAssertFalse(state.apply(["type": "runtime_dropped"])) // Only request recovery once.
+        XCTAssertFalse(state.apply(["type": "runtime_snapshot", "snapshot": ["epoch": "new", "seq": 10, "current_run_view": .null]]))
+        XCTAssertFalse(state.active)
+        XCTAssertTrue(state.apply(["type": "runtime_delta", "epoch": "e", "seq": 11, "delta": ["run": ["status": "running"]]]))
+        XCTAssertFalse(state.active)
+    }
     func testRuntimeUpsertWinsOverAppendAndClearsRun() {
         var state = RuntimeState(); state.apply(snapshot)
         state.apply(["type": "runtime_delta", "epoch": "e", "seq": 2, "delta": ["message_appends": [["id": 1, "type": "text", "content": " there"]], "message_upserts": [["id": 1, "type": "text", "content": "Authoritative"]]]])

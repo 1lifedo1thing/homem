@@ -8,6 +8,8 @@ struct ChatDestination: Hashable, Codable {
 }
 
 struct ConversationsView: View {
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var activity = ConversationActivity()
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.appAccent) private var accent
     @Environment(AppStore.self) private var store
@@ -23,6 +25,10 @@ struct ConversationsView: View {
     @State private var deletion: Record?
     @State private var columnVisibility: NavigationSplitViewVisibility = .automatic
     @State private var compactColumn: NavigationSplitViewColumn = .sidebar
+    private var activityScope: String {
+        store.connectionID.uuidString + "|" + (store.selectedBot?.id ?? "") + "|"
+            + sessions.map(\.id).sorted().joined(separator: ",") + "|" + String(scenePhase == .background)
+    }
     private var needsCompactBackControl: Bool {
         #if HOMEM_DUO_SDK
         if #available(iOS 27.1, *) { return sizeClass != .regular }
@@ -40,7 +46,16 @@ struct ConversationsView: View {
                             HStack(alignment: .top, spacing: 12) {
                                 AgentAvatar(name: store.selectedBot?.title ?? "", avatarURL: store.selectedBot?.value.avatarURL ?? "", size: 30)
                                 VStack(alignment: .leading, spacing: 5) {
-                                    Text(session.title).font(sizeClass == .regular ? .subheadline.weight(.medium) : .body.weight(.semibold)).lineLimit(2)
+                                    HStack(alignment: .top, spacing: 8) {
+                                        Text(session.title).font(sizeClass == .regular ? .subheadline.weight(.medium) : .body.weight(.semibold)).lineLimit(2)
+                                        if activity.running.contains(session.id) {
+                                            Spacer(minLength: 0)
+                                            ProgressView().controlSize(.small).tint(accent)
+                                                .frame(width: 18, height: 20)
+                                                .accessibilityLabel("Working…".localized)
+                                                .accessibilityIdentifier("conversationRunning_" + session.id)
+                                        }
+                                    }
                                     HStack(spacing: 6) {
                                         Image(systemName: session.value["type"] == "schedule" ? "clock" : "bubble.left")
                                         Text(session.value["type"].string.fieldLabel.localized.nonEmpty ?? "Chat".localized)
@@ -141,6 +156,10 @@ struct ConversationsView: View {
         .onChange(of: sizeClass) { _, value in
             // Expanded column visibility must not suppress compact Back navigation.
             if value == .compact { columnVisibility = .automatic }
+        }
+        .task(id: activityScope) {
+            await activity.watch(api: scenePhase == .background ? nil : store.api,
+                                 botID: store.selectedBot?.id ?? "", sessionIDs: sessions.map(\.id))
         }
         .task(id: store.selectedBot?.id) {
             sessions = []; cursor = ""; error = nil
