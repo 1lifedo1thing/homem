@@ -14,7 +14,7 @@ import XCTest
 
     private func viewport(size: CGSize = CGSize(width: 400, height: 800), control: Bool = false) -> DesktopViewportView {
         let view = DesktopViewportView(frame: CGRect(origin: .zero, size: size))
-        view.configure(image: nil, track: nil, remoteSize: CGSize(width: 1280, height: 720), canControl: control, resetID: 0)
+        view.configure(remoteSize: CGSize(width: 1280, height: 720), canControl: control, resetID: 0)
         view.layoutIfNeeded()
         return view
     }
@@ -51,7 +51,7 @@ import XCTest
         view.onPointer = { _, _ in mouseEvents += 1 }
         XCTAssertEqual(view.scrollView.panGestureRecognizer.minimumNumberOfTouches, 2)
         view.scrollView.setZoomScale(4, animated: false)
-        view.configure(image: nil, track: nil, remoteSize: CGSize(width: 1280, height: 720), canControl: false, resetID: 1)
+        view.configure(remoteSize: CGSize(width: 1280, height: 720), canControl: false, resetID: 1)
         XCTAssertEqual(view.scrollView.panGestureRecognizer.minimumNumberOfTouches, 1)
         XCTAssertEqual(view.scrollView.zoomScale, 1)
         XCTAssertNil(view.remotePoint(at: CGPoint(x: 200, y: 100)))

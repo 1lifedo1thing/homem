@@ -162,6 +162,7 @@ import Observation
         }
     }
     private func replaceClient(_ client: APIClient?) {
+        DesktopPictureInPicture.stopActive(disconnect: true)
         api?.invalidate()
         api = client; bots = []; profile = .null; accountProfile = .null; workspace = .null; workspaces = []
         selectedBotID = ""; error = nil; connectionID = UUID()

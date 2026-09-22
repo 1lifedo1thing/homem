@@ -1,5 +1,4 @@
 import SwiftUI
-import WebRTC
 
 enum DesktopControlLayout {
     /// Use existing pillarbox space, without making the fitted desktop smaller.
@@ -23,22 +22,16 @@ struct DesktopViewport: UIViewRepresentable {
     func makeUIView(context: Context) -> DesktopViewportView { DesktopViewportView() }
     func updateUIView(_ view: DesktopViewportView, context: Context) {
         view.onPointer = onPointer
-        view.onVideoSize = { size in
-            model.videoSize = size
-            model.hasVideo = true
-        }
-        view.configure(image: model.runtimeImage, track: model.track, remoteSize: model.videoSize,
+        view.configure(surface: model.pictureInPicture.surface, remoteSize: model.videoSize,
                        canControl: !model.viewOnly && model.status == "Connected", resetID: resetID)
     }
     static func dismantleUIView(_ view: DesktopViewportView, coordinator: ()) { view.stop() }
 }
 
-final class DesktopViewportView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate, RTCVideoViewDelegate {
+final class DesktopViewportView: UIView, UIScrollViewDelegate, UIGestureRecognizerDelegate {
     let scrollView = UIScrollView()
     private let canvas = UIView()
-    private let imageView = UIImageView()
-    private let videoView = RTCMTLVideoView(frame: .zero)
-    private var track: RTCVideoTrack?
+    private var videoSurface: DesktopVideoSurface?
     private var remoteSize = CGSize.zero
     private var layoutSize = CGSize.zero
     private var layoutRemoteSize = CGSize.zero
@@ -46,7 +39,6 @@ final class DesktopViewportView: UIView, UIScrollViewDelegate, UIGestureRecogniz
     private var canControl = false
     private var heldPoint: CGPoint?
     var onPointer: ((CGPoint, Int) -> Void)?
-    var onVideoSize: ((CGSize) -> Void)?
     private lazy var click = UITapGestureRecognizer(target: self, action: #selector(tapped(_:)))
     private lazy var mouseDrag = UIPanGestureRecognizer(target: self, action: #selector(dragged(_:)))
 
@@ -64,11 +56,6 @@ final class DesktopViewportView: UIView, UIScrollViewDelegate, UIGestureRecogniz
         scrollView.contentInsetAdjustmentBehavior = .never
         addSubview(scrollView)
         scrollView.addSubview(canvas)
-        canvas.addSubview(imageView)
-        canvas.addSubview(videoView)
-        imageView.contentMode = .scaleAspectFit
-        videoView.videoContentMode = .scaleAspectFit
-        videoView.delegate = self
         // A second finger cancels the mouse drag; pinch and canvas pan remain local.
         mouseDrag.maximumNumberOfTouches = 1
         mouseDrag.delegate = self
@@ -84,7 +71,7 @@ final class DesktopViewportView: UIView, UIScrollViewDelegate, UIGestureRecogniz
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
-    func configure(image: UIImage?, track: RTCVideoTrack?, remoteSize: CGSize, canControl: Bool, resetID: Int) {
+    func configure(surface: DesktopVideoSurface? = nil, remoteSize: CGSize, canControl: Bool, resetID: Int) {
         if self.canControl != canControl {
             releasePointer()
             self.canControl = canControl
@@ -92,14 +79,11 @@ final class DesktopViewportView: UIView, UIScrollViewDelegate, UIGestureRecogniz
             click.isEnabled = canControl
         }
         scrollView.panGestureRecognizer.minimumNumberOfTouches = canControl ? 2 : 1
-        if self.track !== track {
-            self.track?.remove(videoView)
-            self.track = track
-            track?.add(videoView)
+        if let surface, surface.superview !== canvas {
+            videoSurface = surface
+            canvas.addSubview(surface)
+            surface.frame = canvas.bounds
         }
-        imageView.image = image
-        imageView.isHidden = image == nil
-        videoView.isHidden = image != nil || track == nil
         self.remoteSize = remoteSize
         if self.resetID != resetID {
             self.resetID = resetID
@@ -124,8 +108,7 @@ final class DesktopViewportView: UIView, UIScrollViewDelegate, UIGestureRecogniz
         scrollView.frame = bounds
         let fit = min(bounds.width / remoteSize.width, bounds.height / remoteSize.height)
         canvas.frame = CGRect(origin: .zero, size: CGSize(width: remoteSize.width * fit, height: remoteSize.height * fit))
-        imageView.frame = canvas.bounds
-        videoView.frame = canvas.bounds
+        if videoSurface?.superview === canvas { videoSurface?.frame = canvas.bounds }
         scrollView.contentSize = canvas.bounds.size
         layoutSize = bounds.size
         layoutRemoteSize = remoteSize
@@ -187,11 +170,5 @@ final class DesktopViewportView: UIView, UIScrollViewDelegate, UIGestureRecogniz
     func releasePointer() {
         if let heldPoint { onPointer?(heldPoint, 0); self.heldPoint = nil }
     }
-    func stop() { releasePointer(); track?.remove(videoView); track = nil; onVideoSize = nil }
-    nonisolated func videoView(_ videoView: RTCVideoRenderer, didChangeVideoSize size: CGSize) {
-        Task { @MainActor [weak self] in
-            guard size.width > 0, size.height > 0, self?.track != nil else { return }
-            self?.onVideoSize?(size)
-        }
-    }
+    func stop() { releasePointer() }
 }

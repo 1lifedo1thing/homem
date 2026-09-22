@@ -73,9 +73,14 @@ struct DesktopContent: View {
         }
         .toolbar(embedded ? .automatic : .hidden, for: .tabBar)
         .task { if !isFullscreen { await model.connect() } }
+        .onAppear { model.pictureInPicture.viewerAppeared() }
+        .alert("Picture in Picture".localized, isPresented: Binding(get: { model.pictureInPicture.error != nil }, set: { if !$0 { model.pictureInPicture.error = nil } })) {
+            Button("OK".localized, role: .cancel) { model.pictureInPicture.error = nil }
+        } message: { Text(model.pictureInPicture.error ?? "") }
         .onDisappear {
+            model.pictureInPicture.viewerDisappeared(allowDisconnect: !fullscreen)
             keyboardVisible = false; modifiers.removeAll(); releasePointer()
-            if !isFullscreen, !fullscreen { model.disconnect() }
+            if !isFullscreen, !fullscreen, !model.pictureInPicture.keepsConnectionAlive { model.disconnect() }
         }
         .onChange(of: model.viewOnly) { _, viewOnly in
             if viewOnly { keyboardVisible = false; modifiers.removeAll(); dragging = false }
@@ -86,7 +91,7 @@ struct DesktopContent: View {
         .onChange(of: scenePhase) { _, phase in
             if phase != .active { keyboardVisible = false; modifiers.removeAll(); releasePointer() }
             guard !isFullscreen else { return }
-            if phase == .background { model.disconnect() }
+            if phase == .background, !model.pictureInPicture.keepsConnectionAlive { model.disconnect() }
             if phase == .active { Task { await model.connect() } }
         }
     }
@@ -162,6 +167,18 @@ struct DesktopContent: View {
                 Button("Reconnect desktop".localized) { Task { model.disconnect(); await model.connect() } }
             } label: { Image(systemName: "computermouse").frame(width: 44, height: 44) }
             .accessibilityLabel("Desktop controls".localized)
+            if model.pictureInPicture.isSupported {
+                Button {
+                    keyboardVisible = false; modifiers.removeAll(); releasePointer()
+                    if model.pictureInPicture.keepsConnectionAlive { model.pictureInPicture.stop() }
+                    else { model.pictureInPicture.start() }
+                } label: {
+                    Image(systemName: model.pictureInPicture.keepsConnectionAlive ? "pip.exit" : "pip.enter").frame(width: 44, height: 44)
+                }
+                .accessibilityLabel((model.pictureInPicture.keepsConnectionAlive ? "Close Picture in Picture" : "Picture in Picture").localized)
+                .accessibilityIdentifier("desktopPictureInPicture")
+                .disabled(!model.hasVideo && !model.pictureInPicture.keepsConnectionAlive)
+            }
             if !isFullscreen {
                 Button { keyboardVisible = false; modifiers.removeAll(); releasePointer(); fullscreen = true } label: {
                     Image(systemName: "arrow.up.left.and.arrow.down.right").frame(width: 44, height: 44)
@@ -296,7 +313,8 @@ enum RemoteKeyInput {
     let botID: String
     var status = "Connecting" { didSet { DebugDiagnostics.record("Desktop stage: \(status)") } }
     var error: String?
-    var track: RTCVideoTrack?
+    var track: RTCVideoTrack? { didSet { pictureInPicture.updateTrack(track) } }
+    @ObservationIgnored lazy var pictureInPicture = DesktopPictureInPicture(model: self)
     var runtimeImage: UIImage?
     private(set) var viewOnly = false
     private var pressedPointer = CGPoint.zero
@@ -417,6 +435,7 @@ enum RemoteKeyInput {
     private func receiveFrame(_ image: CGImage, attempt: UUID) {
         guard generation == attempt else { return }
         if !hasVideo { DebugDiagnostics.record("Desktop gateway frame: \(image.width)x\(image.height)") }
+        pictureInPicture.display(image)
         runtimeImage = UIImage(cgImage: image); videoSize = CGSize(width: image.width, height: image.height)
         hasVideo = true; retries = 0; if status != "Connected" { status = "Connected" }; watchdog?.cancel()
     }
