@@ -100,9 +100,10 @@ struct ConversationAgent: Identifiable {
 struct ChatAgentIndicator: View {
     let type: ChatAgentType
     var body: some View {
-        Label { Text(type.title) } icon: {
+        HStack(spacing: 4) {
             Image(type.asset).resizable().scaledToFit().frame(width: 14, height: 14).accessibilityHidden(true)
-        }
+            Text(type.title)
+        }.accessibilityElement(children: .combine)
     }
 }
 

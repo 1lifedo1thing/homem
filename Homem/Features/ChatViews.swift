@@ -45,7 +45,7 @@ struct ConversationsView: View {
                         NavigationLink(value: destination) {
                             HStack(alignment: .top, spacing: 12) {
                                 AgentAvatar(name: store.selectedBot?.title ?? "", avatarURL: store.selectedBot?.value.avatarURL ?? "", size: 30)
-                                VStack(alignment: .leading, spacing: 5) {
+                                VStack(alignment: .leading, spacing: 3) {
                                     HStack(alignment: .top, spacing: 8) {
                                         Text(session.title).font(sizeClass == .regular ? .subheadline.weight(.medium) : .body.weight(.semibold)).lineLimit(2)
                                         if activity.running.contains(session.id) {
