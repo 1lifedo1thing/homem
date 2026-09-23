@@ -55,10 +55,10 @@ struct AgentCard: View {
                 VStack(alignment: .leading, spacing: 0) {
                     HStack(alignment: .top, spacing: 14) {
                         AgentAvatar(name: bot.title, avatarURL: bot.value.avatarURL, size: 52)
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(bot.title).font(.title3.weight(.semibold)).lineLimit(2, reservesSpace: true).fixedSize(horizontal: false, vertical: true)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(bot.title).font(.title3.weight(.semibold)).lineLimit(2).fixedSize(horizontal: false, vertical: true)
                             StatusIndicator(text: bot.value["is_active"].bool ? "Active" : "Paused", color: bot.value["is_active"].bool ? .green : .secondary)
-                        }
+                        }.frame(minHeight: 52, alignment: .leading)
                         Spacer(minLength: 4)
                         AgentResourceSummary(botID: bot.id)
                     }
