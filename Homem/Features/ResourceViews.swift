@@ -76,7 +76,7 @@ struct ResourceListView: View {
                         VStack(alignment: .leading, spacing: 5) {
                             Text(record.title).font(.body.weight(.medium)).lineLimit(4)
                             if !record.subtitle.isEmpty { Text(record.subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(2) }
-                            if !record.value["pattern"].string.isEmpty { Text(record.value["pattern"].string).font(.caption.monospaced()).foregroundStyle(.secondary) }
+                            if !record.value["pattern"].string.isEmpty { Text(ScheduleRepeat(pattern: record.value["pattern"].string).summary).font(.caption).foregroundStyle(.secondary) }
                         }
                         Spacer(minLength: 0)
                         if !record.value["enabled"].isNull { Image(systemName: record.value["enabled"].bool ? "checkmark.circle.fill" : "pause.circle").foregroundStyle(record.value["enabled"].bool ? .green : .secondary) }
@@ -131,7 +131,8 @@ struct ResourceDetailView: View {
             if spec.template == "/providers" {
                 Section { NavigationLink("Models".localized, systemImage: "cpu") { ModelsView(providerID: record.id) } }
             }
-            JSONDetails(value: value.isNull ? record.value : value)
+            if spec.template.hasSuffix("/schedule") { ScheduleDetails(value: value.isNull ? record.value : value) }
+            else { JSONDetails(value: value.isNull ? record.value : value) }
             if spec.template.hasSuffix("/schedule") {
                 Section { NavigationLink("Execution history".localized) { ReadOnlyDocumentView(title: "Execution history", path: spec.path + "/\(record.id.pathComponent)/logs") } }
             }

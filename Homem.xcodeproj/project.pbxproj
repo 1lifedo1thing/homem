@@ -80,7 +80,9 @@
 		C88462814207EE5DDC483E03 /* WebRTC in Frameworks */ = {isa = PBXBuildFile; productRef = 50BD593C60F7E2D0C727C104 /* WebRTC */; };
 		C9B04CE4669D73869CD74BE1 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 3028BE1450525B84DE65C339 /* PrivacyInfo.xcprivacy */; };
 		CC04FBAD27E12AC9FC668A07 /* CodeFormattingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17FC902DC15E9038234833DC /* CodeFormattingTests.swift */; };
+		CE17F2A0A08A39E71CD262FF /* FriendlyFormControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25F0D0EA0C17252C61DBF594 /* FriendlyFormControls.swift */; };
 		CE4768FA889B81B84F207E83 /* VoiceRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CFA5BAAB1EBE3520892B44A /* VoiceRecorder.swift */; };
+		CFFED781A09A0420992927DF /* ScheduleEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 762D9F4D26BECD7FD0D7D3CA /* ScheduleEditor.swift */; };
 		D0BD005070B917AA66C43B8B /* OfficialSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 694EAE315F5E62357B1EC8D8 /* OfficialSession.swift */; };
 		DB008DA9FAB10E27A4C0AFD9 /* TerminalScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 656A5D7AF9D5F2549BB2AEBB /* TerminalScreen.swift */; };
 		DB597EB906F31F3C73639454 /* HomemShare.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 4A807D473143986BBCD7B862 /* HomemShare.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -148,6 +150,7 @@
 		17FC902DC15E9038234833DC /* CodeFormattingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeFormattingTests.swift; sourceTree = "<group>"; };
 		207E03B5932E08062598338C /* MemoryGraphView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemoryGraphView.swift; sourceTree = "<group>"; };
 		20D4E505D6E2AE02A980EABB /* AuthorizationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthorizationView.swift; sourceTree = "<group>"; };
+		25F0D0EA0C17252C61DBF594 /* FriendlyFormControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FriendlyFormControls.swift; sourceTree = "<group>"; };
 		28E6A68B0E9C9B53B7FE4137 /* HomemShare.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = HomemShare.entitlements; sourceTree = "<group>"; };
 		291B489866E3307D03F63279 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		3028BE1450525B84DE65C339 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
@@ -181,6 +184,7 @@
 		6BB2DA5026AF1C34286EBFB3 /* CodeBlockView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeBlockView.swift; sourceTree = "<group>"; };
 		6C4A17048FA3998EA4C7A2FE /* OfficialLoginTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfficialLoginTests.swift; sourceTree = "<group>"; };
 		760B838F03A02A7D4B9E97FA /* THIRD_PARTY_NOTICES.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = THIRD_PARTY_NOTICES.txt; sourceTree = "<group>"; };
+		762D9F4D26BECD7FD0D7D3CA /* ScheduleEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScheduleEditor.swift; sourceTree = "<group>"; };
 		7692BAD5ED20408C3ABF6B39 /* RFBClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RFBClientTests.swift; sourceTree = "<group>"; };
 		7715B54E7C67866D62D2C8D5 /* SchemaEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SchemaEditor.swift; sourceTree = "<group>"; };
 		77AD54B58693DBDD6B393E01 /* SettingsViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsViews.swift; sourceTree = "<group>"; };
@@ -324,12 +328,14 @@
 				56FE608C033FCC97D400902B /* DesktopPictureInPicture.swift */,
 				3A11C53FEC3D427669CBD1C6 /* DesktopScreen.swift */,
 				D78ABB01D81D27F938583B5F /* DesktopViewport.swift */,
+				25F0D0EA0C17252C61DBF594 /* FriendlyFormControls.swift */,
 				001EC9B1D40E0CE5901CE41D /* ManagementViews.swift */,
 				207E03B5932E08062598338C /* MemoryGraphView.swift */,
 				5C7D5C230806B61B7D7E5228 /* ModelsView.swift */,
 				5B723DB07120BB218AEA9300 /* NewConversationView.swift */,
 				86AD19C58E8328C35AD42D54 /* ResourceFormField.swift */,
 				35B74DD4C0B4B7C4F3884D38 /* ResourceViews.swift */,
+				762D9F4D26BECD7FD0D7D3CA /* ScheduleEditor.swift */,
 				7715B54E7C67866D62D2C8D5 /* SchemaEditor.swift */,
 				77AD54B58693DBDD6B393E01 /* SettingsViews.swift */,
 				656A5D7AF9D5F2549BB2AEBB /* TerminalScreen.swift */,
@@ -620,6 +626,7 @@
 				ED7EFEA3B0330BDD09B12067 /* DesktopReadiness.swift in Sources */,
 				87E527B0FAF57A4570B3103F /* DesktopScreen.swift in Sources */,
 				F13F0A58C4AD5C3BD6214F89 /* DesktopViewport.swift in Sources */,
+				CE17F2A0A08A39E71CD262FF /* FriendlyFormControls.swift in Sources */,
 				4FE5DA7E971115502A5DFAC4 /* HomeShell.swift in Sources */,
 				F209A47CEA848CC0EE547F2E /* HomemApp.swift in Sources */,
 				AD7343B478C7A14DA5B74B61 /* JSONValue.swift in Sources */,
@@ -635,6 +642,7 @@
 				C1ECECF823784E4B494754EF /* RFBClient.swift in Sources */,
 				EFD9076E8BF3188CCBDBCCA9 /* ResourceFormField.swift in Sources */,
 				1867D7F93C26ED97CC6ABD56 /* ResourceViews.swift in Sources */,
+				CFFED781A09A0420992927DF /* ScheduleEditor.swift in Sources */,
 				1855B92EA42B9F28B27DEC62 /* SchemaCatalog.swift in Sources */,
 				6CD20C578587EF7082CD5FAB /* SchemaEditor.swift in Sources */,
 				9374492078430E501DEC029B /* SettingsViews.swift in Sources */,

@@ -26,7 +26,7 @@ enum ResourceFormReferences {
         }
     }
     static func label(_ name: String) -> String {
-        let names = ["user_id": "Person", "owner_user_id": "Owner", "channel_identity_id": "Channel account", "provider_id": "Provider", "model_id": "Model", "bot_id": "Agent", "bot_agent_id": "Agent runtime", "session_id": "Conversation", "runtime_id": "Computer", "workdir_id": "Working directory", "target_id": "Run on", "snapshot_name": "Name"]
+        let names = ["user_id": "Person", "owner_user_id": "Owner", "channel_identity_id": "Channel account", "provider_id": "Provider", "model_id": "Model", "bot_id": "Agent", "bot_agent_id": "Agent runtime", "session_id": "Conversation", "runtime_id": "Computer", "workdir_id": "Working directory", "target_id": "Run on", "snapshot_name": "Name", "display_name": "Display name", "is_active": "Active", "avatar_url": "Avatar URL", "timezone": "Time zone", "acl_preset": "Access", "wait_for_ready": "Wait until ready"]
         return names[name] ?? AgentSettingsFields.label(name)
     }
 }
@@ -74,33 +74,100 @@ struct ResourceReferencePicker: View {
     let source: String
     let required: Bool
     @Binding var value: JSONValue
+    var sessionModes: Set<String>? = nil
+    var chatModelsOnly = false
+    var defaultTitle = "Default"
+    var onSelection: ((Record?) -> Void)? = nil
     @State private var choices: [Record] = []
     @State private var error: String?
     @State private var loading = true
-    private var selection: Binding<String> { Binding(get: { value.string }, set: { value = $0.isEmpty ? .null : .string($0) }) }
+    @State private var cursor = ""
+    private var selection: Binding<String> { Binding(get: { value.string }, set: { id in
+        value = id.isEmpty ? .null : .string(id)
+        onSelection?(choices.first { $0.id == id })
+    }) }
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Picker(title.localized, selection: selection) {
-                Text((required ? "Choose" : "Default").localized).tag("")
-                if !value.string.isEmpty && !choices.contains(where: { $0.id == value.string }) { Text("Current selection".localized).tag(value.string) }
-                ForEach(choices) { row in Text(row.title).tag(row.id) }
-            }.disabled(loading)
+            if choices.count > 10 || source.hasSuffix("/sessions") {
+                NavigationLink {
+                    ResourceReferenceChoices(title: title, choices: choices, selection: selection, required: required, defaultTitle: defaultTitle, loading: loading, error: error, hasMore: !cursor.isEmpty, loadMore: { Task { await load(more: true) } }, retry: { Task { await load() } })
+                } label: {
+                    LabeledContent(title.localized, value: selection.wrappedValue.isEmpty ? (required ? "Choose" : defaultTitle).localized : choices.first { $0.id == value.string }?.title ?? "Current selection".localized)
+                }
+            } else {
+                Picker(title.localized, selection: selection) {
+                    Text((required ? "Choose" : defaultTitle).localized).tag("")
+                    if !value.string.isEmpty && !choices.contains(where: { $0.id == value.string }) { Text("Current selection".localized).tag(value.string) }
+                    ForEach(choices) { row in Text(row.title).tag(row.id) }
+                }.disabled(loading)
+            }
             if let error { ErrorBanner(message: error) { Task { await load() } } }
         }.task(id: source) { await load() }
     }
-    private func load() async {
+    private func load(more: Bool = false) async {
         loading = true; defer { loading = false }
         do {
-            let response = try await store.api?.call(source) ?? .null
+            var query: [String: String] = [:]
+            if source.hasSuffix("/sessions") {
+                query["limit"] = "50"
+                if let sessionModes { query["types"] = sessionModes.union(sessionModes.contains("chat") ? ["acp_agent"] : []).sorted().joined(separator: ",") }
+                if more { query["cursor"] = cursor }
+            }
+            let response = try await store.api?.call(source, query: query) ?? .null
+            cursor = response["next_cursor"].string
             let rows = response.items.isEmpty ? (response["targets"].array.isEmpty ? response["candidates"].array : response["targets"].array) : response.items
-            choices = rows.map { value in
+            let loaded = rows.filter { row in
+                if let sessionModes {
+                    let mode = row.text("session_mode", "type").nonEmpty ?? "chat"
+                    return sessionModes.contains(mode == "acp_agent" ? "chat" : mode)
+                }
+                if source.hasSuffix("/agents") { return row["enabled"] != false || row["id"] == value }
+                if chatModelsOnly { return row["id"] == value || ((row["type"].string.isEmpty || row["type"] == "chat") && row["enable"] != false) }
+                return true
+            }.map { value in
                 var row = value
                 if row["id"].string.isEmpty { row["id"] = .string(row.text("user_id", "channel_identity_id", "runtime_id", "target_id")) }
                 if row.displayTitle == row["id"].string { row["display_name"] = .string(row.text("display_name", "username", "name", "title", "platform").nonEmpty ?? "Untitled".localized) }
                 return Record(value: row)
             }.filter { !$0.value["id"].string.isEmpty }
+            choices = more ? choices + loaded.filter { row in !choices.contains { $0.id == row.id } } : loaded
+            if source.hasSuffix("/sessions"), !value.string.isEmpty, !choices.contains(where: { $0.id == value.string }),
+               let selected = try? await store.api?.call(source + "/" + value.string.pathComponent), !selected["id"].string.isEmpty {
+                choices.insert(Record(value: selected), at: 0)
+            }
+            if let current = choices.first(where: { $0.id == value.string }) { onSelection?(current) }
             error = nil
         } catch { self.error = error.localizedDescription }
+    }
+}
+
+private struct ResourceReferenceChoices: View {
+    @Environment(\.dismiss) private var dismiss
+    let title: String
+    let choices: [Record]
+    @Binding var selection: String
+    let required: Bool
+    let defaultTitle: String
+    let loading: Bool
+    let error: String?
+    let hasMore: Bool
+    let loadMore: () -> Void
+    let retry: () -> Void
+    @State private var search = ""
+    var body: some View {
+        List {
+            if !required { row("", title: defaultTitle.localized) }
+            if !selection.isEmpty && !choices.contains(where: { $0.id == selection }) { row(selection, title: "Current selection".localized) }
+            ForEach(choices.filter { search.isEmpty || $0.title.localizedCaseInsensitiveContains(search) }) { item in row(item.id, title: item.title) }
+            if let error { ErrorBanner(message: error, retry: retry) }
+            if loading { ProgressView() }
+            else if hasMore { Button("Load more conversations".localized, action: loadMore) }
+        }.navigationTitle(title.localized).searchable(text: $search)
+    }
+    private func row(_ id: String, title: String) -> some View {
+        Button { selection = id; dismiss() } label: {
+            HStack { Text(title).foregroundStyle(.primary); Spacer(); if selection == id { Image(systemName: "checkmark") } }
+        }
     }
 }
 

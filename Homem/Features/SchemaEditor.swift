@@ -15,12 +15,31 @@ struct SchemaEditor: View {
     @State private var error: String?
     @State private var advanced = false
     @State private var progress = ""
+    @State private var initialized = false
     private var schema: JSONValue { SchemaCatalog.shared.resolve(operation.bodySchema) }
     private var fields: [String] { SchemaCatalog.shared.fields(schema) }
+    private var isSchedule: Bool { operation.path == "/bots/{bot_id}/schedule" || operation.path == "/bots/{bot_id}/schedule/{id}" }
+    private var isAgentProfile: Bool { operation.path == "/bots" || operation.path == "/bots/{id}" }
     var body: some View {
+        if isSchedule {
+            ScheduleEditor(path: path, operation: operation, initial: initial, onSaved: onSaved)
+        } else { editor }
+    }
+    private var editor: some View {
         NavigationStack {
             Form {
-                if fields.isEmpty && !operation.bodySchema.isNull {
+                if isAgentProfile {
+                    Section("Profile".localized) {
+                        ForEach(["display_name", "name", "avatar_url"].filter { fields.contains($0) }, id: \.self) { field($0) }
+                    }
+                    Section("Behavior".localized) {
+                        ForEach(["is_active", "timezone"].filter { fields.contains($0) }, id: \.self) { field($0) }
+                    }
+                    let extra = fields.filter { !["display_name", "name", "avatar_url", "is_active", "timezone"].contains($0) }
+                    if !extra.isEmpty {
+                        Section { DisclosureGroup("Advanced options".localized) { ForEach(extra, id: \.self) { field($0) } } }
+                    }
+                } else if fields.isEmpty && !operation.bodySchema.isNull {
                     Section("Configuration".localized) { ResourceFormField(name: "Configuration", schema: schema, required: true, value: $draft, path: path) }
                 } else {
                     Section {
@@ -39,6 +58,7 @@ struct SchemaEditor: View {
                     ToolbarItem(placement: .confirmationAction) { Button { Task { await save() } } label: { if busy { ProgressView() } else { Text(operation.method == "DELETE" ? "Delete".localized : submitTitle.localized).fontWeight(.semibold) } }.disabled(busy) }
                 }
                 .onAppear {
+                    guard !initialized else { return }; initialized = true
                     let allowed = Set(fields)
                     draft = .object(initial.object.filter { allowed.contains($0.key) })
                     if fields.isEmpty { draft = initial }
@@ -93,10 +113,7 @@ struct SchemaField: View {
             } else if schema["type"].string == "boolean" {
                 Toggle(label, isOn: Binding(get: { value.bool }, set: { value = .bool($0) }))
             } else if ["integer", "number"].contains(schema["type"].string) {
-                LabeledContent(label) {
-                    TextField("Default".localized, text: Binding(get: { value.isNull ? "" : value.scalar }, set: { value = $0.isEmpty ? .null : Double($0).map(JSONValue.number) ?? .string($0) }))
-                        .keyboardType(.numbersAndPunctuation).multilineTextAlignment(.trailing)
-                }
+                FriendlyNumberField(title: label, name: name, schema: schema, required: required, value: $value)
             } else if !schema["properties"].object.isEmpty {
                 DisclosureGroup(label) {
                     ForEach(SchemaCatalog.shared.fields(schema), id: \.self) { key in
@@ -105,8 +122,19 @@ struct SchemaField: View {
                 }
             } else if ["object", "array"].contains(schema["type"].string) || !schema["properties"].object.isEmpty || schema.object.isEmpty {
                 DisclosureGroup(label) { JSONInput(value: $value) }
+            } else if name == "timezone" {
+                TimeZoneFormField(title: label, value: $value)
+            } else if ["description", "instructions", "prompt", "system_prompt", "command", "message", "content", "text"].contains(name) {
+                Text(label).font(.subheadline).foregroundStyle(.secondary)
+                TextField("", text: stringBinding, axis: .vertical).lineLimit(3...10)
+                    .textInputAutocapitalization(.sentences)
             } else if name.contains("key") && !name.hasSuffix("_id") || name.contains("password") || name.contains("secret") || name == "token" {
                 SecureField(label, text: stringBinding).textInputAutocapitalization(.never).autocorrectionDisabled()
+            } else if name.contains("url") {
+                LabeledContent(label) {
+                    TextField("https://", text: stringBinding).keyboardType(.URL).textContentType(.URL)
+                        .textInputAutocapitalization(.never).autocorrectionDisabled().multilineTextAlignment(.trailing)
+                }
             } else if displayName != nil {
                 LabeledContent(label) {
                     TextField("Default".localized, text: stringBinding, axis: .vertical)

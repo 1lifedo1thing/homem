@@ -2,6 +2,52 @@ import XCTest
 @testable import Homem
 
 final class CoreTests: XCTestCase {
+    func testScheduleRepeatPreservesComplexPatternsAndSupportsVisualPresets() {
+        for pattern in ["*/15 * * * *", "12 * * * *", "30 9 * * *", "30 9 * * 1,3,5", "15 8 31 * *"] {
+            let rule = ScheduleRepeat(pattern: pattern)
+            XCTAssertNotEqual(rule.frequency, .custom)
+            XCTAssertEqual(rule.pattern, pattern)
+        }
+        for pattern in ["0 0 9 * * MON-FRI", "CRON_TZ=UTC 0 9 * * *", "@every 2h", "0 9 * * 1-5", "5,10 * * * *", "0 9 * * 7"] {
+            let rule = ScheduleRepeat(pattern: pattern)
+            XCTAssertEqual(rule.frequency, .custom)
+            XCTAssertEqual(rule.pattern, pattern)
+        }
+        var weekly = ScheduleRepeat(pattern: "0 9 * * 1")
+        weekly.weekdays = []
+        var draft = ScheduleDraft(["name": "Test", "command": "Check updates"])
+        draft.repeatRule = weekly
+        XCTAssertFalse(draft.canSave)
+    }
+    func testScheduleUpdatePreservesExecutionAndExplicitlyClearsLimit() {
+        var draft = ScheduleDraft(["name": "Morning", "command": "Check updates", "pattern": "0 9 * * *", "max_calls": 5,
+                                   "run_target": "new_session", "bot_agent_id": "coding", "runtime_type": "codex", "acp_model_id": "custom-model"])
+        draft.name = "Evening"
+        XCTAssertTrue(draft.body(editing: true)["execution"].isNull)
+        XCTAssertNil(draft.body(editing: true).object["max_calls"])
+        draft.limited = false
+        XCTAssertEqual(draft.body(editing: true).object["max_calls"], .null)
+        draft.changeTarget("existing_session")
+        XCTAssertFalse(draft.canSave)
+        draft.selectSession("chat-1")
+        draft.execution["model_id"] = "previous-model"
+        draft.selectSession("chat-2")
+        XCTAssertTrue(draft.execution["model_id"].isNull)
+        draft.selectSession("chat-1")
+        XCTAssertTrue(draft.canSave)
+        XCTAssertEqual(draft.body(editing: true)["execution"], ["run_target": "existing_session", "target_session_id": "chat-1"])
+        XCTAssertTrue(draft.body(editing: true)["run_target"].isNull)
+        let create = draft.body(editing: false)
+        XCTAssertEqual(create["target_session_id"], "chat-1")
+        XCTAssertTrue(create["execution"].isNull)
+        draft.changeTarget("new_session")
+        draft.execution["model_id"] = "native"
+        draft.execution["reasoning_effort"] = "high"
+        draft.selectAgent("external")
+        XCTAssertEqual(draft.body(editing: false)["bot_agent_id"], "external")
+        XCTAssertTrue(draft.body(editing: false)["model_id"].isNull)
+        XCTAssertTrue(draft.body(editing: false)["reasoning_effort"].isNull)
+    }
     func testConversationAgentIdentitySupportsCurrentAndLegacySessions() {
         XCTAssertEqual(ChatAgentType.session(["type": "chat"]), .memoh)
         XCTAssertEqual(ChatAgentType.session(["runtime_type": "codex"]), .codex)
