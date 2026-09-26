@@ -1,6 +1,8 @@
 # App Store preparation
 
-Updated 2026-09-18. **Do not submit for review until the review server is ready.**
+Current review corrections and resubmission status: [September 26, 2026](REVIEW-2026-09-26.md).
+
+The preparation notes below describe earlier work from September 18, 2026 and are retained as history.
 
 App: Homem · `ad.neko.homem` · Apple ID `6812852139` · Kitta Ltd
 

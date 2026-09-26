@@ -1,6 +1,47 @@
 import XCTest
 
 final class HomemUITests: XCTestCase {
+    @MainActor func testAISharingConsentDeclineAcceptAndWithdraw() throws {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-onboarding"]; app.launch()
+        func connectFixture() {
+            let custom = app.buttons["Use another server"]
+            if !custom.isHittable { app.swipeUp() }
+            custom.tap()
+            let address = app.textFields["serverAddress"]
+            XCTAssertTrue(address.waitForExistence(timeout: 5))
+            address.tap()
+            if let current = address.value as? String, current.hasPrefix("http") { address.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count)) }
+            address.typeText("http://127.0.0.1:18765/api")
+            let username = app.textFields["Username"]
+            username.tap(); username.typeText("fixture")
+            let password = app.secureTextFields["Password"]
+            password.tap(); password.typeText("fixture-password")
+            app.swipeUp()
+            app.buttons["connectServer"].tap()
+        }
+        func reveal(_ element: XCUIElement) {
+            for _ in 0..<8 { if element.isHittable { break }; app.swipeUp() }
+        }
+        connectFixture()
+        XCTAssertTrue(app.staticTexts["Allow AI data sharing?"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["workspacePicker"].exists)
+        let decline = app.buttons["declineDataSharing"]
+        reveal(decline); capture(app, "AI sharing consent and recipients")
+        decline.tap()
+        XCTAssertTrue(app.buttons["officialSignIn"].waitForExistence(timeout: 5))
+        connectFixture()
+        let allow = app.buttons["allowDataSharing"]
+        XCTAssertTrue(app.staticTexts["Allow AI data sharing?"].waitForExistence(timeout: 10)); reveal(allow)
+        XCTAssertTrue(allow.exists)
+        XCTAssertTrue(allow.isEnabled); allow.tap()
+        XCTAssertTrue(app.buttons["workspacePicker"].waitForExistence(timeout: 10))
+        selectTab("Settings", in: app)
+        let settings = app.buttons["AI data sharing"]
+        reveal(settings); settings.tap()
+        let withdraw = app.buttons["withdrawDataSharing"]
+        reveal(withdraw); XCTAssertTrue(withdraw.exists); withdraw.tap()
+        XCTAssertTrue(app.buttons["officialSignIn"].waitForExistence(timeout: 5))
+    }
     @MainActor func testWorkspaceToolbarAndAddAccountCanBeCancelled() throws {
         let app = XCUIApplication(); app.launchArguments = ["--demo"]; app.launch()
         let workspace = app.buttons["workspacePicker"]
