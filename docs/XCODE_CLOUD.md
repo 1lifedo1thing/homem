@@ -29,6 +29,22 @@ Apple references: [workflow reference](https://developer.apple.com/documentation
 
 All three workflow configurations were read back from Apple's API with required `TEST` and `ARCHIVE` actions and the correct shared schemes. Local icon, privacy-string, and localization preflights passed (741 localized strings), as did the fixture startup, UI endpoint, and shutdown hooks. New Cloud build results are recorded separately after execution.
 
+## Initial three-platform runs — 3 October 2026
+
+The first runs from `9f073cc` completed with failures. Required tests remained enabled, and TestFlight post-actions were skipped after their failures.
+
+| Platform | Run | Archive | Test |
+| --- | --- | --- | --- |
+| iOS | [70](https://appstoreconnect.apple.com/teams/cbaca10a-f696-4d2b-959e-0d3fa1b23452/xcode-cloud/products/13960BE0-6304-4C11-A080-C67D06BE2E79/builds/cbbaa597-0ec9-4d05-a021-1c4e86955026/summary) | Succeeded | 136 passed, 6 failed |
+| macOS | [69](https://appstoreconnect.apple.com/teams/cbaca10a-f696-4d2b-959e-0d3fa1b23452/xcode-cloud/products/13960BE0-6304-4C11-A080-C67D06BE2E79/builds/662a9015-f044-4b9f-93e3-3f13e3aa64da/summary) | Succeeded | App launch failed |
+| visionOS | [68](https://appstoreconnect.apple.com/teams/cbaca10a-f696-4d2b-959e-0d3fa1b23452/xcode-cloud/products/13960BE0-6304-4C11-A080-C67D06BE2E79/builds/ce9c0437-61d4-41f0-a0b2-dd2b2b96df37/summary) | Failed during App Store Connect preparation | 132 passed, 3 failed |
+
+- iOS failures were the three localization flows, theme persistence after relaunch, creating a memory, and expanding tool activity. The localization helper searched for an English sign-in label; the relaunch kept the onboarding reset flag; the memory test queried an unlabeled multiline field; the activity test expected a heading absent from the expanded view. The UI branch repairs those selectors, gives multiline schema fields accessible labels, removes the reset flag after fixture sign-in, and checks the expanded fixture output.
+- Mac test logs show ad hoc “Sign to Run Locally” signing and launch failures (`RBSRequestErrorDomain` 5 / `NSPOSIXErrorDomain` 163). This app's restricted Keychain access groups need a development signing identity/profile for test execution. Local development-signed Mac builds launch successfully. A successful Cloud distribution archive does not certify Cloud's test app signing. No Keychain entitlements or required tests were removed to hide this failure.
+- visionOS test failures were account switching, independent chat selections, and opening Desktop after Terminal. The local UI review reproduced the last failure as overlapping windows; the new placement passed that test locally. The archive compiled and exported, then failed during App Store Connect preparation. Its delivery log also contains an App Store Connect authentication error, but it does not establish a specific server rejection. Account-switch and independent-selection failures still require a passing rerun.
+
+These results do not yet certify the workflows for unattended TestFlight delivery. Private signing keys and delivery logs are not committed to the repository.
+
 ## Historical iOS validation
 
 The first workflow was created on 17 September 2026. Build 1 from `7273dd7` passed simulator tests and the iOS archive. Build 58 from `b77dc85` later completed archive and TestFlight distribution. These historical results do not certify the new three-platform configuration.

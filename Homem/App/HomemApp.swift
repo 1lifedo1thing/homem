@@ -18,6 +18,12 @@ import SwiftUI
                 .modifier(AppPresentation(store: store))
         }
         .defaultSize(width: 960, height: 720)
+        .defaultWindowPlacement { _, context in
+            let neighbor = context.windows.last { $0.id == "workspace-tool" && $0.phase != .background }
+                ?? context.windows.first { $0.id == "workspace" && $0.phase != .background }
+            if let neighbor { return WindowPlacement(.trailing(neighbor)) }
+            return WindowPlacement()
+        }
         .windowResizability(.contentMinSize)
         #elseif targetEnvironment(macCatalyst)
         WindowGroup(id: "workspace") {
@@ -25,6 +31,7 @@ import SwiftUI
                 .modifier(AppPresentation(store: store))
         }
         .defaultSize(width: 1120, height: 800)
+        .commands { WorkspaceWindowCommands() }
 
         WindowGroup("Workspace".localized, id: "workspace-tool", for: WorkspaceWindowRoute.self) { $route in
             SpatialWorkspaceWindow(route: route)

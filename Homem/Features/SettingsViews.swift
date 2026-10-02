@@ -49,7 +49,9 @@ struct SettingsView: View {
                 Button("Sign out".localized, role: .destructive) { signOut = true }
             } footer: { Text("Homem 1.0 · Native Swift client for Memoh".localized) }
         }.navigationTitle("Settings".localized)
+            #if !targetEnvironment(macCatalyst)
             .toolbar { ToolbarItem(placement: .topBarLeading) { WorkspacePickerMenu() }.adaptiveAvatarPlacement() }
+            #endif
             .sheet(isPresented: $accounts) { AccountsView() }
             .alert("Sign out of Memoh?".localized, isPresented: $signOut) { Button("Sign out".localized, role: .destructive) { store.signOut() } }
     }

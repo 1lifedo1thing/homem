@@ -127,6 +127,7 @@ struct SchemaField: View {
                 Text(label).font(.subheadline).foregroundStyle(.secondary)
                 TextField("", text: stringBinding, axis: .vertical).lineLimit(3...10)
                     .textInputAutocapitalization(.sentences)
+                    .accessibilityLabel(label).accessibilityIdentifier("schemaField_" + name)
             } else if name.contains("key") && !name.hasSuffix("_id") || name.contains("password") || name.contains("secret") || name == "token" {
                 SecureField(label, text: stringBinding).textInputAutocapitalization(.never).autocorrectionDisabled()
             } else if name.contains("url") {

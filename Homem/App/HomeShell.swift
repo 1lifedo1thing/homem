@@ -1,10 +1,71 @@
 import SwiftUI
 
+private struct HomeChatVisibleKey: EnvironmentKey {
+    static let defaultValue = true
+}
+private struct HomeSectionTitleKey: EnvironmentKey {
+    static let defaultValue = ""
+}
+extension EnvironmentValues {
+    var homeChatVisible: Bool {
+        get { self[HomeChatVisibleKey.self] }
+        set { self[HomeChatVisibleKey.self] = newValue }
+    }
+    var homeSectionTitle: String {
+        get { self[HomeSectionTitleKey.self] }
+        set { self[HomeSectionTitleKey.self] = newValue }
+    }
+}
+
+enum HomeSection: String, CaseIterable, Identifiable {
+    case chats, agents, library, settings
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .chats: "Chats"
+        case .agents: "Agents"
+        case .library: "Library"
+        case .settings: "Settings"
+        }
+    }
+    var symbol: String {
+        switch self {
+        case .chats: "bubble.left.and.bubble.right"
+        case .agents: "square.grid.2x2"
+        case .library: "books.vertical"
+        case .settings: "slider.horizontal.3"
+        }
+    }
+    var shortcut: KeyEquivalent {
+        switch self {
+        case .chats: "1"
+        case .agents: "2"
+        case .library: "3"
+        case .settings: "4"
+        }
+    }
+}
+
 struct HomeShell: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(AppStore.self) private var store
     @Environment(\.scenePhase) private var scenePhase
+    @State private var section = HomeSection.chats
     var body: some View {
+        navigation
+        .modifier(AdaptiveTabLayout())
+        .task { await store.reload() }
+        .onChange(of: scenePhase) { _, value in if value == .active { Task { await store.reload() } } }
+        .alert("Sign in again".localized, isPresented: Binding(get: { store.api?.unauthorized == true }, set: { _ in })) {
+            Button("Sign in".localized) { store.signOut() }
+        } message: { Text("Your Memoh session has expired. Sign in to reconnect to your server.".localized) }
+    }
+    @ViewBuilder private var navigation: some View {
+        #if targetEnvironment(macCatalyst)
+        // One sidebar owns both app navigation and recent conversations. A second
+        // global sidebar would leave too little room for chat in smaller windows.
+        ConversationsView(macSection: $section)
+        #else
         TabView {
             ConversationsView().environment(\.horizontalSizeClass, sizeClass).tabItem { Label("Chats".localized, systemImage: "bubble.left.and.bubble.right") }
             NavigationStack { AgentsView() }.environment(\.horizontalSizeClass, sizeClass).tabItem { Label("Agents".localized, systemImage: "square.grid.2x2") }
@@ -13,12 +74,7 @@ struct HomeShell: View {
         }
         // iOS 27.1 arranges the system bars for each Duo display and pose.
         // Preserve the established bottom-tab presentation on older systems.
-        .modifier(AdaptiveTabLayout())
-        .task { await store.reload() }
-        .onChange(of: scenePhase) { _, value in if value == .active { Task { await store.reload() } } }
-        .alert("Sign in again".localized, isPresented: Binding(get: { store.api?.unauthorized == true }, set: { _ in })) {
-            Button("Sign in".localized) { store.signOut() }
-        } message: { Text("Your Memoh session has expired. Sign in to reconnect to your server.".localized) }
+        #endif
     }
 }
 
@@ -64,9 +120,9 @@ private struct AvatarToolbarLabel<Avatar: View>: View {
 
     private var horizontal: some View {
         HStack(spacing: 5) {
-            avatar(28)
+            avatar(Theme.toolbarAvatarSize)
             Image(systemName: "chevron.down").font(.system(size: 9, weight: .bold)).foregroundStyle(.secondary)
-        }.frame(minWidth: 44, minHeight: 44)
+        }.frame(minWidth: Theme.controlSize, minHeight: Theme.controlSize)
     }
 }
 
@@ -126,7 +182,9 @@ struct LibraryView: View {
                 .frame(maxWidth: 760).frame(maxWidth: .infinity)
         }.background(Theme.canvas).navigationTitle("Library".localized)
             .toolbar {
+                #if !targetEnvironment(macCatalyst)
                 ToolbarItem(placement: .topBarLeading) { WorkspacePickerMenu() }.adaptiveAvatarPlacement()
+                #endif
                 ToolbarItem(placement: .topBarTrailing) {
                     AgentPickerMenu(selection: Binding(get: { store.selectedBot?.id ?? "" }, set: { store.selectedBotID = $0 }))
                 }.adaptiveAvatarPlacement()
@@ -194,7 +252,15 @@ struct AgentPickerMenu: View {
                     }.tag(bot.id)
                 }
             }.pickerStyle(.inline)
-        } label: { pickerLabel }
+        } label: {
+            Label {
+                Text(selected?.title ?? "Agent".localized)
+            } icon: {
+                if let image = menuImages[selected?.id ?? ""] { Image(uiImage: image).renderingMode(.original) }
+                else { Image(systemName: "person.crop.square") }
+            }.labelStyle(.iconOnly)
+        }
+        .buttonStyle(.plain).spatialHoverEffect()
         .disabled(store.bots.isEmpty)
         .accessibilityLabel("Choose agent".localized)
         .accessibilityValue(selected?.title ?? "No agent selected")
@@ -219,6 +285,7 @@ struct AgentPickerMenu: View {
         }
         #else
         Button { presented.toggle() } label: { pickerLabel }
+        .buttonStyle(.plain).spatialHoverEffect()
         .disabled(store.bots.isEmpty)
         .accessibilityLabel("Choose agent".localized)
         .accessibilityValue(selected?.title ?? "No agent selected")
@@ -275,6 +342,9 @@ struct WorkspacePickerMenu: View {
 
     var body: some View {
         Button { presented.toggle() } label: {
+            #if targetEnvironment(macCatalyst)
+            Label("Workspace".localized, systemImage: "person.crop.circle").labelStyle(.iconOnly)
+            #else
             AvatarToolbarLabel { size in
                 if busy { ProgressView().frame(width: size, height: size) }
                 else if store.workspace != .null {
@@ -283,7 +353,9 @@ struct WorkspacePickerMenu: View {
                     AgentAvatar(name: store.accountName, avatarURL: store.accountAvatarURL, size: size)
                 }
             }
+            #endif
         }
+        .buttonStyle(.plain).spatialHoverEffect()
         .accessibilityLabel("Workspace".localized).accessibilityValue(store.workspaceName)
         .accessibilityIdentifier("workspacePicker")
         .disabled(busy)

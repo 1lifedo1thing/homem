@@ -67,7 +67,7 @@ struct ConnectionView: View {
                     #else
                     DisclosureGroup("Use another server".localized, isExpanded: $showCustomServer) {
                         customServerForm.padding(.top, 16)
-                    }
+                    }.accessibilityIdentifier("customServerSignIn")
                     #endif
                 }.padding(32).padding(.bottom, 24).frame(maxWidth: 520)
                     .frame(maxWidth: .infinity)

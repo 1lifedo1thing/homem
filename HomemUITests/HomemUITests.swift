@@ -194,7 +194,8 @@ final class HomemUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["update_schedule"].exists)
         capture(app, "Compact activity summary")
         activity.tap()
-        XCTAssertTrue(app.staticTexts["Schedule"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Schedule updated."].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["update_schedule"].exists)
         capture(app, "Expanded activity")
     }
     @MainActor private func selectTab(_ name: String, in app: XCUIApplication) {
@@ -232,7 +233,7 @@ final class HomemUITests: XCTestCase {
         app.buttons["Memories"].tap()
         XCTAssertTrue(app.staticTexts["Prefers thoughtful answers with concrete examples."].waitForExistence(timeout: 5))
         app.buttons["Add Memories"].tap()
-        let message = app.textFields["Message"]
+        let message = app.descendants(matching: .any).matching(identifier: "schemaField_message").firstMatch
         XCTAssertTrue(message.waitForExistence(timeout: 5)); message.tap(); message.typeText("Remember this native app test")
         app.buttons["Save"].tap()
         XCTAssertTrue(app.staticTexts["Remember this native app test"].waitForExistence(timeout: 5))

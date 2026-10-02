@@ -10,16 +10,21 @@ enum Theme {
     static let groupedCanvas = Color.clear
     static let groupedSurface = surface
     static let controlSize: CGFloat = 60
+    static let toolbarAvatarSize: CGFloat = 36
+    static let agentCardMinimumHeight: CGFloat = 180
     static let paneGap: CGFloat = 44
     static let minimumPaneWidth: CGFloat = 380
     static let onboardingTitle = "Memoh, in your space."
     #else
     static let controlSize: CGFloat = 44
+    static let toolbarAvatarSize: CGFloat = 28
     static let paneGap: CGFloat = 24
     static let minimumPaneWidth: CGFloat = 300
     #if targetEnvironment(macCatalyst)
+    static let agentCardMinimumHeight: CGFloat = 156
     static let onboardingTitle = "Memoh, on your Mac."
     #else
+    static let agentCardMinimumHeight: CGFloat = 210
     static let onboardingTitle = "Memoh, on your iPhone."
     #endif
     static let canvas = Color(uiColor: .systemBackground)

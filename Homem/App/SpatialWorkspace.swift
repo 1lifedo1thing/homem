@@ -64,15 +64,24 @@ struct SpatialWorkspaceWindow: View {
             if let route, let windowStore, route.belongs(to: windowStore.api) {
                 NavigationStack {
                     SpatialWindowContent(route: route)
+                        #if os(visionOS)
                         .toolbar {
                             ToolbarItem(placement: .topBarLeading) {
-                                Label(windowStore.accountName, systemImage: "person.crop.circle")
-                                    .labelStyle(.titleAndIcon).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                                    .help(windowStore.workspaceName)
-                                    .accessibilityIdentifier("windowAccount")
+                                accountLabel(windowStore)
                             }
                         }
+                        #endif
                 }.environment(windowStore).id(windowStore.connectionID)
+                    #if targetEnvironment(macCatalyst)
+                    .safeAreaInset(edge: .bottom, spacing: 0) {
+                        VStack(spacing: 0) {
+                            Divider()
+                            accountLabel(windowStore)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 16).padding(.vertical, 8)
+                        }.background(Theme.canvas)
+                    }
+                    #endif
             } else {
                 VStack(spacing: 24) {
                     ContentUnavailableView("Workspace unavailable".localized, systemImage: "rectangle.on.rectangle.slash",
@@ -89,6 +98,12 @@ struct SpatialWorkspaceWindow: View {
                 windowStore = try? store.windowStore(for: route)
                 if let windowStore, windowStore.bots.isEmpty { await windowStore.reload() }
             }
+    }
+    private func accountLabel(_ windowStore: AppStore) -> some View {
+        Label(windowStore.accountName, systemImage: "person.crop.circle")
+            .labelStyle(.titleAndIcon).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            .help(windowStore.workspaceName)
+            .accessibilityIdentifier("windowAccount")
     }
 }
 
@@ -118,6 +133,10 @@ private struct SpatialWindowContent: View {
         .accessibilityIdentifier("spatialContent_" + route.tool.rawValue)
         .accessibilityValue(store.accountName)
         .navigationTitle(route.tool == .chat ? (conversation?.title ?? "Chats".localized) : "\(route.tool.title.localized) · \(botName)")
+        #if targetEnvironment(macCatalyst)
+        .navigationBarTitleDisplayMode(.inline)
+        .modifier(WorkspaceWindowFocus(botID: route.botID, conversation: conversation))
+        #endif
         .toolbar {
             if route.tool != .chat {
                 ToolbarItem(placement: .topBarTrailing) { SpatialWindowMenu(botID: route.botID) }
@@ -128,21 +147,81 @@ private struct SpatialWindowContent: View {
 
 /// Native buttons and menus supply system gaze feedback and keyboard access.
 struct SpatialWindowMenu: View {
+    let botID: String
+    var conversation: ChatDestination? = nil
+    var body: some View {
+        Menu {
+            WorkspaceWindowButtons(botID: botID, conversation: conversation)
+        } label: { Label("New window".localized, systemImage: "macwindow.badge.plus") }
+        .accessibilityIdentifier("spatialNewWindow")
+    }
+}
+
+struct WorkspaceWindowButtons: View {
     @Environment(AppStore.self) private var store
     @Environment(\.openWindow) private var openWindow
     let botID: String
     var conversation: ChatDestination? = nil
     var body: some View {
-        Menu {
-            ForEach(ChatWorkspaceTool.allCases) { tool in
-                Button(tool.title.localized, systemImage: tool.symbol) {
-                    guard let route = store.workspaceWindowRoute(botID: botID, tool: tool,
-                        conversation: tool == .chat ? conversation : nil) else { return }
-                    openWindow(id: "workspace-tool", value: route)
-                }
-            }
-        } label: { Label("New window".localized, systemImage: "macwindow.badge.plus") }
-        .accessibilityIdentifier("spatialNewWindow")
+        ForEach(ChatWorkspaceTool.allCases) { tool in
+            Button(tool.title.localized, systemImage: tool.symbol) {
+                guard let route = store.workspaceWindowRoute(botID: botID, tool: tool,
+                    conversation: tool == .chat ? conversation : nil) else { return }
+                openWindow(id: "workspace-tool", value: route)
+            }.accessibilityIdentifier("newWindow_" + tool.rawValue)
+        }
     }
 }
+
+#if targetEnvironment(macCatalyst)
+private struct WorkspaceWindowActions {
+    let open: (ChatWorkspaceTool) -> Void
+}
+private struct WorkspaceWindowActionsKey: FocusedValueKey {
+    typealias Value = WorkspaceWindowActions
+}
+private extension FocusedValues {
+    var workspaceWindows: WorkspaceWindowActions? {
+        get { self[WorkspaceWindowActionsKey.self] }
+        set { self[WorkspaceWindowActionsKey.self] = newValue }
+    }
+}
+
+struct WorkspaceWindowFocus: ViewModifier {
+    @Environment(AppStore.self) private var store
+    @Environment(\.openWindow) private var openWindow
+    let botID: String
+    var conversation: ChatDestination? = nil
+    func body(content: Content) -> some View {
+        content.focusedSceneValue(\.workspaceWindows, WorkspaceWindowActions { tool in
+            guard let route = store.workspaceWindowRoute(botID: botID, tool: tool,
+                conversation: tool == .chat ? conversation : nil) else { return }
+            openWindow(id: "workspace-tool", value: route)
+        })
+    }
+}
+
+struct WorkspaceWindowCommands: Commands {
+    @FocusedValue(\.workspaceWindows) private var windows
+    var body: some Commands {
+        CommandMenu("Workspace".localized) {
+            Section("New window".localized) {
+                ForEach(ChatWorkspaceTool.allCases) { tool in
+                    Button(tool.title.localized, systemImage: tool.symbol) { windows?.open(tool) }
+                        .keyboardShortcut(shortcut(for: tool), modifiers: [.command, .shift])
+                        .disabled(windows == nil)
+                }
+            }
+        }
+    }
+    private func shortcut(for tool: ChatWorkspaceTool) -> KeyEquivalent {
+        switch tool {
+        case .chat: "n"
+        case .files: "f"
+        case .terminal: "t"
+        case .desktop: "d"
+        }
+    }
+}
+#endif
 #endif
