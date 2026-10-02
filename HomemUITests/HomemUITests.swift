@@ -170,6 +170,10 @@ final class HomemUITests: XCTestCase {
         capture(app, "\(language) agent details")
         app.buttons["workspaceTool_desktop"].tap()
         XCTAssertTrue(app.navigationBars[desktop].waitForExistence(timeout: 5))
+        // The desktop intentionally hides tabs to give the remote screen space.
+        let back = app.navigationBars[desktop].buttons["Atlas"]
+        XCTAssertTrue(back.waitForExistence(timeout: 5))
+        back.tap()
         selectTab(tabs[0], in: app)
         app.buttons["newConversation"].tap()
         XCTAssertTrue(app.navigationBars[newChat].waitForExistence(timeout: 5))

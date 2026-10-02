@@ -127,6 +127,7 @@ struct ConversationsView: View {
             if value == .compact { columnVisibility = .automatic }
         }
         #if targetEnvironment(macCatalyst)
+        .background { WorkspaceWindowTitle(title: macDetailTitle.isEmpty ? "Homem" : "\(macDetailTitle) · Homem").frame(width: 0, height: 0).allowsHitTesting(false).accessibilityHidden(true) }
         .modifier(WorkspaceWindowFocus(botID: store.selectedBot?.id ?? "", conversation: showsChats ? currentConversation : nil))
         .onChange(of: macSection?.wrappedValue) { _, _ in
             columnVisibility = .all

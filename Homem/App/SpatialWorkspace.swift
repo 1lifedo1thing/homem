@@ -118,6 +118,7 @@ private struct SpatialWindowContent: View {
         _conversation = State(initialValue: route.conversation)
     }
     private var botName: String { store.bots.first { $0.id == route.botID }?.title ?? route.conversation?.botName ?? "Agent".localized }
+    private var windowTitle: String { route.tool == .chat ? (conversation?.title ?? "Chats".localized) : "\(route.tool.title.localized) · \(botName)" }
     var body: some View {
         Group {
             switch route.tool {
@@ -132,9 +133,10 @@ private struct SpatialWindowContent: View {
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("spatialContent_" + route.tool.rawValue)
         .accessibilityValue(store.accountName)
-        .navigationTitle(route.tool == .chat ? (conversation?.title ?? "Chats".localized) : "\(route.tool.title.localized) · \(botName)")
+        .navigationTitle(windowTitle)
         #if targetEnvironment(macCatalyst)
         .navigationBarTitleDisplayMode(.inline)
+        .background { WorkspaceWindowTitle(title: windowTitle).frame(width: 0, height: 0).allowsHitTesting(false).accessibilityHidden(true) }
         .modifier(WorkspaceWindowFocus(botID: route.botID, conversation: conversation))
         #endif
         .toolbar {
@@ -174,6 +176,26 @@ struct WorkspaceWindowButtons: View {
 }
 
 #if targetEnvironment(macCatalyst)
+/// Catalyst's navigation title does not update the native Window menu. Apply
+/// the scene title when the hosting view joins its window, including restoration.
+struct WorkspaceWindowTitle: UIViewRepresentable {
+    let title: String
+    func makeUIView(context: Context) -> TitleView {
+        let view = TitleView(frame: .zero)
+        view.title = title
+        return view
+    }
+    func updateUIView(_ view: TitleView, context: Context) { view.title = title }
+    final class TitleView: UIView {
+        var title = "" { didSet { updateTitle() } }
+        override func didMoveToWindow() { super.didMoveToWindow(); updateTitle() }
+        private func updateTitle() {
+            guard let scene = window?.windowScene, scene.title != title else { return }
+            scene.title = title
+        }
+    }
+}
+
 private struct WorkspaceWindowActions {
     let open: (ChatWorkspaceTool) -> Void
 }

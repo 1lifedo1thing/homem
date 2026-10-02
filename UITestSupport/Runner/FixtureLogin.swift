@@ -36,6 +36,7 @@ extension XCUIApplication {
             address.typeText(url)
         }
         let username = textFields["serverUsername"]
+        if !username.isHittable { swipeUp() }
         username.tap(); username.typeText(fixtureUsername)
         let password = secureTextFields["serverPassword"]
         if !password.isHittable { swipeUp() }
