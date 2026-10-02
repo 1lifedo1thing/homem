@@ -132,6 +132,9 @@ struct WorkspaceToolPresentation: ViewModifier {
         }
         #else
         content.navigationDestination(item: $selection) { tool in WorkspaceToolDestination(tool: tool, botID: botID) }
+            #if targetEnvironment(macCatalyst)
+            .modifier(WorkspaceWindowFocus(botID: botID))
+            #endif
         #endif
     }
 }

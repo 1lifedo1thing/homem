@@ -8,6 +8,7 @@ struct ChatDestination: Hashable, Codable {
 }
 
 struct ConversationsView: View {
+    var macSection: Binding<HomeSection>? = nil
     @Environment(\.workspaceSceneID) private var workspaceSceneID
     #if os(visionOS)
     @Environment(\.openWindow) private var openWindow
@@ -29,6 +30,15 @@ struct ConversationsView: View {
     @State private var deletion: Record?
     @State private var columnVisibility: NavigationSplitViewVisibility = .automatic
     @State private var compactColumn: NavigationSplitViewColumn = .sidebar
+    @State private var macNavigationPath = NavigationPath()
+    private var showsChats: Bool { (macSection?.wrappedValue ?? .chats) == .chats }
+    private var currentConversation: ChatDestination? {
+        guard let selection else { return nil }
+        return store.chatWorkspace(for: selection.botID, windowID: workspaceSceneID).snapshot.conversation ?? selection
+    }
+    private var macDetailTitle: String {
+        showsChats ? (currentConversation?.title ?? "") : (macSection?.wrappedValue.title.localized ?? "")
+    }
     private var activityScope: String {
         store.connectionID.uuidString + "|" + (store.selectedBot?.id ?? "") + "|"
             + sessions.map(\.id).sorted().joined(separator: ",") + "|" + String(scenePhase == .background)
@@ -45,6 +55,14 @@ struct ConversationsView: View {
         #else
         sizeClass == .regular
         #endif
+    }
+    private var conversationSelection: Binding<ChatDestination?> {
+        Binding(get: {
+            showsChats ? selection : nil
+        }, set: { value in
+            selection = value
+            if value != nil { macSection?.wrappedValue = .chats }
+        })
     }
     var body: some View {
         navigation
@@ -73,33 +91,28 @@ struct ConversationsView: View {
         NavigationSplitView(columnVisibility: $columnVisibility, preferredCompactColumn: $compactColumn) {
             conversationList
         } detail: {
-            if let selection {
-                ChatScreen(destination: selection, showsAgentSwitcher: true).id(selection.botID)
-                    .navigationBarBackButtonHidden(needsCompactBackControl)
-                    .toolbar {
-                        if needsCompactBackControl {
-                            ToolbarItem(placement: .topBarLeading) {
-                                Button {
-                                    self.selection = nil
-                                    compactColumn = .sidebar
-                                    columnVisibility = .all
-                                } label: { Image(systemName: "chevron.backward") }
-                                    .accessibilityLabel("Chats".localized)
-                                    .accessibilityIdentifier("backToConversations")
-                            }.adaptiveAvatarPlacement()
-                        }
+            #if targetEnvironment(macCatalyst)
+            NavigationStack(path: $macNavigationPath) {
+                ZStack {
+                    // Keep the chat alive while browsing another section, including
+                    // its draft, attachments, pane layout, and active connection.
+                    conversationDetail
+                        .environment(\.homeChatVisible, showsChats)
+                        .environment(\.homeSectionTitle, macSection?.wrappedValue.title.localized ?? "")
+                        .opacity(showsChats ? 1 : 0)
+                        .allowsHitTesting(showsChats)
+                        .accessibilityHidden(!showsChats)
+                    switch macSection?.wrappedValue ?? .chats {
+                    case .chats: EmptyView()
+                    case .agents: AgentsView()
+                    case .library: LibraryView()
+                    case .settings: SettingsView()
                     }
+                }.navigationTitle(macDetailTitle)
             }
-            else {
-                EmptyState(title: "Choose a conversation", symbol: "bubble.left.and.bubble.right", detail: "Choose a conversation or start a new one.")
-                    .toolbar {
-                        if sizeClass == .regular {
-                            ToolbarItem(placement: .topBarTrailing) {
-                                AgentPickerMenu(selection: Binding(get: { store.selectedBot?.id ?? "" }, set: { store.selectedBotID = $0 }))
-                            }.adaptiveAvatarPlacement()
-                        }
-                    }
-            }
+            #else
+            conversationDetail
+            #endif
         }
         .navigationSplitViewStyle(.balanced)
         .environment(\.expandChatWorkspace, { columnVisibility = .detailOnly })
@@ -108,28 +121,80 @@ struct ConversationsView: View {
             if value == nil { columnVisibility = .all }
         }
         .onChange(of: compactColumn) { _, column in
-            // Back on a compact display must also restore the list when the
-            // window expands. A previous pane expansion can leave it detail-only.
             if column == .sidebar { columnVisibility = .all }
         }
         .onChange(of: sizeClass) { _, value in
-            // Expanded column visibility must not suppress compact Back navigation.
             if value == .compact { columnVisibility = .automatic }
         }
+        #if targetEnvironment(macCatalyst)
+        .background { WorkspaceWindowTitle(title: macDetailTitle.isEmpty ? "Homem" : "\(macDetailTitle) · Homem").frame(width: 0, height: 0).allowsHitTesting(false).accessibilityHidden(true) }
+        .modifier(WorkspaceWindowFocus(botID: store.selectedBot?.id ?? "", conversation: showsChats ? currentConversation : nil))
+        .onChange(of: macSection?.wrappedValue) { _, _ in
+            columnVisibility = .all
+            macNavigationPath = NavigationPath()
+        }
+        #endif
         #endif
     }
+    @ViewBuilder private var conversationDetail: some View {
+        if let selection {
+            ChatScreen(destination: selection, showsAgentSwitcher: true).id(selection.botID)
+                .navigationBarBackButtonHidden(needsCompactBackControl)
+                .toolbar {
+                    if needsCompactBackControl {
+                        ToolbarItem(placement: .topBarLeading) {
+                            Button {
+                                self.selection = nil
+                                compactColumn = .sidebar
+                                columnVisibility = .all
+                            } label: { Image(systemName: "chevron.backward") }
+                                .accessibilityLabel("Chats".localized)
+                                .accessibilityIdentifier("backToConversations")
+                        }.adaptiveAvatarPlacement()
+                    }
+                }
+        } else {
+            EmptyState(title: "Choose a conversation", symbol: "bubble.left.and.bubble.right", detail: "Choose a conversation or start a new one.")
+                .toolbar {
+                    if sizeClass == .regular && showsChats {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            AgentPickerMenu(selection: Binding(get: { store.selectedBot?.id ?? "" }, set: { store.selectedBotID = $0 }))
+                        }.adaptiveAvatarPlacement()
+                    }
+                }
+        }
+    }
     private var conversationList: some View {
-        List(selection: $selection) {
+        List(selection: conversationSelection) {
+            #if targetEnvironment(macCatalyst)
+            if let macSection {
+                Section {
+                    ForEach(HomeSection.allCases) { section in
+                        Button { macSection.wrappedValue = section } label: {
+                            Label(section.title.localized, systemImage: section.symbol)
+                                .font(.subheadline.weight(.medium))
+                                .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
+                                .contentShape(Rectangle())
+                        }.buttonStyle(.plain)
+                            .listRowSeparator(.hidden)
+                            .listRowBackground(RoundedRectangle(cornerRadius: 8).fill(macSection.wrappedValue == section ? accent.opacity(0.13) : .clear))
+                            .accessibilityValue(macSection.wrappedValue == section ? "Selected".localized : "")
+                            .accessibilityIdentifier("homeSection_" + section.rawValue)
+                            .keyboardShortcut(section.shortcut, modifiers: .command)
+                    }
+                }
+            }
+            #endif
             if let error = error ?? store.error { ErrorBanner(message: error) { Task { await load() } } }
             Section {
                 ForEach(sessions.filter { search.isEmpty || $0.title.localizedCaseInsensitiveContains(search) }) { session in
                     let destination = ChatDestination(botID: store.selectedBot?.id ?? "", sessionID: session.id, title: session.title, botName: store.selectedBot?.title ?? "Agent")
                     conversationLink(destination) {
                         HStack(alignment: .top, spacing: 12) {
-                            AgentAvatar(name: store.selectedBot?.title ?? "", avatarURL: store.selectedBot?.value.avatarURL ?? "", size: 30)
+                            AgentAvatar(name: store.selectedBot?.title ?? "", avatarURL: store.selectedBot?.value.avatarURL ?? "", size: conversationAvatarSize)
                             VStack(alignment: .leading, spacing: 3) {
                                 HStack(alignment: .top, spacing: 8) {
-                                    Text(session.title).font(usesSidebar ? .subheadline.weight(.medium) : .body.weight(.semibold)).lineLimit(2)
+                                    Text(session.title).font(conversationTitleFont).lineLimit(2)
                                     if activity.running.contains(session.id) {
                                         Spacer(minLength: 0)
                                         ProgressView().controlSize(.small).tint(accent)
@@ -167,7 +232,7 @@ struct ConversationsView: View {
                 if !cursor.isEmpty { Button("Load more conversations".localized) { Task { await load(more: true) } } }
                 if sessions.isEmpty && !loading && error == nil { Text("Start a new conversation.".localized).foregroundStyle(.secondary).padding(.vertical) }
             } header: {
-                if !usesSidebar { Text("Recent".localized) }
+                if !usesSidebar || macSection != nil { Text("Recent".localized) }
             }
         }
             .modifier(ConversationListStyle(isSidebar: usesSidebar))
@@ -175,7 +240,7 @@ struct ConversationsView: View {
             #if !os(visionOS)
             .navigationSplitViewColumnWidth(min: 280, ideal: 320, max: 380)
             #endif
-            .navigationTitle("Chats".localized)
+            .navigationTitle(macSection == nil ? "Chats".localized : "Homem")
             .navigationBarTitleDisplayMode(usesSidebar ? .inline : .large)
             .searchable(text: $search, placement: usesSidebar ? .sidebar : .navigationBarDrawer(displayMode: .automatic), prompt: Text("Find a conversation".localized))
             .toolbar {
@@ -195,6 +260,7 @@ struct ConversationsView: View {
                     #if os(visionOS)
                     openChat(route)
                     #else
+                    macSection?.wrappedValue = .chats
                     selection = route
                     #endif
                 }
@@ -211,6 +277,20 @@ struct ConversationsView: View {
             } message: { record in
                 Text(AppLocalization.format("“%@” will be permanently deleted.", record.title))
             }
+    }
+    private var conversationAvatarSize: CGFloat {
+        #if os(visionOS)
+        44
+        #else
+        30
+        #endif
+    }
+    private var conversationTitleFont: Font {
+        #if os(visionOS)
+        .headline
+        #else
+        usesSidebar ? .subheadline.weight(.medium) : .body.weight(.semibold)
+        #endif
     }
     @ViewBuilder private func conversationLink<Label: View>(_ destination: ChatDestination, @ViewBuilder label: () -> Label) -> some View {
         #if os(visionOS)
@@ -265,8 +345,12 @@ struct ConversationsView: View {
 private struct ConversationListStyle: ViewModifier {
     var isSidebar: Bool
     @ViewBuilder func body(content: Content) -> some View {
+        #if os(visionOS)
+        content.listStyle(.insetGrouped)
+        #else
         if isSidebar { content.listStyle(.sidebar) }
         else { content.listStyle(.plain) }
+        #endif
     }
 }
 
@@ -296,11 +380,13 @@ private struct AgentChatWorkspace: View {
     @State private var titlesVisible = true
     @AppStorage("keepWorkspaceTitleBarsVisible") private var keepTitlesVisible = false
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
+    @Environment(\.homeChatVisible) private var homeChatVisible
+    @Environment(\.homeSectionTitle) private var homeSectionTitle
     private var route: ChatDestination { workspace.snapshot.conversation ?? destination }
     var body: some View {
         content
         .background { Theme.canvas.ignoresSafeArea(.container, edges: .bottom) }
-        .navigationTitle(route.title).navigationBarTitleDisplayMode(.inline)
+        .navigationTitle(homeChatVisible ? route.title : homeSectionTitle).navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(Theme.canvas, for: .navigationBar).toolbarBackground(.visible, for: .navigationBar)
         #if !os(visionOS)
         .toolbar(workspace.snapshot.panes.isEmpty ? .visible : .hidden, for: .tabBar)
@@ -312,22 +398,21 @@ private struct AgentChatWorkspace: View {
         .onChange(of: workspace.snapshot.panes.isEmpty) { _, _ in titlesVisible = true }
         #endif
         .toolbar {
-            #if !os(visionOS)
-            ToolbarItem(placement: .topBarTrailing) { paneMenu }
-            #endif
-            #if targetEnvironment(macCatalyst)
-            ToolbarItem(placement: .topBarTrailing) { SpatialWindowMenu(botID: route.botID, conversation: route) }
-            #endif
-            if showsAgentSwitcher {
+            if homeChatVisible {
+                #if !os(visionOS)
+                ToolbarItem(placement: .topBarTrailing) { paneMenu }
+                #endif
+                if showsAgentSwitcher {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        AgentPickerMenu(selection: Binding(get: { destination.botID }, set: { store.selectedBotID = $0 }))
+                    }.adaptiveAvatarPlacement()
+                }
                 ToolbarItem(placement: .topBarTrailing) {
-                    AgentPickerMenu(selection: Binding(get: { destination.botID }, set: { store.selectedBotID = $0 }))
-                }.adaptiveAvatarPlacement()
-            }
-            ToolbarItem(placement: .topBarTrailing) {
-                Menu {
-                    NavigationLink("Workspace".localized, systemImage: "folder") { WorkspaceView(botID: destination.botID, name: destination.botName) }
-                    NavigationLink("Conversation settings".localized, systemImage: "slider.horizontal.3") { ConversationSettingsView(botID: route.botID, sessionID: route.sessionID) }
-                } label: { Image(systemName: "ellipsis.circle") }
+                    Menu {
+                        NavigationLink("Workspace".localized, systemImage: "folder") { WorkspaceView(botID: destination.botID, name: destination.botName) }
+                        NavigationLink("Conversation settings".localized, systemImage: "slider.horizontal.3") { ConversationSettingsView(botID: route.botID, sessionID: route.sessionID) }
+                    } label: { Image(systemName: "ellipsis.circle") }
+                }
             }
         }
         #if os(visionOS)
@@ -364,12 +449,17 @@ private struct AgentChatWorkspace: View {
     #if !os(visionOS)
     private var paneMenu: some View {
         Menu {
+            #if targetEnvironment(macCatalyst)
+            Section("New window".localized) {
+                WorkspaceWindowButtons(botID: route.botID, conversation: route)
+            }
+            #endif
             Section("Add pane".localized) {
                 ForEach(ChatWorkspaceTool.allCases) { tool in
                     Button(tool.title.localized, systemImage: tool.symbol) {
                         workspace.snapshot.panes.append(WorkspacePane(tool: tool, botID: destination.botID))
                         expandWorkspace()
-                    }
+                    }.accessibilityIdentifier("addPane_" + tool.rawValue)
                 }
             }
             if !workspace.snapshot.panes.isEmpty {
@@ -386,7 +476,12 @@ private struct AgentChatWorkspace: View {
         } label: {
             Image(systemName: "rectangle.badge.plus")
         }
-        .accessibilityLabel("Add pane".localized).accessibilityIdentifier("chatSplitView")
+        #if targetEnvironment(macCatalyst)
+        .accessibilityLabel("Workspace".localized)
+        #else
+        .accessibilityLabel("Add pane".localized)
+        #endif
+        .accessibilityIdentifier("chatSplitView")
     }
     #endif
 }
@@ -496,7 +591,8 @@ struct ChatContent: View {
                 Menu {
                     Button("Attach a file".localized, systemImage: "paperclip") { filePicker = true }
                     Button("Record voice message".localized, systemImage: "mic") { Task { await voice.start() } }.disabled(voice.recording)
-                } label: { Image(systemName: "plus").font(.title3).frame(width: Theme.controlSize, height: Theme.controlSize) }.accessibilityLabel("Add attachment".localized)
+                } label: { Image(systemName: "plus").font(.title3).frame(width: Theme.controlSize, height: Theme.controlSize) }
+                    .buttonStyle(.plain).spatialHoverEffect().accessibilityLabel("Add attachment".localized)
                 TextField(AppLocalization.format("Message %@…", destination.botName), text: $model.draft, axis: .vertical).lineLimit(1...7).padding(.vertical, 10).focused($composerFocused).accessibilityIdentifier("messageComposer")
                 if model.active {
                     Menu {
@@ -522,6 +618,7 @@ struct ChatContent: View {
                             else { Image(systemName: model.active ? "text.badge.plus" : "arrow.up").font(.body.weight(.semibold)) }
                         }.foregroundStyle(.white).frame(width: Theme.controlSize, height: Theme.controlSize).background(accent, in: Circle())
                     }.disabled(!hasComposerInput || model.queue.submitting)
+                        .buttonStyle(.plain)
                         .accessibilityLabel((model.active ? "Queue message" : "Send message").localized).accessibilityIdentifier("sendMessage").spatialHoverEffect()
                 }
             }.padding(.horizontal, 10).padding(.vertical, 5).background(Theme.surface, in: RoundedRectangle(cornerRadius: 24)).overlay(RoundedRectangle(cornerRadius: 24).stroke(Theme.separator, lineWidth: 0.5))
@@ -529,7 +626,8 @@ struct ChatContent: View {
                 Menu {
                     Picker("Model".localized, selection: $model.modelID) { Text("Agent default".localized).tag(""); ForEach(model.models) { Text($0.title).tag($0.id) } }
                     Picker("Reasoning".localized, selection: $model.effort) { ForEach(["", "none", "minimal", "low", "medium", "high", "xhigh", "max"], id: \.self) { Text($0.isEmpty ? "Default reasoning".localized : $0.capitalized.localized).tag($0) } }
-                } label: { Label(model.models.first { $0.id == model.modelID }?.title ?? "Agent default".localized, systemImage: "sparkle").font(.caption) }
+                } label: { Label(model.models.first { $0.id == model.modelID }?.title ?? "Agent default".localized, systemImage: "sparkle").font(.caption).padding(.vertical, 6) }
+                    .buttonStyle(.plain).spatialHoverEffect()
                 Spacer()
                 if !model.effort.isEmpty { Text(model.effort.capitalized.localized).font(.caption).foregroundStyle(.secondary) }
                 if composerFocused {

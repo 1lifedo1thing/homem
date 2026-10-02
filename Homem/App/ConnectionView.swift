@@ -65,8 +65,10 @@ struct ConnectionView: View {
                     }.signInSecondaryAction().accessibilityIdentifier("customServerSignIn")
                         .navigationDestination(isPresented: $showCustomServer) { customServerScreen }
                     #else
-                    DisclosureGroup("Use another server".localized, isExpanded: $showCustomServer) {
+                    DisclosureGroup(isExpanded: $showCustomServer) {
                         customServerForm.padding(.top, 16)
+                    } label: {
+                        Text("Use another server".localized).accessibilityIdentifier("customServerSignIn")
                     }
                     #endif
                 }.padding(32).padding(.bottom, 24).frame(maxWidth: 520)

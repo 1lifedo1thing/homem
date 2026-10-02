@@ -5,7 +5,7 @@ struct AgentsView: View {
     @Environment(AppStore.self) private var store
     @State private var create = false
     @State private var search = ""
-    @ScaledMetric(relativeTo: .body) private var cardHeight = 210
+    @ScaledMetric(relativeTo: .body) private var cardHeight = Theme.agentCardMinimumHeight
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
@@ -19,28 +19,38 @@ struct AgentsView: View {
                     ForEach(store.bots.filter { search.isEmpty || $0.title.localizedCaseInsensitiveContains(search) }) { bot in
                         AgentCard(bot: bot, height: cardHeight)
                     }
-                    Button { create = true } label: {
-                        HStack(spacing: 12) {
-                            Image(systemName: "plus").font(.title2).frame(width: 52, height: 52).background(accent.opacity(0.10), in: RoundedRectangle(cornerRadius: 12))
-                            Text("Create an agent".localized).font(.headline)
-                            Spacer()
-                            Image(systemName: "arrow.right").font(.subheadline)
-                        }.foregroundStyle(accent).padding(Theme.gutter)
-                            .frame(maxWidth: .infinity).frame(height: cardHeight, alignment: .top)
-                            .modifier(DetailSurface())
-                    }.buttonStyle(.plain).accessibilityIdentifier("createAgent")
+                    #if !os(visionOS) && !targetEnvironment(macCatalyst)
+                    createButton.frame(height: cardHeight, alignment: .top).modifier(DetailSurface())
+                    #endif
                 }
+                #if os(visionOS) || targetEnvironment(macCatalyst)
+                createButton.frame(maxWidth: 360).modifier(DetailSurface())
+                #endif
             }.padding(22).frame(maxWidth: 1100).frame(maxWidth: .infinity)
         }.background(Theme.canvas).navigationTitle("Agents".localized)
             .searchable(text: $search, prompt: "Find an agent")
             .toolbar {
+                #if !targetEnvironment(macCatalyst)
                 ToolbarItem(placement: .topBarLeading) { WorkspacePickerMenu() }.adaptiveAvatarPlacement()
+                #endif
                 ToolbarItem(placement: .topBarTrailing) { Button { create = true } label: { Image(systemName: "plus") }.accessibilityLabel("Create agent".localized) }
             }
             .refreshable { await store.reload() }
             .sheet(isPresented: $create, onDismiss: { Task { await store.reload() } }) {
                 if let op = SchemaCatalog.shared.operation("/bots", "POST") { SchemaEditor(title: "Create an agent", path: "/bots", operation: op) }
             }
+    }
+    private var createButton: some View {
+        Button { create = true } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "plus").font(.title2).frame(width: 44, height: 44)
+                    .background(accent.opacity(0.10), in: RoundedRectangle(cornerRadius: 12))
+                Text("Create an agent".localized).font(.headline)
+                Spacer()
+                Image(systemName: "arrow.right").font(.subheadline)
+            }.foregroundStyle(accent).padding(Theme.gutter)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }.buttonStyle(.plain).spatialHoverEffect().accessibilityIdentifier("createAgent")
     }
 }
 
@@ -64,9 +74,14 @@ struct AgentCard: View {
                     if let description = bot.value["metadata"]["description"].string.nonEmpty {
                         Text(description).font(.subheadline).foregroundStyle(.secondary).lineLimit(2).padding(.top, 12)
                     }
+                    #if !os(visionOS) && !targetEnvironment(macCatalyst)
                     Spacer(minLength: 0)
+                    #endif
                 }.padding(.horizontal, Theme.gutter).padding(.top, Theme.gutter).padding(.bottom, 12)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+                    #if !os(visionOS) && !targetEnvironment(macCatalyst)
+                    .frame(maxHeight: .infinity, alignment: .topLeading)
+                    #endif
                     .contentShape(Rectangle())
             }.buttonStyle(.plain).accessibilityIdentifier("agentDetails_" + bot.id)
             Divider().padding(.horizontal, Theme.gutter)
@@ -76,12 +91,26 @@ struct AgentCard: View {
                         VStack(spacing: 5) {
                             Image(systemName: tool.symbol).font(.system(size: 17))
                             Text(tool.title.localized).font(.caption.weight(.medium)).lineLimit(1)
-                        }.frame(maxWidth: .infinity, minHeight: 44).contentShape(Rectangle())
+                        }.frame(maxWidth: .infinity, minHeight: Theme.controlSize).contentShape(Rectangle())
                     }.buttonStyle(.plain).foregroundStyle(accent)
+                        .spatialHoverEffect()
                         .accessibilityIdentifier("agentTool_" + bot.id + "_" + tool.rawValue)
                 }
             }.padding(.horizontal, 12).padding(.vertical, 8)
-        }.frame(maxWidth: .infinity).frame(height: height, alignment: .top).modifier(DetailSurface())
+        }.frame(maxWidth: .infinity)
+            .modifier(AgentCardSize(height: height))
+            .modifier(DetailSurface())
+    }
+}
+
+private struct AgentCardSize: ViewModifier {
+    let height: CGFloat
+    func body(content: Content) -> some View {
+        #if os(visionOS) || targetEnvironment(macCatalyst)
+        content.frame(minHeight: height, alignment: .top)
+        #else
+        content.frame(height: height, alignment: .top)
+        #endif
     }
 }
 
@@ -299,9 +328,21 @@ struct AgentResourceSummary: View {
     }
     var body: some View {
         VStack(alignment: .trailing, spacing: 5) {
+            #if os(visionOS) || targetEnvironment(macCatalyst)
+            if cpuUsed != "—" || cpuLimit != "—" {
+                resource("CPU", symbol: "cpu", used: cpuUsed, limit: cpuLimit)
+            }
+            if !metrics["memory"]["usage_bytes"].isNull || !memoryLimit.isNull {
+                resource("RAM", symbol: "memorychip", used: bytes(metrics["memory"]["usage_bytes"]), limit: bytes(memoryLimit, limit: true))
+            }
+            if !metrics["storage"]["used_bytes"].isNull || !limits["storage_bytes"].isNull {
+                resource("Storage", symbol: "internaldrive", used: bytes(metrics["storage"]["used_bytes"]), limit: bytes(limits["storage_bytes"], limit: true))
+            }
+            #else
             resource("CPU", symbol: "cpu", used: cpuUsed, limit: cpuLimit)
             resource("RAM", symbol: "memorychip", used: bytes(metrics["memory"]["usage_bytes"]), limit: bytes(memoryLimit, limit: true))
             resource("Storage", symbol: "internaldrive", used: bytes(metrics["storage"]["used_bytes"]), limit: bytes(limits["storage_bytes"], limit: true))
+            #endif
         }.font(.caption2.monospacedDigit()).foregroundStyle(.secondary).fixedSize()
             .accessibilityIdentifier("agentResources_" + botID)
             .task(id: scenePhase) {

@@ -10,11 +10,17 @@ extension XCUIApplication {
         resetFixture(scenario: scenario)
         launchArguments.removeAll { $0 == "--ui-onboarding" }
         launchArguments.append("--ui-onboarding")
+        if !launchArguments.contains("-AppleLanguages") {
+            launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        }
         launch()
         signInToFixture()
+        // Relaunch checks must restore the account created above, rather than
+        // resetting onboarding and deleting it a second time.
+        launchArguments.removeAll { $0 == "--ui-onboarding" }
     }
     @MainActor func signInToFixture(username fixtureUsername: String = "fixture") {
-        let custom = buttons["customServerSignIn"].exists ? buttons["customServerSignIn"] : buttons["Use another server"]
+        let custom = descendants(matching: .any).matching(identifier: "customServerSignIn").firstMatch
         XCTAssertTrue(custom.waitForExistence(timeout: 20))
         if !custom.isHittable { swipeUp() }
         custom.tap()
@@ -30,6 +36,7 @@ extension XCUIApplication {
             address.typeText(url)
         }
         let username = textFields["serverUsername"]
+        if !username.isHittable { swipeUp() }
         username.tap(); username.typeText(fixtureUsername)
         let password = secureTextFields["serverPassword"]
         if !password.isHittable { swipeUp() }
