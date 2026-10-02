@@ -19,9 +19,13 @@ The `HomemMac` target uses SwiftUI and AppKit on macOS 14+. The executable's `LC
 
 The visionOS prebuilt WebRTC simulator framework supports arm64; the generic simulator check therefore specifies that architecture. Live production WebRTC/terminal interaction and physical iCloud Keychain propagation were not exercised by the local fixture.
 
+Cloud's native Mac archive succeeded, but its ad hoc test signing prevents the app from launching with the shared Keychain entitlement. A local reproduction confirmed an invalid-signature termination; the development-signed 51-test run remains the completed test result. See [Cloud diagnostics](../../XCODE_CLOUD.md#native-workflow-execution-and-remaining-blockers).
+
 ## Captures
 
 These are captures of the running native Mac app, with fictional sample data from the local review fixture. They retain the system window-sharing indicator shown during automated capture. App Store JPEGs preserve the interface within a 1440 × 900 canvas.
+
+After capture, the native app and fixture server were stopped. The temporary loopback fixture account was removed from the synchronized Keychain directory and local account preferences; other saved accounts were preserved.
 
 | Capture | View |
 | --- | --- |

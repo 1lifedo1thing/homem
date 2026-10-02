@@ -69,6 +69,22 @@ The direct upload also warned that the prebuilt WebRTC framework lacks a dSYM (U
 
 The Mac workflow now tests and archives `HomemMac`, with native Mac test destination `mac` and archive destination `ANY_MAC`. Both actions are required to pass; the App Store eligible archive delivers to the existing **Homem Internal** group. Restricted editing is enabled. The other two workflows retain `Homem` and `HomemVision`, respectively. All three configurations were read back from Apple's API after the update.
 
-The standalone source was pushed directly to `master` as `c443934`. Signed local native tests passed **51/51**, and iOS Simulator and arm64 visionOS Simulator builds passed. The native Release archive contains Intel and Apple silicon `MACOS` binaries, with minimum macOS 14. Native build 101 is valid and submitted to App Review with manual release. The next source push starts Cloud runs with the updated configuration; local verification does not imply that those Cloud runs have already completed.
+The standalone source was pushed directly to `master` as `c443934`, followed by configuration and release evidence in `ef1e667`. Signed local native tests passed **51/51**, and iOS Simulator and arm64 visionOS Simulator builds passed. The native Release archive contains Intel and Apple silicon `MACOS` binaries, with minimum macOS 14. Native build 101 is valid and submitted to App Review with manual release.
 
 UI evidence: [native workflow](ui/2026-10-03-native/06-native-cloud-workflow.png), [build counter](ui/2026-10-03-native/07-cloud-build-counter.png). Release details: [native Mac submission](app-store/NATIVE-MACOS-2026-10-03.md).
+
+### Native workflow execution and remaining blockers
+
+Runs from `ef1e667` started on all three workflows. At 20:49 UTC on 2 October (3 October locally):
+
+| Platform | Run | Archive | Required tests |
+| --- | --- | --- | --- |
+| macOS | [103](https://appstoreconnect.apple.com/teams/cbaca10a-f696-4d2b-959e-0d3fa1b23452/xcode-cloud/products/13960BE0-6304-4C11-A080-C67D06BE2E79/builds/bc0c2793-9b7e-4c95-a0a4-3a482d170fae/summary) | Succeeded | Test app launch failed |
+| iOS | [104](https://appstoreconnect.apple.com/teams/cbaca10a-f696-4d2b-959e-0d3fa1b23452/xcode-cloud/products/13960BE0-6304-4C11-A080-C67D06BE2E79/builds/a2af82ef-9ace-4db5-8863-4faea98a2907/summary) | Compiled/exported; App Store Connect preparation failed | Running |
+| visionOS | [102](https://appstoreconnect.apple.com/teams/cbaca10a-f696-4d2b-959e-0d3fa1b23452/xcode-cloud/products/13960BE0-6304-4C11-A080-C67D06BE2E79/builds/629ada0c-aecc-4e1b-88e1-6b62eeaa9a49/summary) | Compiled/exported; App Store Connect preparation failed | Running |
+
+The native Mac worker explicitly invokes `build-for-testing` with `CODE_SIGN_IDENTITY=-` and `AD_HOC_CODE_SIGNING_ALLOWED=YES`. Its required tests cannot launch the app with the restricted shared Keychain entitlement. Reproducing these flags locally, including disabling hardened runtime for the diagnostic run, also failed before tests executed. The crash report identifies `SIGKILL (Code Signature Invalid)` and `Taskgated Invalid Signature`. The same suite previously passed 51/51 with the development certificate and native provisioning profile. [Apple's documented hardened-runtime workaround](https://developer.apple.com/xcode-cloud/release-notes/) did not resolve this case. The shipped app's entitlements and hardened runtime remain enabled, and Cloud's required test action remains enabled. Native Mac archive success and the valid local upload do not certify Cloud test execution or TestFlight delivery.
+
+Both iOS and visionOS App Store export logs show Apple's `Session Proxy Provider` unable to authenticate with App Store Connect. The public issue is “Preparing build for App Store Connect failed.” These logs do not identify an ITMS packaging rejection. API access and the direct native Mac upload succeeded, but they do not repair Apple's worker authentication. These runs therefore do not yet certify unattended three-platform TestFlight delivery. Private delivery logs and crash reports remain outside the repository.
+
+This documentation-only result update uses Apple's [documented `[ci skip]` marker](https://developer.apple.com/documentation/xcode/configuring-start-conditions) to avoid canceling the in-progress simulator tests and rebuilding unchanged application code.
