@@ -1,5 +1,7 @@
 import XCTest
+#if !os(visionOS)
 import WebRTC
+#endif
 import CoreGraphics
 @testable import Homem
 

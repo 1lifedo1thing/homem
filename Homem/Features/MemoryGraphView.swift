@@ -31,13 +31,13 @@ struct MemoryGraphView: View {
                                 }.buttonStyle(.plain).position(position(i, size: geometry.size)).accessibilityLabel(node.text("label", "subject", "topic", "id"))
                             }
                         }
-                    }.frame(height: 380).background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 22))
+                    }.frame(height: 380).background(Theme.groupedSurface, in: RoundedRectangle(cornerRadius: 22))
                 } else if error == nil { EmptyState(title: "Connections grow over time", symbol: "brain", detail: "Your agent’s memory relationships will appear here.") }
                 ForEach(nodes.filter { search.isEmpty || $0.pretty.localizedCaseInsensitiveContains(search) }, id: \.self) { node in
                     Button { selected = node } label: { HStack { Image(systemName: "circle.hexagongrid").foregroundStyle(accent); VStack(alignment: .leading) { Text(node.text("label", "subject", "topic", "id")).font(.headline); Text(node["memory"].string).font(.caption).foregroundStyle(.secondary).lineLimit(2) }; Spacer(); Text(node["count"].scalar).font(.caption).foregroundStyle(.secondary) }.padding() }.buttonStyle(.plain)
                 }
             }.padding(22)
-        }.background(Color(.systemGroupedBackground)).navigationTitle("Memory graph".localized).navigationBarTitleDisplayMode(.inline).searchable(text: $search)
+        }.background(Theme.groupedCanvas).navigationTitle("Memory graph".localized).navigationBarTitleDisplayMode(.inline).searchable(text: $search)
             .task { do { graph = try await store.api?.call(path) ?? .null } catch { self.error = error.localizedDescription } }
             .sheet(isPresented: Binding(get: { selected != nil }, set: { if !$0 { selected = nil } })) { NavigationStack { List { if let selected { JSONDetails(value: selected) } }.navigationTitle("Memory topic".localized).toolbar { Button("Done".localized) { selected = nil } } } }
     }

@@ -1,6 +1,8 @@
 import AVKit
 import SwiftUI
+#if !os(visionOS)
 import WebRTC
+#endif
 import Observation
 
 final class DesktopVideoSurface: UIView {
@@ -28,7 +30,14 @@ final class DesktopVideoSurface: UIView {
     private(set) var duplicatesInline = false
     var error: String?
     var keepsConnectionAlive: Bool { isActive || isStarting }
-    var isSupported: Bool { AVPictureInPictureController.isPictureInPictureSupported() }
+    var isSupported: Bool {
+        #if os(visionOS)
+        // A spatial desktop window provides the persistent live view.
+        false
+        #else
+        AVPictureInPictureController.isPictureInPictureSupported()
+        #endif
+    }
     @ObservationIgnored let surface = DesktopVideoSurface()
     @ObservationIgnored let duplicateSurface = DesktopVideoSurface()
     @ObservationIgnored private weak var model: DesktopModel?

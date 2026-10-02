@@ -181,8 +181,13 @@ final class ChatSplitLayoutTests: XCTestCase {
     func testIPadColumnsKeepBothPanesUsableAndNarrowWindowsStack() {
         XCTAssertFalse(ChatSplitLayout.usesColumns(width: 430))
         XCTAssertFalse(ChatSplitLayout.usesColumns(width: 600))
+        #if !os(visionOS)
         XCTAssertTrue(ChatSplitLayout.usesColumns(width: 669))
         XCTAssertTrue(ChatSplitLayout.usesColumns(width: 700))
+        #else
+        XCTAssertFalse(ChatSplitLayout.usesColumns(width: 700))
+        XCTAssertTrue(ChatSplitLayout.usesColumns(width: 804))
+        #endif
         XCTAssertTrue(ChatSplitLayout.usesColumns(width: 1032))
         for width: CGFloat in [676, 1008, 1352] {
             for proposed in [-1.0, 0.45, 2.0] {

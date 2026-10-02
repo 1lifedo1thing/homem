@@ -1,51 +1,37 @@
 # Xcode Cloud
 
-## Project and source control
+## Active workflows — 3 October 2026
 
-- Repository: [iebb/homem](https://github.com/iebb/homem) (private)
-- Default branch: `main`
-- Project: `Homem.xcodeproj`
-- Shared scheme: `Homem`
-- Bundle identifier: `ad.neko.homem`
-- Apple Developer organization: **Kitta Ltd**
-- Team identifier: `7P8CLHDH5G`
-- Signing: Automatic
+All three platforms use the private [iebb/homem](https://github.com/iebb/homem) repository, `master`, the checked-in `Homem.xcodeproj`, and automatic signing for Kitta Ltd (`7P8CLHDH5G`). Workflows start on pushes to `master` and can be started manually. Superseded builds are automatically canceled. The environment is pinned to **Xcode 27 (27A266a)** and **macOS Golden Gate 27 (26A428)**, with clean builds.
 
-The generated Xcode project and pinned `Package.resolved` are committed. Cloud builds do not require XcodeGen. If project configuration changes locally, run `xcodegen generate` and commit the resulting project alongside `project.yml`.
+| Workflow | Shared scheme | Required tests | Archive |
+| --- | --- | --- | --- |
+| [Homem iOS CI](https://appstoreconnect.apple.com/teams/cbaca10a-f696-4d2b-959e-0d3fa1b23452/xcode-cloud/products/13960BE0-6304-4C11-A080-C67D06BE2E79/workflows/A3B8E4E8-2CBF-49A8-83E3-6E20DFFE1DA3) | `Homem` | iPhone 17 Pro / iOS 27 | iOS device |
+| [Homem visionOS CI](https://appstoreconnect.apple.com/teams/cbaca10a-f696-4d2b-959e-0d3fa1b23452/xcode-cloud/products/13960BE0-6304-4C11-A080-C67D06BE2E79/workflows/8c7000f3-3994-4b58-a2fc-23680009593c) | `HomemVision` | Apple Vision Pro / visionOS 27 | visionOS device |
+| [Homem macOS CI](https://appstoreconnect.apple.com/teams/cbaca10a-f696-4d2b-959e-0d3fa1b23452/xcode-cloud/products/13960BE0-6304-4C11-A080-C67D06BE2E79/workflows/d5b424ea-87cb-46c4-8fb9-bb7bcc3394cc) | `HomemCatalyst` | Mac Catalyst / selected macOS | Mac Catalyst |
+
+Archives are App Store eligible. App Review submission and release remain manual. All platforms deliver successful archives to **Homem Internal** (three testers). The existing iOS external TestFlight post-action is also retained. Cloud's shared product build counter was advanced from 59 to **68**, above the locally uploaded Mac build 67. Future local uploads must likewise stay ahead of the latest Cloud build number.
+
+The Cloud product is `13960BE0-6304-4C11-A080-C67D06BE2E79`, associated with [Homem (6812852139)](https://appstoreconnect.apple.com/apps/6812852139/distribution). [The workflow snapshot](xcode-cloud/workflows.json) records the public API configuration; TestFlight post-actions and the product build counter are managed in App Store Connect.
 
 ## Worker preparation
 
-- `ci_post_clone.sh` permits SwiftTerm's pinned version-metadata build plugin in the disposable Xcode Cloud worker. It does not change the local developer's Xcode preferences. Review dependency changes before accepting a new plugin version.
-- `ci_pre_xcodebuild.sh` starts the loopback HTTP/SSE/WebSocket fixture during `test-without-building`, waits for readiness, and fails if startup fails.
-- `ci_post_xcodebuild.sh` stops that fixture after tests. The fixture script is linked into `ci_scripts` so Apple includes it in the separate test environment.
-- Integration tests fail, rather than skip, if the fixture is unavailable in Xcode Cloud. No production credentials or server are needed.
+The generated project, shared schemes, and pinned `Package.resolved` are committed. Cloud builds do not require XcodeGen. When changing `project.yml`, regenerate and commit the resulting project.
 
-The pre/post hooks and native networking smoke check have passed locally. The app's earlier simulator checks are recorded in [VALIDATION.md](VALIDATION.md).
+- `ci_post_clone.sh` checks iOS and visionOS icons, camera/microphone purpose strings, and localization coverage. It permits SwiftTerm's pinned version-metadata build plugin in the disposable worker.
+- `ci_pre_xcodebuild.sh` starts the loopback HTTP/SSE/WebSocket fixture for `test-without-building`, waits for readiness, and fails if startup fails.
+- `ci_post_xcodebuild.sh` stops the fixture. Both `fixture-server.py` and its `ui_fixture.py` dependency are linked into `ci_scripts` for the separate test environment.
+- Integration tests fail if the fixture is unavailable in Cloud. UI tests use the real sign-in and transport against this local fixture. No production credentials are needed.
 
-## Apple-side workflow
+Apple references: [workflow reference](https://developer.apple.com/documentation/xcode/xcode-cloud-workflow-reference), [custom build scripts](https://developer.apple.com/documentation/xcode/writing-custom-build-scripts), [environment variables](https://developer.apple.com/documentation/xcode/environment-variable-reference), [setting the next build number](https://developer.apple.com/documentation/xcode/setting-the-next-build-number-for-xcode-cloud-builds).
 
-**Status: active.** The app record and workflow were created in Kitta Ltd on 17 September 2026. The first build from commit `7273dd7` passed both its required simulator test action and iOS archive action.
+## Setup verification
 
-- App Store Connect app: [Homem (6812852139)](https://appstoreconnect.apple.com/apps/6812852139/distribution)
-- Cloud product: `13960BE0-6304-4C11-A080-C67D06BE2E79`
-- Workflow: [Homem CI](https://appstoreconnect.apple.com/teams/cbaca10a-f696-4d2b-959e-0d3fa1b23452/xcode-cloud/products/13960BE0-6304-4C11-A080-C67D06BE2E79/workflows/A3B8E4E8-2CBF-49A8-83E3-6E20DFFE1DA3)
-- Starts on changes to `main` and pull requests from any source branch targeting `main`, with automatic cancellation of superseded builds.
-- Environment: Xcode 26.6 (17F113), compatible latest-release macOS (Tahoe 26.5.1 when pinned); clean builds.
-- Required simulator test action: Homem scheme, iPhone 17 Pro, latest OS included with the selected Xcode.
-- iOS archive action: Homem scheme, distribution preparation set to **TestFlight (Internal Testing Only)**.
-- [Build 1](https://appstoreconnect.apple.com/teams/cbaca10a-f696-4d2b-959e-0d3fa1b23452/xcode-cloud/products/13960BE0-6304-4C11-A080-C67D06BE2E79/builds/de595d62-2229-4007-967b-c338080cd2f8) passed tests and archive.
+All three workflow configurations were read back from Apple's API with required `TEST` and `ARCHIVE` actions and the correct shared schemes. Local icon, privacy-string, and localization preflights passed (741 localized strings), as did the fixture startup, UI endpoint, and shutdown hooks. New Cloud build results are recorded separately after execution.
 
-Build 1 successfully fetched the primary repository, resolved every package dependency (including WebRTC), checked the project/workflow configuration, and ran the Cloud preparation hooks. The iOS archive succeeded with zero errors and warnings. The separate test worker also started its local transport fixture successfully. Public package dependencies required no additional repository grant. The required test action subsequently passed.
+## Historical iOS validation
 
-## TestFlight
-
-The workflow now includes a **TestFlight Internal Testing - iOS** post-action using the Archive - iOS artifact. Successful builds are delivered to [Homem Internal](https://appstoreconnect.apple.com/apps/6812852139/testflight/groups/926f0163-0a4e-41e4-b3b6-2eb289f969c3). The group has automatic distribution enabled for local Xcode uploads as well; Cloud delivery is handled by the workflow post-action.
-
-[Build 2](https://appstoreconnect.apple.com/teams/cbaca10a-f696-4d2b-959e-0d3fa1b23452/xcode-cloud/products/13960BE0-6304-4C11-A080-C67D06BE2E79/builds/ef5e32b1-31e1-42a8-ae48-45333fc42bcc/summary) was started after enabling TestFlight. Upload, Apple processing, and tester availability are separate stages; workflow activation alone does not mean the build is installable. The internal group currently has three members configured in App Store Connect.
-
-No external/public distribution, App Store submission, or paid compute subscription has been configured. The app declares exempt encryption with `ITSAppUsesNonExemptEncryption = false` in `Homem/Info.plist`, as requested by the owner.
-
-Apple references: [First workflow](https://developer.apple.com/documentation/xcode/configuring-your-first-xcode-cloud-workflow), [custom build scripts](https://developer.apple.com/documentation/xcode/writing-custom-build-scripts), [Cloud environment variables](https://developer.apple.com/documentation/xcode/environment-variable-reference).
+The first workflow was created on 17 September 2026. Build 1 from `7273dd7` passed simulator tests and the iOS archive. Build 58 from `b77dc85` later completed archive and TestFlight distribution. These historical results do not certify the new three-platform configuration.
 
 ## Distribution repair — 17 September 2026
 

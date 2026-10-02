@@ -25,3 +25,7 @@ Dependency versions and revisions are locked in `Homem.xcodeproj/project.xcworks
 ## HighlightSwift and highlight.js
 
 [appstefan/HighlightSwift](https://github.com/appstefan/HighlightSwift), version 1.1.0, provides local syntax highlighting using bundled highlight.js. HighlightSwift is MIT licensed; highlight.js is BSD-3-Clause licensed. Full notices are included in `docs/licenses/HighlightSwift-LICENSE`, `docs/licenses/highlight.js-LICENSE`, and the app's license screen.
+
+## LiveKit WebRTC (visionOS)
+
+The visionOS target uses [livekit/webrtc-xcframework](https://github.com/livekit/webrtc-xcframework), version 150.7871.02, to supply native device and simulator slices. Only the standalone WebRTC framework is used; signaling still connects directly to Memoh. The distribution's MIT notice is bundled as `LiveKitWebRTC-LICENSE.txt`; Google WebRTC's BSD and third-party notices continue to apply. The binary requires visionOS 26.0 or later.

@@ -5,7 +5,6 @@ import Observation
 @MainActor @Observable final class APIClient {
     var baseURL: URL
     var token: String
-    var isDemo: Bool
     var unauthorized = false
     var signedOut = false
     var officialSession: OfficialSession?
@@ -15,11 +14,11 @@ import Observation
     var draftScope: String { (credentialAccount ?? baseURL.absoluteString) + (officialSession.map { "|" + $0.teamID } ?? "") }
     let session: URLSession
     private let desktopSession: URLSession
-    let demo = DemoServer()
     private var refreshTask: Task<String, Error>?
+    @ObservationIgnored private var streamingSessions: [UUID: URLSession] = [:]
 
-    init(baseURL: URL, token: String = "", isDemo: Bool = false, session: URLSession? = nil, officialSession: OfficialSession? = nil) {
-        self.baseURL = baseURL; self.token = token; self.isDemo = isDemo
+    init(baseURL: URL, token: String = "", session: URLSession? = nil, officialSession: OfficialSession? = nil) {
+        self.baseURL = baseURL; self.token = token
         self.officialSession = officialSession
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = 45
@@ -33,12 +32,21 @@ import Observation
             for cookie in officialSession.validCookies { self.session.configuration.httpCookieStorage?.setCookie(cookie) }
         }
     }
-    deinit { desktopSession.invalidateAndCancel() }
+    deinit {
+        desktopSession.invalidateAndCancel()
+        for session in streamingSessions.values { session.invalidateAndCancel() }
+    }
     func invalidate() {
         signedOut = true
         refreshTask?.cancel()
         session.invalidateAndCancel()
         desktopSession.invalidateAndCancel()
+        for session in streamingSessions.values { session.invalidateAndCancel() }
+        streamingSessions.removeAll()
+    }
+    private func checkConnection() throws {
+        guard !signedOut else { throw ClientError.message("This session has signed out.".localized) }
+        try Task.checkCancellation()
     }
     static func normalizedURL(_ input: String) throws -> URL {
         guard var c = URLComponents(string: input.trimmingCharacters(in: .whitespacesAndNewlines)),
@@ -87,7 +95,6 @@ import Observation
     }
     func call(_ path: String, method: String = "GET", query: [String: String] = [:], body: JSONValue? = nil) async throws -> JSONValue {
         guard !signedOut else { throw ClientError.message("This session has signed out.".localized) }
-        if isDemo { return try demo.call(path, method: method, query: query, body: body) }
         let data = try await perform(request(path, method: method, query: query, body: body))
         if data.isEmpty { return .object([:]) }
         guard let value = try? JSONDecoder().decode(JSONValue.self, from: data) else { throw ClientError.invalidResponse }
@@ -108,7 +115,11 @@ import Observation
             }
         }
         if let officialSession, persistOfficialSession {
-            try OfficialSession(cookies: session.configuration.httpCookieStorage?.cookies ?? [], teamID: officialSession.teamID).save(account: credentialAccount ?? OfficialServer.keychainAccount)
+            let account = credentialAccount ?? OfficialServer.keychainAccount
+            // A background window may still be using another workspace. Refresh
+            // its cookies without changing the launcher's remembered selection.
+            let selectedTeam = OfficialSession.restore(account: account)?.teamID ?? officialSession.teamID
+            try OfficialSession(cookies: session.configuration.httpCookieStorage?.cookies ?? [], teamID: selectedTeam).save(account: account)
         }
         if http.statusCode == 401, retry, !isOfficial, !token.isEmpty, !request.url!.path.hasSuffix("/auth/refresh") {
             do {
@@ -136,6 +147,7 @@ import Observation
         return data
     }
     func socketRequest(_ path: String, query: [String: String] = [:]) async throws -> URLRequest {
+        try checkConnection()
         var query = query
         if let officialSession {
             let ticket = try await platformCall("/ws-tickets", method: "POST")
@@ -143,6 +155,7 @@ import Observation
             query["ticket"] = ticket["ticket"].string
             query["team_id"] = officialSession.teamID
         }
+        try checkConnection()
         var r = try request(path, query: query)
         var c = URLComponents(url: r.url!, resolvingAgainstBaseURL: false)!
         c.scheme = c.scheme == "https" ? "wss" : "ws"; r.url = c.url
@@ -150,11 +163,14 @@ import Observation
     }
     func socket(_ path: String, query: [String: String] = [:]) async throws -> URLSessionWebSocketTask {
         let r = try await socketRequest(path, query: query)
+        try checkConnection()
         let socket = session.webSocketTask(with: r); socket.resume(); return socket
     }
     func runtimeDisplayRequest(sessionID: String, token: String) async throws -> URLRequest {
+        try checkConnection()
         guard isOfficial, !sessionID.isEmpty, !token.isEmpty else { throw ClientError.invalidResponse }
         let ticket = try await platformCall("/ws-tickets", method: "POST")
+        try checkConnection()
         guard !ticket["ticket"].string.isEmpty else { throw ClientError.invalidResponse }
         var url = URLComponents(string: "https://app.memoh.net")!
         url.scheme = "wss"
@@ -168,6 +184,7 @@ import Observation
     }
     func runtimeDisplaySocket(sessionID: String, token: String) async throws -> URLSessionWebSocketTask {
         let request = try await runtimeDisplayRequest(sessionID: sessionID, token: token)
+        try checkConnection()
         // A live desktop must not inherit the API session's two-minute resource limit.
         let socket = desktopSession.webSocketTask(with: request)
         socket.maximumMessageSize = 64 * 1_024 * 1_024
@@ -175,15 +192,20 @@ import Observation
         return socket
     }
     func streamOperation(_ path: String, method: String, query: [String: String] = [:], body: JSONValue?, onEvent: (JSONValue) -> Void) async throws -> JSONValue {
-        if isDemo { throw ClientError.message("This operation requires a connected Memoh server.".localized) }
+        try checkConnection()
         var request = try request(path, method: method, query: query, body: body)
         request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
         request.timeoutInterval = 1200
         let config = session.configuration
         config.timeoutIntervalForRequest = 1200; config.timeoutIntervalForResource = 1800
         let streamingSession = URLSession(configuration: config, delegate: SafeRedirectDelegate(), delegateQueue: nil)
-        defer { streamingSession.invalidateAndCancel() }
+        // Account removal must also cancel streams while they are waiting for
+        // headers or an event. Other accounts keep their own sessions alive.
+        let streamID = UUID()
+        streamingSessions[streamID] = streamingSession
+        defer { streamingSessions.removeValue(forKey: streamID); streamingSession.invalidateAndCancel() }
         let (bytes, response) = try await streamingSession.bytes(for: request)
+        try checkConnection()
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else { throw ClientError.message("The server rejected the operation. Check your connection and permissions.".localized) }
         var parser = SSEParser()
         var last: JSONValue = .null
@@ -192,16 +214,18 @@ import Observation
         // Parse the bytes so adjacent progress events remain separate frames.
         for try await byte in bytes {
             if let data = parser.consume(byte: byte), let event = try? JSONValue.parse(data) {
+                try checkConnection()
                 last = event; onEvent(event)
+                try checkConnection()
                 if event["type"] == "error" { throw ClientError.message(event.text("message", "detail", "code").nonEmpty ?? "The operation failed.") }
                 if ["done", "completed", "complete"].contains(event["type"].string) { completed = true }
             }
         }
+        try checkConnection()
         guard completed else { throw ClientError.message("The operation stream ended before completion. Refresh its status before retrying.".localized) }
         return last
     }
     func upload(path: String, fileURL: URL, destination: String) async throws -> JSONValue {
-        guard !isDemo else { throw ClientError.message("File uploads require a connected Memoh server.".localized) }
         let access = fileURL.startAccessingSecurityScopedResource(); defer { if access { fileURL.stopAccessingSecurityScopedResource() } }
         let file = try Data(contentsOf: fileURL)
         guard file.count <= 50 * 1_024 * 1_024 else { throw ClientError.message("Choose a file smaller than 50 MB.".localized) }

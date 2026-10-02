@@ -9,3 +9,5 @@ xcuserdata/
 TestResults/
 build-catalyst/
 build-release/
+__pycache__/
+*.py[cod]

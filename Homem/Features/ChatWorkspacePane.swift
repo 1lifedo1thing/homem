@@ -101,10 +101,10 @@ indirect enum WorkspaceDockNode: Codable, Equatable {
     }
     var minimum: CGSize {
         switch self {
-        case .pane: CGSize(width: 300, height: 180)
+        case .pane: CGSize(width: Theme.minimumPaneWidth, height: 180)
         case .split(let horizontal, _, let first, let second):
-            horizontal ? CGSize(width: first.minimum.width + second.minimum.width + 24, height: max(first.minimum.height, second.minimum.height))
-                : CGSize(width: max(first.minimum.width, second.minimum.width), height: first.minimum.height + second.minimum.height + 24)
+            horizontal ? CGSize(width: first.minimum.width + second.minimum.width + Theme.paneGap, height: max(first.minimum.height, second.minimum.height))
+                : CGSize(width: max(first.minimum.width, second.minimum.width), height: first.minimum.height + second.minimum.height + Theme.paneGap)
         }
     }
     func removing(_ id: UUID) -> Self? {
@@ -165,15 +165,15 @@ indirect enum WorkspaceDockNode: Codable, Equatable {
             switch node {
             case .pane(let id): frames[id] = rect
             case .split(let horizontal, let fraction, let first, let second):
-                let available = (horizontal ? rect.width : rect.height) - 24
+                let available = (horizontal ? rect.width : rect.height) - Theme.paneGap
                 let minFirst = horizontal ? first.minimum.width : first.minimum.height
                 let minSecond = horizontal ? second.minimum.width : second.minimum.height
                 let length = min(available - minSecond, max(minFirst, available * fraction))
                 let a = CGRect(x: rect.minX, y: rect.minY, width: horizontal ? length : rect.width, height: horizontal ? rect.height : length)
-                let b = horizontal ? CGRect(x: a.maxX + 24, y: rect.minY, width: available - length, height: rect.height)
-                    : CGRect(x: rect.minX, y: a.maxY + 24, width: rect.width, height: available - length)
-                dividers.append(horizontal ? CGRect(x: a.maxX, y: rect.minY, width: 24, height: rect.height)
-                                : CGRect(x: rect.minX, y: a.maxY, width: rect.width, height: 24))
+                let b = horizontal ? CGRect(x: a.maxX + Theme.paneGap, y: rect.minY, width: available - length, height: rect.height)
+                    : CGRect(x: rect.minX, y: a.maxY + Theme.paneGap, width: rect.width, height: available - length)
+                dividers.append(horizontal ? CGRect(x: a.maxX, y: rect.minY, width: Theme.paneGap, height: rect.height)
+                                : CGRect(x: rect.minX, y: a.maxY, width: rect.width, height: Theme.paneGap))
                 paths.append(path); extents.append(available)
                 visit(first, a, path + [false]); visit(second, b, path + [true])
             }
@@ -185,10 +185,10 @@ indirect enum WorkspaceDockNode: Codable, Equatable {
 
 enum ChatSplitLayout {
     static func fraction(_ value: Double) -> Double { min(0.65, max(0.25, value)) }
-    // Two readable 300-point panes plus the divider, independent of device idiom.
-    static func usesColumns(width: CGFloat) -> Bool { width >= 624 }
+    // Use the actual window width and each platform’s readable pane minimum.
+    static func usesColumns(width: CGFloat) -> Bool { width >= Theme.minimumPaneWidth * 2 + Theme.paneGap }
     static func columnFraction(_ value: Double, available: CGFloat) -> Double {
-        let minimum = min(0.5, 300 / max(available, 1))
+        let minimum = min(0.5, Theme.minimumPaneWidth / max(available, 1))
         return min(1 - minimum, max(minimum, value))
     }
     static func paneHeight(available: CGFloat, fraction: Double) -> CGFloat {
@@ -209,7 +209,7 @@ struct WorkspaceGeometry {
     static func make(size proposed: CGSize, count: Int, arrangement: WorkspaceArrangement,
                      columnFraction: Double = 0.45, rowFraction: Double = 0.45, division: CGRect? = nil, docking: WorkspaceDockNode? = nil, order: [UUID] = []) -> Self {
         let width = max(1, proposed.width), height = max(1, proposed.height)
-        let count = max(1, count), gap: CGFloat = 24
+        let count = max(1, count), gap: CGFloat = Theme.paneGap
         // An active fold takes precedence over a saved arrangement. Keep the
         // preference intact so unfolding restores it without recreating panes.
         if let division, let folded = folded(size: CGSize(width: width, height: height), count: count, division: division) {
@@ -249,7 +249,7 @@ struct WorkspaceGeometry {
         case .automatic, .grid: columns = ChatSplitLayout.usesColumns(width: width) ? 2 : 1
         }
         let rows = (count + columns - 1) / columns
-        let cellWidth = max(min(width, 320), (width - CGFloat(columns - 1) * gap) / CGFloat(columns))
+        let cellWidth = max(min(width, Theme.minimumPaneWidth + 20), (width - CGFloat(columns - 1) * gap) / CGFloat(columns))
         let cellHeight = max(300, (height - CGFloat(rows - 1) * gap) / CGFloat(rows))
         let frames = (0..<count).map { index in
             CGRect(x: CGFloat(index % columns) * (cellWidth + gap), y: CGFloat(index / columns) * (cellHeight + gap), width: cellWidth, height: cellHeight)
@@ -342,12 +342,12 @@ private struct PaneDragHandle: View {
     @GestureState private var active = false
     var body: some View {
         Image(systemName: "line.3.horizontal").foregroundStyle(.secondary)
-            .frame(width: 40, height: 44).contentShape(Rectangle())
+            .frame(width: Theme.controlSize, height: Theme.controlSize).contentShape(Rectangle())
             .gesture(DragGesture(minimumDistance: 6, coordinateSpace: .named("chatSplit"))
                 .updating($active) { _, state, _ in state = true }
                 .onChanged(changed).onEnded { _ in ended() })
             .onChange(of: active) { _, value in if !value { cancelled() } }
-            .accessibilityLabel("Drag pane".localized)
+            .accessibilityLabel("Drag pane".localized).spatialHoverEffect()
     }
 }
 
@@ -378,7 +378,7 @@ private struct WorkspacePaneSurface<Header: View, Content: View>: View {
                 Button { setVisible(true) } label: {
                     Image(systemName: "chevron.compact.down")
                         .font(.system(size: 18, weight: .semibold)).foregroundStyle(.secondary)
-                        .frame(width: 56, height: 24)
+                        .frame(width: 56, height: Theme.paneGap)
                         .background(.regularMaterial, in: Capsule())
                         .frame(width: 64, height: 44, alignment: .top).contentShape(Rectangle())
                 }.buttonStyle(.plain).padding(.top, 4)
@@ -455,7 +455,7 @@ struct WorkspaceCanvas<Primary: View>: View {
                             Label("Chat".localized, systemImage: "bubble.left").font(.subheadline.weight(.medium))
                             Spacer()
                             Text(botName).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                        }.padding(.trailing, 14).frame(height: 44).background(Theme.surface)
+                        }.padding(.trailing, 14).frame(height: Theme.controlSize).background(Theme.surface)
                     } content: {
                         primary()
                     }
@@ -480,9 +480,9 @@ struct WorkspaceCanvas<Primary: View>: View {
                         }
                     }
                     ForEach(Array(layout.dividers.enumerated()), id: \.offset) { index, frame in
-                        let vertical = frame.width == 24
+                        let vertical = frame.width == Theme.paneGap
                         ChatPaneDivider(fraction: dividerBinding(index, vertical: vertical, layout: layout),
-                                        vertical: vertical, available: layout.dividerExtents.indices.contains(index) ? layout.dividerExtents[index] : (vertical ? layout.size.width - 24 : layout.size.height - 24))
+                                        vertical: vertical, available: layout.dividerExtents.indices.contains(index) ? layout.dividerExtents[index] : (vertical ? layout.size.width - Theme.paneGap : layout.size.height - Theme.paneGap))
                             .paneFrame(frame)
                     }
                     if let proposal {
@@ -533,6 +533,8 @@ struct WorkspaceCanvas<Primary: View>: View {
 /// UIKit resets inherited navigation safe-area insets once, at the workspace
 /// boundary. All child panes then lay out in their actual available rectangle.
 private struct PaneSurfaceHost<Content: View>: UIViewControllerRepresentable {
+    @Environment(\.workspaceSceneID) private var workspaceSceneID
+    @Environment(\.defaultMinListRowHeight) private var minimumRowHeight
     @Environment(AppStore.self) private var store
     @Environment(\.appAccent) private var accent
     @Environment(\.scenePhase) private var scenePhase
@@ -541,6 +543,8 @@ private struct PaneSurfaceHost<Content: View>: UIViewControllerRepresentable {
     @ViewBuilder let content: () -> Content
     private var root: some View {
         content().environment(store).environment(\.appAccent, accent).tint(accent)
+            .environment(\.workspaceSceneID, workspaceSceneID)
+            .environment(\.defaultMinListRowHeight, minimumRowHeight)
             .environment(\.scenePhase, scenePhase).environment(\.colorScheme, colorScheme).environment(\.locale, locale)
     }
     func makeUIViewController(context: Context) -> UIHostingController<AnyView> {
@@ -602,24 +606,23 @@ struct ChatWorkspacePane: View {
                     VStack(alignment: .leading, spacing: 1) {
                         Label(tool.title.localized, systemImage: tool.symbol).font(.subheadline.weight(.medium)).lineLimit(1)
                         Text(store.bots.first { $0.id == botID }?.title ?? "Agent".localized).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
-                    }
-                }.accessibilityLabel("Switch pane".localized)
+                    }.frame(minWidth: Theme.controlSize, minHeight: Theme.controlSize)
+                }.accessibilityLabel("Switch pane".localized).spatialHoverEffect()
                 Spacer(minLength: 4)
                 if tool == .desktop { DesktopModeButton(model: desktop) }
                 if tool == .desktop || tool == .terminal {
                     Button {
                         if tool == .desktop { Task { desktop.disconnect(); await desktop.connect() } }
                         else { terminalID = UUID() }
-                    } label: { Image(systemName: "arrow.clockwise").frame(width: 40, height: 44) }
+                    } label: { Image(systemName: "arrow.clockwise").frame(width: Theme.controlSize, height: Theme.controlSize) }
                         .accessibilityLabel((tool == .desktop ? "Reconnect desktop" : "Reconnect terminal").localized)
                 }
-                Button(action: close) { Image(systemName: "xmark").frame(width: 40, height: 44) }.accessibilityLabel("Close pane".localized)
-            }.buttonStyle(.plain).padding(.trailing, 4).frame(height: 44).background(Theme.surface)
+                Button(action: close) { Image(systemName: "xmark").frame(width: Theme.controlSize, height: Theme.controlSize) }.accessibilityLabel("Close pane".localized).spatialHoverEffect()
+            }.buttonStyle(.plain).padding(.trailing, 4).frame(height: Theme.controlSize).background(Theme.surface)
         } content: {
             switch tool {
             case .desktop:
-                if api.isDemo { EmptyState(title: "Desktop unavailable", symbol: tool.symbol, detail: "Connect to a server to use this agent’s desktop.") }
-                else { DesktopContent(model: desktop, embedded: true, onClosePane: close) }
+                DesktopContent(model: desktop, embedded: true, onClosePane: close)
             case .terminal: TerminalScreen(botID: botID, embedded: true).id(terminalID)
             case .files: PaneFiles(botID: botID, path: $pane.directory)
             case .chat: PaneConversationPicker(initialBotID: botID, selection: $pane.conversation)
@@ -629,7 +632,7 @@ struct ChatWorkspacePane: View {
     }
 }
 
-private struct PaneFiles: View {
+struct PaneFiles: View {
     let botID: String
     @Binding var path: String
     @State private var selectedFile: Record?
@@ -645,7 +648,7 @@ private struct PaneFiles: View {
     }
 }
 
-private struct PaneConversationPicker: View {
+struct PaneConversationPicker: View {
     @Environment(AppStore.self) private var store
     let initialBotID: String
     @Binding var selection: ChatDestination?
@@ -693,11 +696,11 @@ struct DesktopModeButton: View {
         Button { model.setViewOnly(!model.viewOnly) } label: {
             Label((model.viewOnly ? "View only" : "Control").localized,
                   systemImage: model.viewOnly ? "eye" : "hand.point.up.left")
-                .font(.caption.weight(.medium)).lineLimit(1).padding(.horizontal, 8).frame(minHeight: 44)
+                .font(.caption.weight(.medium)).lineLimit(1).padding(.horizontal, 8).frame(minHeight: Theme.controlSize)
         }.buttonStyle(.plain)
             .accessibilityLabel("View only".localized)
             .accessibilityValue((model.viewOnly ? "On" : "Off").localized)
-            .accessibilityIdentifier("desktopViewOnly")
+            .accessibilityIdentifier("desktopViewOnly").spatialHoverEffect()
     }
 }
 
@@ -716,13 +719,14 @@ struct ChatPaneDivider: View {
         Capsule().fill(.tertiary)
             .frame(width: vertical ? 4 : 32, height: vertical ? 32 : 4)
             .frame(maxWidth: vertical ? nil : .infinity, maxHeight: vertical ? .infinity : nil)
-            .frame(width: vertical ? 24 : nil, height: vertical ? nil : 24)
+            .frame(width: vertical ? Theme.paneGap : nil, height: vertical ? nil : Theme.paneGap)
             .background(Theme.surface).contentShape(Rectangle())
             .gesture(DragGesture(minimumDistance: 2, coordinateSpace: .named("chatSplit")).onChanged { value in
                 if startFraction == nil { startFraction = clamped(fraction) }
                 let translation = vertical ? value.translation.width : value.translation.height
                 fraction = clamped((startFraction ?? fraction) + translation / max(available, 1))
             }.onEnded { _ in startFraction = nil })
+            .spatialHoverEffect()
             .accessibilityElement().accessibilityLabel("Resize split view".localized)
             .accessibilityValue(Text(clamped(fraction), format: .percent.precision(.fractionLength(0))))
             .accessibilityAdjustableAction { direction in

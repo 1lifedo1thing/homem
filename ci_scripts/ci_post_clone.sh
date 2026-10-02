@@ -14,6 +14,23 @@ if ! grep -q 'hasAlpha: no' <<< "$icon_info" ||
 fi
 echo 'App Store icon preflight passed.'
 
+# visionOS upload validation requires a 2x background rendition. Validate every
+# layer so a successful local asset-catalog compile cannot hide a missing scale.
+python3 - "$repo_dir" <<'PY'
+import json, pathlib, struct, sys
+stack = pathlib.Path(sys.argv[1]) / 'Homem/Resources/Assets.xcassets/AppIconVision.solidimagestack'
+for layer in ('Front', 'Middle', 'Back'):
+    imageset = stack / f'{layer}.solidimagestacklayer/Content.imageset'
+    entries = json.loads((imageset / 'Contents.json').read_text())['images']
+    image = next((item for item in entries if item.get('scale') == '2x' and item.get('filename')), None)
+    if image is None:
+        raise SystemExit(f'error: visionOS {layer} icon layer requires a 2x image.')
+    data = (imageset / image['filename']).read_bytes()
+    if data[:8] != b'\x89PNG\r\n\x1a\n' or struct.unpack('>II', data[16:24]) != (1024, 1024):
+        raise SystemExit(f'error: visionOS {layer} icon must be a 1024x1024 PNG at 2x.')
+print('visionOS layered icon preflight passed.')
+PY
+
 # Apple's processing scans embedded SDKs too. WebRTC references camera APIs even
 # though Homem's desktop viewer only receives video (ITMS-90683).
 for usage_key in NSCameraUsageDescription NSMicrophoneUsageDescription; do

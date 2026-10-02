@@ -39,13 +39,12 @@ struct ChatQueuedMessage: Identifiable {
     init(api: APIClient, path: String) {
         self.api = api; self.path = path
         submissionKey = "chat-queue|\(api.draftScope)|\(path)"
-        if !api.isDemo, let saved = Keychain.read(submissionKey), let data = saved.data(using: .utf8) {
+        if let saved = Keychain.read(submissionKey), let data = saved.data(using: .utf8) {
             submission = try? JSONDecoder().decode(Submission.self, from: data)
         }
     }
     func start() {
         stop()
-        guard !api.isDemo else { return }
         refreshTask = Task { [weak self] in
             while !Task.isCancelled {
                 guard self != nil else { return }
@@ -71,7 +70,7 @@ struct ChatQueuedMessage: Identifiable {
         submission?.text == text.trimmingCharacters(in: .whitespacesAndNewlines) ? submission?.kind : nil
     }
     func refresh() async {
-        guard !api.isDemo, !submitting, busy.isEmpty else { return }
+        guard !submitting, busy.isEmpty else { return }
         refreshVersion += 1
         let version = refreshVersion
         do {

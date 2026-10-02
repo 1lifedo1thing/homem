@@ -3,7 +3,7 @@ import XCTest
 
 /// Run scripts/fixture-server.py before these tests. No production credentials needed.
 @MainActor final class IntegrationTests: XCTestCase {
-    func connectedClient() async throws -> APIClient {
+    func connectedClient(username: String = "fixture") async throws -> APIClient {
         let url = URL(string: "http://127.0.0.1:18765/api")!
         let config = URLSessionConfiguration.ephemeral; config.timeoutIntervalForRequest = 15
         let api = APIClient(baseURL: url, session: URLSession(configuration: config))
@@ -12,7 +12,7 @@ import XCTest
             if ProcessInfo.processInfo.environment["CI_XCODE_CLOUD"] == "TRUE" { throw error }
             throw XCTSkip("Start scripts/fixture-server.py for wire integration tests: \(error.localizedDescription)")
         }
-        let response = try await api.call("/auth/login", method: "POST", body: ["username": "fixture", "password": "fixture-password"])
+        let response = try await api.call("/auth/login", method: "POST", body: ["username": .string(username), "password": "fixture-password"])
         api.token = response["access_token"].string
         return api
     }
@@ -69,6 +69,46 @@ import XCTest
         let result = try await api.streamOperation("/test/stream", method: "POST", body: [:]) { events.append($0) }
         XCTAssertEqual(events.map { $0["type"].string }, ["started", "step", "done"])
         XCTAssertEqual(result["id"], "fixture-install")
+    }
+    func testSignedOutClientCannotStartAnOperationStream() async throws {
+        let api = try await connectedClient()
+        api.invalidate()
+        var events: [JSONValue] = []
+        do {
+            _ = try await api.streamOperation("/test/stream", method: "POST", body: [:]) { events.append($0) }
+            XCTFail("A signed-out account must not start another operation")
+        } catch { XCTAssertTrue(error.localizedDescription.contains("signed out")) }
+        XCTAssertTrue(events.isEmpty)
+    }
+    func testSignOutCancelsAnIdleStreamWithoutDisconnectingAnotherAccount() async throws {
+        let first = try await connectedClient()
+        let second = try await connectedClient(username: "fixture-two")
+        XCTAssertNotEqual(first.token, second.token)
+        defer { first.invalidate(); second.invalidate() }
+        let started = expectation(description: "First account's operation started")
+        let finished = expectation(description: "First account's idle operation stopped")
+        var events: [String] = []
+        let operation = Task {
+            defer { finished.fulfill() }
+            return try await first.streamOperation("/test/slow-stream", method: "POST", body: [:]) {
+                events.append($0["type"].string)
+                if $0["type"] == "started" { started.fulfill() }
+            }
+        }
+        defer { operation.cancel() }
+        await fulfillment(of: [started], timeout: 5)
+        first.invalidate()
+        // The fixture stays silent for three seconds. Cancellation must wake
+        // the client without waiting for its next event or its resource timeout.
+        await fulfillment(of: [finished], timeout: 1)
+        switch await operation.result {
+        case .success: XCTFail("The removed account's operation must not complete")
+        case .failure: break
+        }
+        XCTAssertEqual(events, ["started"])
+        let result = try await second.streamOperation("/test/stream", method: "POST", body: [:]) { _ in }
+        XCTAssertEqual(result["type"], "done")
+        XCTAssertFalse(second.signedOut)
     }
     func testRealWebSocketAdmissionDeltaAndHistoryReconciliation() async throws {
         let api = try await connectedClient()

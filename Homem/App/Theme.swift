@@ -3,8 +3,30 @@ import ImageIO
 import WebKit
 
 enum Theme {
+    #if os(visionOS)
+    // Let the system's window glass respond to the room and accessibility settings.
+    static let canvas = Color.clear
+    static let surface = Color.primary.opacity(0.06)
+    static let groupedCanvas = Color.clear
+    static let groupedSurface = surface
+    static let controlSize: CGFloat = 60
+    static let paneGap: CGFloat = 44
+    static let minimumPaneWidth: CGFloat = 380
+    static let onboardingTitle = "Memoh, in your space."
+    #else
+    static let controlSize: CGFloat = 44
+    static let paneGap: CGFloat = 24
+    static let minimumPaneWidth: CGFloat = 300
+    #if targetEnvironment(macCatalyst)
+    static let onboardingTitle = "Memoh, on your Mac."
+    #else
+    static let onboardingTitle = "Memoh, on your iPhone."
+    #endif
     static let canvas = Color(uiColor: .systemBackground)
     static let surface = Color(uiColor: .secondarySystemBackground)
+    static let groupedCanvas = Color(uiColor: .systemGroupedBackground)
+    static let groupedSurface = Color(uiColor: .secondarySystemGroupedBackground)
+    #endif
     static let separator = Color(uiColor: .separator).opacity(0.35)
     static let cornerRadius: CGFloat = 16
     static let gutter: CGFloat = 20
@@ -237,9 +259,7 @@ struct EmptyState: View {
     var body: some View { ContentUnavailableView(title.localized, systemImage: symbol, description: Text(detail.localized)) }
 }
 
-struct DemoBadge: View {
-    var body: some View { Label("Demo workspace".localized, systemImage: "sparkles").font(.caption.weight(.medium)).foregroundStyle(.secondary) }
-}
+
 
 extension NavigationLink where Label == SwiftUI.Label<Text, Image> {
     init(_ title: String, systemImage: String, @ViewBuilder destination: () -> Destination) {
@@ -254,5 +274,53 @@ extension EnvironmentValues {
     var appAccent: Color {
         get { self[AppAccentKey.self] }
         set { self[AppAccentKey.self] = newValue }
+    }
+}
+
+/// Custom controls need a visible gaze target on visionOS.
+extension View {
+    /// Keep login fields and actions easy to distinguish with eye input.
+    @ViewBuilder func signInField() -> some View {
+        #if os(visionOS)
+        self.textFieldStyle(.roundedBorder).controlSize(.extraLarge)
+            .padding(.vertical, 8)
+        #else
+        self.padding(16).background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+        #endif
+    }
+    @ViewBuilder func signInActionLabel(fullWidth: Bool = true) -> some View {
+        #if os(visionOS)
+        self.frame(minWidth: 60, maxWidth: fullWidth ? .infinity : nil, minHeight: 60)
+        #else
+        self
+        #endif
+    }
+    @ViewBuilder func signInSecondaryAction() -> some View {
+        #if os(visionOS)
+        self.buttonStyle(.bordered).controlSize(.extraLarge).font(.body).tint(.white.opacity(0.12)).foregroundStyle(.primary)
+        #else
+        self
+        #endif
+    }
+    @ViewBuilder func signInPrimaryAction() -> some View {
+        #if os(visionOS)
+        self.buttonStyle(.borderedProminent).controlSize(.extraLarge)
+        #else
+        self.buttonStyle(.borderedProminent).controlSize(.large)
+        #endif
+    }
+    @ViewBuilder func dismissKeyboardOnScroll() -> some View {
+        #if os(visionOS)
+        self
+        #else
+        self.scrollDismissesKeyboard(.interactively)
+        #endif
+    }
+    @ViewBuilder func spatialHoverEffect() -> some View {
+        #if os(visionOS)
+        self.hoverEffect(.highlight)
+        #else
+        self
+        #endif
     }
 }

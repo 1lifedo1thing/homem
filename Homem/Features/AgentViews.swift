@@ -30,7 +30,6 @@ struct AgentsView: View {
                             .modifier(DetailSurface())
                     }.buttonStyle(.plain).accessibilityIdentifier("createAgent")
                 }
-                if store.isDemo { DemoBadge() }
             }.padding(22).frame(maxWidth: 1100).frame(maxWidth: .infinity)
         }.background(Theme.canvas).navigationTitle("Agents".localized)
             .searchable(text: $search, prompt: "Find an agent")
@@ -73,7 +72,7 @@ struct AgentCard: View {
             Divider().padding(.horizontal, Theme.gutter)
             HStack(spacing: 4) {
                 ForEach([WorkspaceTool.files, .terminal, .desktop]) { tool in
-                    NavigationLink { WorkspaceToolDestination(tool: tool, botID: bot.id) } label: {
+                    WorkspaceToolLink(tool: tool, botID: bot.id) {
                         VStack(spacing: 5) {
                             Image(systemName: tool.symbol).font(.system(size: 17))
                             Text(tool.title.localized).font(.caption.weight(.medium)).lineLimit(1)
@@ -151,7 +150,7 @@ struct AgentDetailView: View {
             }
             if let error { ErrorBanner(message: error) }
         }.navigationTitle(current.title).navigationBarTitleDisplayMode(.inline)
-            .navigationDestination(item: $selectedTool) { tool in WorkspaceToolDestination(tool: tool, botID: bot.id) }
+            .modifier(WorkspaceToolPresentation(selection: $selectedTool, botID: bot.id))
             .toolbar { if manage { Button("Edit".localized) { edit = true } } }
             .sheet(isPresented: $edit, onDismiss: { Task { await store.reload() } }) { if let op = SchemaCatalog.shared.operation("/bots/{id}", "PUT") { SchemaEditor(title: "Edit agent", path: base, operation: op, initial: current.value) } }
             .alert(AppLocalization.format("Delete %@?", current.title), isPresented: $delete) { Button("Delete agent".localized, role: .destructive) { Task { do { _ = try await store.api?.call(base, method: "DELETE"); await store.reload(); dismiss() } catch { self.error = error.localizedDescription } } } } message: { Text("This permanently removes the agent and its associated data. Export a backup first if needed.".localized) }

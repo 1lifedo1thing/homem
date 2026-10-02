@@ -1,17 +1,29 @@
 import SwiftUI
+#if !os(visionOS)
 import WebRTC
+#endif
 import Observation
 
 struct DesktopScreen: View {
     @Environment(AppStore.self) private var store
     var botID: String
+    var initialViewOnly = false
+    private func desktopModel(_ api: APIClient) -> DesktopModel {
+        let model = DesktopModel(api: api, botID: botID)
+        model.setViewOnly(initialViewOnly)
+        return model
+    }
     var body: some View {
-        if let api = store.api, !api.isDemo { DesktopContent(model: DesktopModel(api: api, botID: botID)).navigationTitle("Desktop".localized).navigationBarTitleDisplayMode(.inline) }
+        if let api = store.api { DesktopContent(model: desktopModel(api)).navigationTitle("Desktop".localized).navigationBarTitleDisplayMode(.inline) }
         else { EmptyState(title: "Desktop unavailable", symbol: "desktopcomputer", detail: "Connect to a server to use this agent’s desktop.").navigationTitle("Desktop".localized) }
     }
 }
 
 struct DesktopContent: View {
+    #if os(visionOS)
+    @Environment(\.openWindow) private var openWindow
+    @Environment(AppStore.self) private var store
+    #endif
     @State var model: DesktopModel
     var embedded = false
     var isFullscreen = false
@@ -22,7 +34,7 @@ struct DesktopContent: View {
     @State private var dragging = false
     @State private var pointer = CGPoint.zero
     @State private var zoomResetID = 0
-    @ScaledMetric(relativeTo: .body) private var controlRailWidth: CGFloat = 56
+    @ScaledMetric(relativeTo: .body) private var controlRailWidth: CGFloat = Theme.controlSize + 12
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     private var showsPiPChoice: Bool { model.pictureInPicture.isActive && !model.pictureInPicture.duplicatesInline }
@@ -53,10 +65,10 @@ struct DesktopContent: View {
                                                            railWidth: controlRailWidth)
                 desktopSurface
                     .padding(.trailing, side ? controlRailWidth : 0)
-                    .padding(.bottom, side ? 0 : 44)
+                    .padding(.bottom, side ? 0 : Theme.controlSize)
                     .overlay(alignment: side ? .trailing : .bottom) {
                         controls(vertical: side)
-                            .frame(width: side ? controlRailWidth : nil, height: side ? nil : 44)
+                            .frame(width: side ? controlRailWidth : nil, height: side ? nil : Theme.controlSize)
                             .frame(maxHeight: side ? .infinity : nil)
                     }
                     .allowsHitTesting(!showsPiPChoice)
@@ -150,7 +162,7 @@ struct DesktopContent: View {
         return layout {
             Button { keyboardVisible.toggle() } label: {
                 Image(systemName: keyboardVisible ? "keyboard.chevron.compact.down" : "keyboard")
-                    .frame(width: 44, height: 44)
+                    .frame(width: Theme.controlSize, height: Theme.controlSize)
             }
             .accessibilityLabel((keyboardVisible ? "Hide keyboard" : "Show keyboard").localized)
             .disabled(model.viewOnly || model.status != "Connected")
@@ -180,7 +192,7 @@ struct DesktopContent: View {
                             ForEach(1...12, id: \.self) { number in
                                 Button("F\(number)") { sendKey(0xffbd + UInt32(number)) }
                             }
-                        } label: { Image(systemName: "ellipsis").frame(width: 44, height: 44) }
+                        } label: { Image(systemName: "ellipsis").frame(width: Theme.controlSize, height: Theme.controlSize) }
                         .accessibilityLabel("More keys".localized)
                     }
                 }.disabled(model.status != "Connected")
@@ -194,7 +206,7 @@ struct DesktopContent: View {
                     .disabled(model.viewOnly || model.status != "Connected")
                 Button("Fit to screen".localized, systemImage: "arrow.down.right.and.arrow.up.left") { zoomResetID += 1 }
                 Button("Reconnect desktop".localized) { Task { model.disconnect(); await model.connect() } }
-            } label: { Image(systemName: "computermouse").frame(width: 44, height: 44) }
+            } label: { Image(systemName: "computermouse").frame(width: Theme.controlSize, height: Theme.controlSize) }
             .accessibilityLabel("Desktop controls".localized)
             if model.pictureInPicture.isSupported {
                 Button {
@@ -202,28 +214,36 @@ struct DesktopContent: View {
                     if model.pictureInPicture.keepsConnectionAlive { model.pictureInPicture.stop() }
                     else { model.pictureInPicture.start() }
                 } label: {
-                    Image(systemName: model.pictureInPicture.keepsConnectionAlive ? "pip.exit" : "pip.enter").frame(width: 44, height: 44)
+                    Image(systemName: model.pictureInPicture.keepsConnectionAlive ? "pip.exit" : "pip.enter").frame(width: Theme.controlSize, height: Theme.controlSize)
                 }
                 .accessibilityLabel((model.pictureInPicture.keepsConnectionAlive ? "Close Picture in Picture" : "Picture in Picture").localized)
                 .accessibilityIdentifier("desktopPictureInPicture")
                 .disabled(!model.hasVideo && !model.pictureInPicture.keepsConnectionAlive)
             }
+            #if os(visionOS)
+            Button {
+                guard let route = store.workspaceWindowRoute(botID: model.botID, tool: .desktop, viewOnly: model.viewOnly) else { return }
+                openWindow(id: "workspace-tool", value: route)
+            } label: { Image(systemName: "macwindow.badge.plus").frame(width: Theme.controlSize, height: Theme.controlSize) }
+                .accessibilityLabel("Open in new window".localized)
+            #else
             if !isFullscreen {
                 Button { keyboardVisible = false; modifiers.removeAll(); releasePointer(); fullscreen = true } label: {
-                    Image(systemName: "arrow.up.left.and.arrow.down.right").frame(width: 44, height: 44)
+                    Image(systemName: "arrow.up.left.and.arrow.down.right").frame(width: Theme.controlSize, height: Theme.controlSize)
                 }.accessibilityLabel("Fullscreen".localized)
             }
-        }.buttonStyle(.plain).padding(vertical ? .vertical : .horizontal, 6).background(.bar)
+            #endif
+        }.buttonStyle(.borderless).padding(vertical ? .vertical : .horizontal, 6).background(.bar)
     }
     private func keyButton(_ title: String, _ code: UInt32, label: String? = nil) -> some View {
-        Button { sendKey(code) } label: { Text(title).font(.system(.caption, design: .monospaced)).frame(minWidth: 40, minHeight: 44) }
+        Button { sendKey(code) } label: { Text(title).font(.system(.caption, design: .monospaced)).frame(minWidth: Theme.controlSize, minHeight: Theme.controlSize) }
             .accessibilityLabel((label ?? title).localized)
     }
     private func modifierButton(_ title: String, _ code: UInt32) -> some View {
         Button {
             if modifiers.contains(code) { modifiers.remove(code) } else { modifiers.insert(code) }
         } label: {
-            Text(title).font(.system(.caption, design: .monospaced)).frame(minWidth: 40, minHeight: 44)
+            Text(title).font(.system(.caption, design: .monospaced)).frame(minWidth: Theme.controlSize, minHeight: Theme.controlSize)
                 .background(modifiers.contains(code) ? Color.accentColor.opacity(0.18) : .clear, in: RoundedRectangle(cornerRadius: 8))
         }.accessibilityValue((modifiers.contains(code) ? "On" : "Off").localized)
     }
@@ -266,7 +286,9 @@ final class RemoteKeyboardView: UITextView, UITextViewDelegate {
         smartQuotesType = .no; smartDashesType = .no; smartInsertDeleteType = .no
         textContentType = nil; backgroundColor = .clear; textColor = .clear; tintColor = .clear
         isScrollEnabled = false
+        #if !os(visionOS)
         inputAssistantItem.leadingBarButtonGroups = []; inputAssistantItem.trailingBarButtonGroups = []
+        #endif
         accessibilityLabel = "Type on remote desktop".localized
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }

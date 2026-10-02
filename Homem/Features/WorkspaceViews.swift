@@ -54,8 +54,11 @@ struct WorkspaceView: View {
         }.background(Theme.canvas)
             .navigationTitle("Workspace".localized).navigationBarTitleDisplayMode(.inline)
             .task { await load() }.refreshable { await load() }
-            .navigationDestination(item: $selectedTool) { tool in WorkspaceToolDestination(tool: tool, botID: botID) }
+            .modifier(WorkspaceToolPresentation(selection: $selectedTool, botID: botID))
             .toolbar {
+                #if os(visionOS) || targetEnvironment(macCatalyst)
+                ToolbarItem(placement: .topBarTrailing) { SpatialWindowMenu(botID: botID) }
+                #endif
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
                         if missing {
@@ -110,6 +113,53 @@ enum WorkspaceTool: String, Identifiable {
     var id: String { rawValue }
     var title: String { switch self { case .files: "Files"; case .terminal: "Terminal"; case .desktop: "Desktop" } }
     var symbol: String { switch self { case .files: "folder"; case .terminal: "terminal"; case .desktop: "desktopcomputer" } }
+}
+
+/// Reuse each tool's destination while letting visionOS open a real scene.
+struct WorkspaceToolPresentation: ViewModifier {
+    @Binding var selection: WorkspaceTool?
+    let botID: String
+    #if os(visionOS)
+    @Environment(AppStore.self) private var store
+    @Environment(\.openWindow) private var openWindow
+    #endif
+    func body(content: Content) -> some View {
+        #if os(visionOS)
+        content.onChange(of: selection) { _, tool in
+            guard let tool, let route = store.workspaceWindowRoute(botID: botID, tool: tool.windowTool) else { return }
+            openWindow(id: "workspace-tool", value: route)
+            selection = nil
+        }
+        #else
+        content.navigationDestination(item: $selection) { tool in WorkspaceToolDestination(tool: tool, botID: botID) }
+        #endif
+    }
+}
+
+struct WorkspaceToolLink<Label: View>: View {
+    let tool: WorkspaceTool
+    let botID: String
+    @ViewBuilder let label: () -> Label
+    #if os(visionOS)
+    @Environment(AppStore.self) private var store
+    @Environment(\.openWindow) private var openWindow
+    #endif
+    var body: some View {
+        #if os(visionOS)
+        Button {
+            guard let route = store.workspaceWindowRoute(botID: botID, tool: tool.windowTool) else { return }
+            openWindow(id: "workspace-tool", value: route)
+        } label: { label() }
+        #else
+        NavigationLink { WorkspaceToolDestination(tool: tool, botID: botID) } label: { label() }
+        #endif
+    }
+}
+
+extension WorkspaceTool {
+    var windowTool: ChatWorkspaceTool {
+        switch self { case .files: .files; case .terminal: .terminal; case .desktop: .desktop }
+    }
 }
 
 struct WorkspaceShortcuts: View {
@@ -296,7 +346,7 @@ struct FileEditorView: View {
     func export() async {
         guard let api = store.api else { return }
         do {
-            let data = api.isDemo ? Data(text.utf8) : try await api.perform(api.request(base + "/download", query: ["path": path]))
+            let data = try await api.perform(api.request(base + "/download", query: ["path": path]))
             let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString); try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
             let url = folder.appendingPathComponent((path as NSString).lastPathComponent); try data.write(to: url); download = url
         } catch { self.error = error.localizedDescription }
@@ -349,14 +399,13 @@ struct BackupView: View {
     func export() async {
         guard let api = store.api else { return }; busy = true; defer { busy = false }
         do {
-            guard !api.isDemo else { throw ClientError.message("Connect a server to export a real backup.".localized) }
             let data = try await api.perform(api.request("/bots/\(botID.pathComponent)/backup/export", method: "POST", body: ["passphrase": .string(passphrase)]))
             let url = FileManager.default.temporaryDirectory.appendingPathComponent("memoh-\(botID)-\(UUID().uuidString.prefix(8)).zip")
             try data.write(to: url, options: [.atomic, .completeFileProtection]); exported = url; error = nil
         } catch { self.error = error.localizedDescription }
     }
     func importBackup(_ url: URL) async throws {
-        guard let api = store.api, !api.isDemo else { throw ClientError.message("Connect a server to import a backup.".localized) }
+        guard let api = store.api else { throw ClientError.message("Connect a server to import a backup.".localized) }
         busy = true; defer { busy = false }
         let access = url.startAccessingSecurityScopedResource(); defer { if access { url.stopAccessingSecurityScopedResource() } }
         let data = try Data(contentsOf: url)

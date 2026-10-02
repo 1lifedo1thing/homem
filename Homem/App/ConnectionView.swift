@@ -5,7 +5,6 @@ struct ConnectionView: View {
     var onCancel: (() -> Void)?
     @Environment(\.dismiss) private var dismiss
     @State private var showAccounts = false
-    @Environment(\.appAccent) private var accent
     @Environment(AppStore.self) private var store
     @State private var address: String = {
         let saved = UserDefaults.standard.string(forKey: "serverURL") ?? ""
@@ -20,74 +19,149 @@ struct ConnectionView: View {
     @State private var busy = false
     @State private var connectionTask: Task<Void, Never>?
     @State private var error: String?
+    private enum Field { case address, username, password, token }
+    @FocusState private var focusedField: Field?
     var body: some View {
         Group {
             if isAddingAccount && showOfficialSignIn {
                 OfficialSignInView(onCancel: { showOfficialSignIn = false })
             } else {
+                #if os(visionOS)
+                connectionForm.frame(width: isAddingAccount ? 560 : nil, height: isAddingAccount ? 660 : nil)
+                #else
                 connectionForm.frame(idealWidth: isAddingAccount ? 480 : nil,
                                      idealHeight: isAddingAccount ? (showCustomServer ? 620 : 260) : nil)
+                #endif
             }
         }.onDisappear { connectionTask?.cancel() }
     }
     private var connectionForm: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
+                VStack(spacing: 32) {
                     if !isAddingAccount {
-                    HStack { Image(systemName: "house.and.flag.fill").font(.title2).foregroundStyle(accent); Text("homem").font(.title2.weight(.bold)); Spacer() }
-                        .padding(.top, 16)
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Memoh, on your iPhone.".localized).font(.system(.largeTitle, design: .rounded, weight: .bold))
-                        Text("Chats, files, and agents in one place.".localized).foregroundStyle(.secondary).lineSpacing(3)
+                        VStack(spacing: 20) {
+                            Image("WelcomeMark").resizable().scaledToFit()
+                                .frame(width: 88, height: 88)
+                                .clipShape(RoundedRectangle(cornerRadius: 22))
+                                .accessibilityHidden(true)
+                            VStack(spacing: 12) {
+                                Text(Theme.onboardingTitle.localized).font(.system(.largeTitle, design: .rounded, weight: .bold))
+                                Text("Chats, files, and agents in one place.".localized)
+                                    .foregroundStyle(.secondary).lineSpacing(3)
+                            }.multilineTextAlignment(.center)
+                        }.padding(.top, 32).padding(.bottom, 8)
                     }
-                    }
-                    VStack(alignment: .leading, spacing: 15) {
-                        Label("Official Memoh".localized, systemImage: "checkmark.seal.fill").font(.caption.weight(.semibold)).foregroundStyle(accent)
-                        if !isAddingAccount {
-                        Text("Continue with your Memoh account.".localized).font(.headline)
-                        Text("Use your email — no password needed.".localized).font(.subheadline).foregroundStyle(.secondary)
-                        }
+                    VStack(spacing: 16) {
                         Button { showOfficialSignIn = true } label: {
-                            HStack { Spacer(); Text("Sign in to Memoh".localized).fontWeight(.semibold); Image(systemName: "arrow.right"); Spacer() }.padding(.vertical, 8)
-                        }.buttonStyle(.borderedProminent).controlSize(.large).accessibilityIdentifier("officialSignIn")
+                            Label("Sign in to Memoh".localized, systemImage: "arrow.right")
+                                .fontWeight(.semibold).frame(maxWidth: .infinity).padding(.vertical, 8).signInActionLabel()
+                        }.signInPrimaryAction().disabled(busy).accessibilityIdentifier("officialSignIn")
+                        Text("Use your email — no password needed.".localized).font(.subheadline).foregroundStyle(.secondary)
                     }
+                    #if os(visionOS)
+                    Button { showCustomServer = true } label: {
+                        Label("Use another server".localized, systemImage: "server.rack").signInActionLabel()
+                    }.signInSecondaryAction().accessibilityIdentifier("customServerSignIn")
+                        .navigationDestination(isPresented: $showCustomServer) { customServerScreen }
+                    #else
                     DisclosureGroup("Use another server".localized, isExpanded: $showCustomServer) {
-                      VStack(alignment: .leading, spacing: 15) {
-                        Text("Custom server".localized).font(.caption.weight(.semibold)).tracking(1.5).foregroundStyle(.secondary)
-                        TextField("https://memoh.example.com/api", text: $address).textContentType(.URL).keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled().accessibilityIdentifier("serverAddress")
-                            .padding(14).background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
-                        Text("Use /api for the web server, or the direct backend address (usually port 8080).").font(.caption).foregroundStyle(.secondary)
-                        if address.lowercased().hasPrefix("http://") { Label("This connection uses unencrypted HTTP.".localized, systemImage: "lock.open").font(.caption).foregroundStyle(.orange) }
-                        if useToken {
-                            SecureField("Access token".localized, text: $token).textInputAutocapitalization(.never).autocorrectionDisabled().textFieldStyle(.roundedBorder)
-                        } else {
-                            TextField("Username".localized, text: $username).textContentType(.username).textInputAutocapitalization(.never).autocorrectionDisabled().textFieldStyle(.roundedBorder)
-                            SecureField("Password".localized, text: $password).textContentType(.password).textFieldStyle(.roundedBorder)
-                        }
-                        Button(useToken ? "Use username and password".localized : "Use an access token".localized) { useToken.toggle() }.font(.caption)
-                        if let error { ErrorBanner(message: error) }
-                        Button { connectionTask = Task { await connect() } } label: {
-                            HStack { Spacer(); if busy { ProgressView().tint(.white) }; Text(busy ? "Connecting…".localized : "Connect to Memoh".localized).fontWeight(.semibold); if !busy { Image(systemName: "arrow.right") }; Spacer() }.padding(.vertical, 8)
-                        }.buttonStyle(.borderedProminent).controlSize(.large).disabled(busy || address.isEmpty || (useToken ? token.isEmpty : username.isEmpty || password.isEmpty))
-                            .accessibilityIdentifier("connectServer")
-                      }.padding(.top, 16)
+                        customServerForm.padding(.top, 16)
                     }
-                    if !isAddingAccount {
-                    if !store.savedAccounts.isEmpty { Button("Accounts".localized) { showAccounts = true } }
-                    Button { store.enterDemo() } label: { HStack { Spacer(); Text("Explore the demo".localized); Image(systemName: "arrow.up.right"); Spacer() } }.accessibilityIdentifier("exploreDemo")
-                    }
-                }.padding(24).frame(maxWidth: 520)
+                    #endif
+                }.padding(32).padding(.bottom, 24).frame(maxWidth: 520)
                     .frame(maxWidth: .infinity)
-            }.scrollDismissesKeyboard(.interactively).background(Color(.systemGroupedBackground)).navigationTitle(isAddingAccount ? "Add account".localized : "").navigationBarTitleDisplayMode(.inline)
-                .toolbar { if isAddingAccount { ToolbarItem(placement: .cancellationAction) { Button("Cancel".localized) { connectionTask?.cancel(); if let onCancel { onCancel() } else { dismiss() } } } } }
+            }.dismissKeyboardOnScroll().background(Theme.groupedCanvas).navigationTitle(isAddingAccount ? "Add account".localized : "").navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    if isAddingAccount && showsRootAccountActions {
+                        ToolbarItem(placement: .cancellationAction) {
+                            cancelButton
+                        }
+                    } else if !isAddingAccount && showsRootAccountActions && !store.savedAccounts.isEmpty {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button { showAccounts = true } label: { Text("Accounts".localized).signInActionLabel(fullWidth: false) }.disabled(busy)
+                        }
+                    }
+                }
                 .sheet(isPresented: $showAccounts) { AccountsView() }
                 .onChange(of: store.connectionID) { _, _ in if isAddingAccount { dismiss() } }
                 .sheet(isPresented: Binding(get: { !isAddingAccount && showOfficialSignIn }, set: { showOfficialSignIn = $0 })) { OfficialSignInView() }
         }.onDisappear { connectionTask?.cancel() }
     }
+    private var showsRootAccountActions: Bool {
+        #if os(visionOS)
+        !showCustomServer
+        #else
+        true
+        #endif
+    }
+    private var customServerScreen: some View {
+        ScrollView {
+            customServerForm.padding(32).frame(maxWidth: 560).frame(maxWidth: .infinity)
+        }.navigationTitle("Custom server".localized).navigationBarTitleDisplayMode(.inline)
+            .background(Theme.canvas)
+            .toolbar {
+                if isAddingAccount {
+                    // Keep Cancel away from the system's Back target.
+                    ToolbarItem(placement: .topBarTrailing) { cancelButton }
+                }
+            }
+            .onDisappear { connectionTask?.cancel() }
+    }
+    private var cancelButton: some View {
+        Button {
+            connectionTask?.cancel()
+            if let onCancel { onCancel() } else { dismiss() }
+        } label: { Text("Cancel".localized).signInActionLabel(fullWidth: false) }
+    }
+    private var customServerForm: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            Text("Custom server".localized).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            TextField("https://memoh.example.com/api", text: $address)
+                .textContentType(.URL).keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
+                .focused($focusedField, equals: .address).signInField().accessibilityIdentifier("serverAddress")
+            Text("Use /api for the web server, or the direct backend address (usually port 8080).")
+                .font(.caption).foregroundStyle(.secondary)
+            if address.lowercased().hasPrefix("http://") {
+                Label("This connection uses unencrypted HTTP.".localized, systemImage: "lock.open").font(.caption).foregroundStyle(.orange)
+            }
+            if useToken {
+                SecureField("Access token".localized, text: $token)
+                    .textInputAutocapitalization(.never).autocorrectionDisabled().focused($focusedField, equals: .token)
+                    .signInField().accessibilityIdentifier("serverToken")
+            } else {
+                TextField("Username".localized, text: $username)
+                    .textContentType(.username).textInputAutocapitalization(.never).autocorrectionDisabled()
+                    .focused($focusedField, equals: .username).signInField().accessibilityIdentifier("serverUsername")
+                SecureField("Password".localized, text: $password).textContentType(.password)
+                    .focused($focusedField, equals: .password).signInField().accessibilityIdentifier("serverPassword")
+            }
+            Button { focusedField = nil; useToken.toggle(); error = nil } label: {
+                Text(useToken ? "Use username and password".localized : "Use an access token".localized).signInActionLabel()
+            }.font(.caption).signInSecondaryAction().accessibilityIdentifier("serverLoginMethod")
+            if let error { ErrorBanner(message: error) }
+            Button(action: startConnection) {
+                HStack {
+                    Spacer()
+                    if busy { ProgressView().tint(.white) }
+                    Text(busy ? "Connecting…".localized : "Connect to Memoh".localized).fontWeight(.semibold)
+                    if !busy { Image(systemName: "arrow.right") }
+                    Spacer()
+                }.padding(.vertical, 8).signInActionLabel()
+            }.signInPrimaryAction()
+                .disabled(address.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (useToken ? token.isEmpty : username.isEmpty || password.isEmpty))
+                .accessibilityIdentifier("connectServer")
+        }.disabled(busy)
+    }
+    private func startConnection() {
+        // Lock synchronously, before creating the task, so rapid pinches cannot
+        // launch two account connections while the first task is being scheduled.
+        guard !busy else { return }
+        busy = true; error = nil; focusedField = nil
+        connectionTask = Task { await connect() }
+    }
     private func connect() async {
-        busy = true; error = nil; defer { busy = false }
+        defer { busy = false }
         do { try await store.connect(address: address, username: username, password: password, accessToken: useToken ? token : ""); password = ""; token = "" }
         catch { if !Task.isCancelled { self.error = error.localizedDescription } }
     }

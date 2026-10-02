@@ -27,7 +27,7 @@ final class HomemUITests: XCTestCase {
         capture(app, "Connected workspace settings")
     }
     @MainActor func testWorkspaceToolbarAndAddAccountCanBeCancelled() throws {
-        let app = XCUIApplication(); app.launchArguments = ["--demo"]; app.launch()
+        let app = XCUIApplication(); app.launchFixture()
         let workspace = app.buttons["workspacePicker"]
         XCTAssertTrue(workspace.waitForExistence(timeout: 10))
         workspace.tap()
@@ -72,9 +72,9 @@ final class HomemUITests: XCTestCase {
         let app = XCUIApplication(); app.launchArguments = ["--ui-onboarding"]; app.launch()
         XCTAssertTrue(app.staticTexts["Memoh, on your iPhone."].waitForExistence(timeout: 10))
         capture(app, "Onboarding")
-        let demo = app.buttons["exploreDemo"]
-        if !demo.isHittable { app.swipeUp() }
-        demo.tap()
+        XCTAssertFalse(app.buttons["exploreDemo"].exists)
+        app.resetFixture()
+        app.signInToFixture()
         XCTAssertTrue(app.buttons["conversation_welcome"].waitForExistence(timeout: 5))
         capture(app, "Conversations")
         selectTab("Agents", in: app)
@@ -87,7 +87,7 @@ final class HomemUITests: XCTestCase {
         capture(app, "Schedules")
     }
     @MainActor func testNewChatComposerAndKeyboardDismissal() throws {
-        let app = XCUIApplication(); app.launchArguments = ["--demo"]; app.launch()
+        let app = XCUIApplication(); app.launchFixture()
         XCTAssertTrue(app.buttons["New conversation"].waitForExistence(timeout: 10))
         app.buttons["New conversation"].tap()
         let message = app.textFields["newChatMessage"]
@@ -112,7 +112,7 @@ final class HomemUITests: XCTestCase {
         let composer = app.textFields["messageComposer"]
         XCTAssertTrue(composer.waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["Plan a calm afternoon"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "This is a local demo reply.")).firstMatch.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Verified native WebSocket response.")).firstMatch.waitForExistence(timeout: 5))
         composer.tap(); composer.typeText("A follow-up")
         XCTAssertTrue(app.buttons["hideChatKeyboard"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["Done"].exists)
@@ -121,7 +121,7 @@ final class HomemUITests: XCTestCase {
         XCTAssertFalse(app.keyboards.firstMatch.exists)
     }
     @MainActor func testDeleteAlertNamesConversationAndCancelPreservesIt() throws {
-        let app = XCUIApplication(); app.launchArguments = ["--demo"]; app.launch()
+        let app = XCUIApplication(); app.launchFixture()
         let conversation = app.buttons["conversation_research"]
         XCTAssertTrue(conversation.waitForExistence(timeout: 10))
         conversation.swipeLeft()
@@ -134,7 +134,7 @@ final class HomemUITests: XCTestCase {
         XCTAssertTrue(conversation.exists)
     }
     @MainActor func testThemePreferencesPersist() throws {
-        let app = XCUIApplication(); app.launchArguments = ["--demo"]; app.launch()
+        let app = XCUIApplication(); app.launchFixture()
         selectTab("Settings", in: app)
         app.swipeUp()
         let appearance = app.buttons["appearancePicker"]
@@ -159,8 +159,8 @@ final class HomemUITests: XCTestCase {
     @MainActor func testJapaneseLocalization() throws { try localizedFlow("ja", tabs: ["チャット", "エージェント", "ライブラリ", "設定"], files: "ファイル", desktop: "デスクトップ", newChat: "新しいチャット", signIn: "Memohにログイン", email: "メールアドレス") }
     @MainActor private func localizedFlow(_ language: String, tabs: [String], files: String, desktop: String, newChat: String, signIn: String, email: String) throws {
         let app = XCUIApplication()
-        app.launchArguments = ["--demo", "-AppleLanguages", "(\(language))", "-AppleLocale", language]
-        app.launch()
+        app.launchArguments = ["-AppleLanguages", "(\(language))", "-AppleLocale", language]
+        app.launchFixture()
         XCTAssertTrue(app.buttons["conversation_welcome"].waitForExistence(timeout: 10))
         selectTab(tabs[1], in: app)
         app.staticTexts["Atlas"].firstMatch.tap()
@@ -186,7 +186,7 @@ final class HomemUITests: XCTestCase {
         capture(app, "\(language) email sign-in")
     }
     @MainActor func testCompactToolActivity() throws {
-        let app = XCUIApplication(); app.launchArguments = ["--demo", "--ui-tool-activity", "-AppleLanguages", "(en)"]; app.launch()
+        let app = XCUIApplication(); app.launchArguments = ["-AppleLanguages", "(en)"]; app.launchFixture(scenario: "tools")
         app.buttons["conversation_welcome"].tap()
         let activity = app.buttons["toolActivity"]
         XCTAssertTrue(activity.waitForExistence(timeout: 5))
@@ -205,8 +205,8 @@ final class HomemUITests: XCTestCase {
     @MainActor private func capture(_ app: XCUIApplication, _ name: String) {
         let attachment = XCTAttachment(screenshot: app.screenshot()); attachment.name = name; attachment.lifetime = .keepAlways; add(attachment)
     }
-    @MainActor func testDemoConversationAndWorkspace() throws {
-        let app = XCUIApplication(); app.launchArguments = ["--demo"]; app.launch()
+    @MainActor func testConnectedConversationAndWorkspace() throws {
+        let app = XCUIApplication(); app.launchFixture()
         XCTAssertTrue(app.buttons["conversation_welcome"].waitForExistence(timeout: 10))
         app.buttons["conversation_welcome"].tap()
         let input = app.textFields["messageComposer"]
@@ -227,7 +227,7 @@ final class HomemUITests: XCTestCase {
         XCTAssertTrue((app.textViews.firstMatch.value as? String ?? "").contains("workspace of your own"))
     }
     @MainActor func testCreateMemoryAndScheduleNavigation() throws {
-        let app = XCUIApplication(); app.launchArguments = ["--demo"]; app.launch()
+        let app = XCUIApplication(); app.launchFixture()
         selectTab("Library", in: app)
         app.buttons["Memories"].tap()
         XCTAssertTrue(app.staticTexts["Prefers thoughtful answers with concrete examples."].waitForExistence(timeout: 5))

@@ -1,6 +1,6 @@
 # Homem
 
-Your Memoh cloud computer, on iPhone and iPad. Built with Swift and SwiftUI.
+Your Memoh cloud computer, on iPhone, iPad, Apple Vision Pro, and Mac. Built with Swift and SwiftUI.
 
 Connect to [official Memoh](https://app.memoh.net) or your own [Memoh server](https://github.com/felinics/Memoh).
 
@@ -12,11 +12,11 @@ Connect to [official Memoh](https://app.memoh.net) or your own [Memoh server](ht
 - Switch between accounts, servers, and workspaces.
 - Manage agents, models, memories, schedules, apps, and integrations.
 
-Supports iOS 17+, system appearance, and English, Simplified Chinese, Spanish, and Japanese.
+Supports iOS 17+, visionOS 26+, Mac Catalyst, system appearance, and English, Simplified Chinese, Spanish, and Japanese.
 
 ## Get started
 
-Choose **Sign in to Memoh** for email or browser sign-in, **Use another server** for a custom deployment, or **Explore the demo** to try the app locally.
+Choose **Sign in to Memoh** for email or browser sign-in, or **Use another server** for a custom deployment. A connected account is required.
 
 For a custom server, enter its API URL (for example, `https://memoh.example.com/api`) and sign in with your credentials or access token.
 
@@ -43,3 +43,11 @@ Set `HOMEM_TEST_DESTINATION` to use a different simulator.
 [Support](https://docs.kitta.co/homem/support/) · [Privacy](https://docs.kitta.co/homem/)
 
 Homem is an independent Memoh client, licensed under [AGPL-3.0](LICENSE). See [third-party notices](THIRD_PARTY_NOTICES.md) for attribution.
+
+## Apple Vision Pro
+
+The `HomemVision` scheme builds the native visionOS 26+ app with separate native chat and tool windows, system glass, and the shared chat/workspace features. See [visionOS setup and controls](docs/VISIONOS.md) and run `bash scripts/test-vision.sh` for simulator verification.
+
+## Mac
+
+The `HomemCatalyst` scheme builds the Mac app from the shared iOS and visionOS code. It uses a wide chat sidebar and the same separate chat, files, terminal, and desktop window routes as visionOS. Saved account credentials and account listings use iCloud Keychain when it is enabled on the same Apple Account; unsent drafts stay on each device. See [Mac setup](docs/MACOS.md).

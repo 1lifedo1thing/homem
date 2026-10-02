@@ -51,7 +51,6 @@ struct SchemaEditor: View {
                 }
                 if let error { Section { ErrorBanner(message: error) } }
                 if !progress.isEmpty { Section("Progress".localized) { Text(progress).font(.caption.monospaced()) } }
-                if store.isDemo { Section { DemoBadge() } }
             }.navigationTitle(title.localized).navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) { Button("Cancel".localized) { dismiss() }.disabled(busy) }

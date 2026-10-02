@@ -212,14 +212,6 @@ final class CoreTests: XCTestCase {
         XCTAssertGreaterThan(catalog.operations.count, 300)
         for (path, method) in [("/bots", "POST"), ("/bots/{bot_id}/schedule", "POST"), ("/bots/{bot_id}/memory/{memory_id}", "PUT"), ("/bots/{bot_id}/container/fs/write", "POST"), ("/providers", "POST")] { XCTAssertNotNil(catalog.operation(path, method)) }
     }
-    @MainActor func testDemoWritesAreIsolatedAndUnsupportedActionsFail() throws {
-        let demo = DemoServer()
-        let created = try demo.call("/bots/atlas/schedule", method: "POST", query: [:], body: ["name": "Test", "pattern": "0 9 * * *"])
-        XCTAssertFalse(created["id"].string.isEmpty)
-        _ = try demo.call("/bots/atlas/schedule/" + created["id"].string, method: "DELETE", query: [:], body: nil)
-        XCTAssertEqual(demo.collections["/bots/atlas/schedule"]?.count, 1)
-        XCTAssertThrowsError(try demo.call("/bots/atlas/container/start", method: "POST", query: [:], body: nil))
-    }
     var snapshot: JSONValue { ["type": "runtime_snapshot", "session_id": "s", "snapshot": ["epoch": "e", "seq": 1, "current_run_view": ["run_id": "r", "status": "running", "turn_id": "t", "messages": [["id": 1, "type": "text", "content": "Hello"]]]]] }
 }
 
@@ -243,6 +235,25 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
     func testHTTPErrorPreservesServerMessage() async {
         StubURLProtocol.handler = { _ in (403, Data(#"{"message":"Manage permission required"}"#.utf8)) }
         do { _ = try await client().call("/bots"); XCTFail("Expected 403") } catch { XCTAssertTrue(error.localizedDescription.contains("Manage permission required")) }
+    }
+    func testSignedOutClientCannotPrepareAWebSocketConnection() async {
+        let api = client(token: "removed-account-token")
+        api.invalidate()
+        do {
+            _ = try await api.socketRequest("/bots/agent/web/ws")
+            XCTFail("A signed-out account must not prepare another authenticated connection")
+        } catch { XCTAssertTrue(error.localizedDescription.contains("signed out")) }
+    }
+    func testCancelledWindowTaskCannotOpenAWebSocket() async {
+        let api = client(token: "fixture-token")
+        defer { api.invalidate() }
+        let connection = Task { try await api.socket("/bots/agent/web/ws") }
+        connection.cancel()
+        do {
+            let socket = try await connection.value
+            socket.cancel(with: .goingAway, reason: nil)
+            XCTFail("Closing a window must not leave a newly opened connection")
+        } catch { XCTAssertTrue(error is CancellationError) }
     }
     func testHTMLProxyResponseIsNotSuccess() async {
         StubURLProtocol.handler = { _ in (200, Data("<html>Login</html>".utf8)) }

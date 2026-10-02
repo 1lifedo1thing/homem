@@ -186,7 +186,7 @@ struct NewConversationView: View {
                     }.padding(.vertical, 8)
                     if let error { ErrorBanner(message: error) }
                 }.padding(Theme.gutter).frame(maxWidth: 640).frame(maxWidth: .infinity)
-            }.scrollDismissesKeyboard(.interactively).background(Theme.canvas)
+            }.dismissKeyboardOnScroll().background(Theme.canvas)
                 .safeAreaInset(edge: .bottom) {
                     composerActions.padding(.horizontal, 22).padding(.vertical, 12)
                         .frame(maxWidth: 640).frame(maxWidth: .infinity).background(.bar)

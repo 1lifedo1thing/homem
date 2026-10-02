@@ -24,7 +24,11 @@ struct HomeShell: View {
 
 private struct AdaptiveTabLayout: ViewModifier {
     @ViewBuilder func body(content: Content) -> some View {
-        #if HOMEM_DUO_SDK
+        #if os(visionOS)
+        content
+        #elseif targetEnvironment(macCatalyst)
+        content.environment(\.horizontalSizeClass, .regular)
+        #elseif HOMEM_DUO_SDK
         if #available(iOS 27.1, *) { content }
         else { content.environment(\.horizontalSizeClass, .compact) }
         #else
@@ -118,7 +122,6 @@ struct LibraryView: View {
                         .background(Theme.surface, in: RoundedRectangle(cornerRadius: 20))
                         .contentShape(RoundedRectangle(cornerRadius: 20))
                 }.buttonStyle(.plain).accessibilityLabel("Supermarket".localized)
-                if store.isDemo { DemoBadge() }
             }.padding(.horizontal, 20).padding(.top, 12).padding(.bottom, 24)
                 .frame(maxWidth: 760).frame(maxWidth: .infinity)
         }.background(Theme.canvas).navigationTitle("Library".localized)
@@ -419,19 +422,22 @@ struct AccountsView: View {
                             else if account.id == store.activeAccountID { Image(systemName: "checkmark").foregroundStyle(.tint) }
                         }.padding(.vertical, 4)
                     }.disabled(busy != nil)
+                        .accessibilityIdentifier("savedAccount_" + account.id)
                         .swipeActions(allowsFullSwipe: false) {
                             Button("Remove account".localized, role: .destructive) { removal = account }
                         }
                         .contextMenu { Button("Remove account".localized, systemImage: "trash", role: .destructive) { removal = account } }
                 }
                 Button("Add account".localized, systemImage: "plus") { add = true }.accessibilityIdentifier("addAccount")
+                Text("Saved sign-ins sync through iCloud Keychain when enabled on your devices.".localized)
+                    .font(.footnote).foregroundStyle(.secondary)
                 if let error { ErrorBanner(message: error) }
             }.navigationTitle("Accounts".localized).navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done".localized) { dismiss() } } }
                 .alert("Remove account?".localized, isPresented: Binding(get: { removal != nil }, set: { if !$0 { removal = nil } }), presenting: removal) { account in
                     Button("Remove account".localized, role: .destructive) { store.removeAccount(account); removal = nil }
                     Button("Cancel".localized, role: .cancel) { removal = nil }
-                } message: { account in Text(AppLocalization.format("Remove %@ from this device?", account.name)) }
+                } message: { account in Text(AppLocalization.format("Remove %@ from synced devices?", account.name)) }
         }
     }
 }

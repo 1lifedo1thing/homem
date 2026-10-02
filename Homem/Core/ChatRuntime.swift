@@ -86,15 +86,14 @@ struct RuntimeState {
     init(api: APIClient, botID: String, sessionID: String) {
         self.api = api; self.botID = botID; self.sessionID = sessionID
         queue = ChatQueue(api: api, path: "/bots/\(botID.pathComponent)/sessions/\(sessionID.pathComponent)")
-        if !api.isDemo { draft = Keychain.read("draft|\(api.draftScope)|\(botID)|\(sessionID)") ?? queue.unconfirmedText ?? "" }
+        draft = Keychain.read("draft|\(api.draftScope)|\(botID)|\(sessionID)") ?? queue.unconfirmedText ?? ""
     }
-    func saveDraft() { if !api.isDemo && !api.signedOut { try? Keychain.save(draft.isEmpty ? nil : draft, account: "draft|\(api.draftScope)|\(botID)|\(sessionID)") } }
+    func saveDraft() { if !api.signedOut { try? Keychain.save(draft.isEmpty ? nil : draft, account: "draft|\(api.draftScope)|\(botID)|\(sessionID)") } }
     func start() async {
         isStopped = false
         queue.start()
         await loadHistory()
         await loadModels()
-        guard !api.isDemo else { connection = "Demo"; return }
         connect()
     }
     func loadModels() async {
@@ -108,7 +107,6 @@ struct RuntimeState {
         isStopped = true; receiveTask?.cancel(); pingTask?.cancel(); socket?.cancel(with: .goingAway, reason: nil); socket = nil
     }
     func connect() {
-        guard !api.isDemo else { return }
         receiveTask?.cancel(); pingTask?.cancel(); socket?.cancel(with: .goingAway, reason: nil)
         receiveTask = Task { [weak self] in
             guard let self else { return }
@@ -175,16 +173,11 @@ struct RuntimeState {
     func send(attachments: [JSONValue] = []) async -> Bool {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty || !attachments.isEmpty else { return false }
-        if !api.isDemo, active || queue.retryKind(for: text) != nil {
+        if active || queue.retryKind(for: text) != nil {
             return await enqueue(kind: queue.retryKind(for: text) ?? .followUp, attachments: attachments)
         }
         let invocation = UUID().uuidString.lowercased()
         let turn: JSONValue = ["turn_id": .string(invocation), "role": "user", "text": .string(text), "attachments": .array(attachments)]
-        if api.isDemo {
-            history.append(turn)
-            history.append(["turn_id": .string(UUID().uuidString), "role": "assistant", "messages": [["id": 1, "type": "text", "content": "This is a local demo reply. Connect your Memoh server in Settings to send messages to a real agent. Your message has not left this device."]]])
-            api.demo.collections["messages/" + sessionID] = history; draft = ""; return true
-        }
         var request: JSONValue = ["type": "message", "invocation_id": .string(invocation), "session_id": .string(sessionID), "text": .string(text), "attachments": .array(attachments)]
         if !workspaceTargetID.isEmpty { request["workspace_target_id"] = .string(workspaceTargetID) }
         if !modelID.isEmpty { request["model_id"] = .string(modelID) }
@@ -362,7 +355,7 @@ struct ConversationRunState {
         let generation = UUID()
         self.generation = generation
         running = []
-        guard let api, !api.isDemo, !botID.isEmpty, !sessionIDs.isEmpty else { return }
+        guard let api, !botID.isEmpty, !sessionIDs.isEmpty else { return }
         let ids = Set(sessionIDs)
         var backoff = 1
         while !Task.isCancelled, self.generation == generation, !api.signedOut {

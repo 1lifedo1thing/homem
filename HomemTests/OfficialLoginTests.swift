@@ -12,6 +12,21 @@ import XCTest
         let config = URLSessionConfiguration.ephemeral; config.protocolClasses = [StubURLProtocol.self]
         return APIClient(baseURL: OfficialServer.apiURL, session: URLSession(configuration: config), officialSession: OfficialSession(cookies: cookies, teamID: teamID))
     }
+    func testBackgroundWorkspaceRefreshDoesNotReplaceRememberedWorkspace() async throws {
+        let key = "spatial-cookie-test-" + UUID().uuidString
+        defer { try? Keychain.save(nil, account: key) }
+        try OfficialSession(cookies: [cookie()], teamID: "launcher-team").save(account: key)
+        let api = client(cookies: [cookie()], teamID: "window-team")
+        api.credentialAccount = key; api.persistOfficialSession = true
+        defer { api.invalidate() }
+        StubURLProtocol.handler = { request in
+            XCTAssertEqual(request.value(forHTTPHeaderField: "X-Team-ID"), "window-team")
+            return (200, Data("{}".utf8))
+        }
+        _ = try await api.call("/bots")
+        XCTAssertEqual(OfficialSession.restore(account: key)?.teamID, "launcher-team")
+        XCTAssertEqual(api.officialSession?.teamID, "window-team")
+    }
     func testReloadUsesPlatformAccountAndWorkspaceAvatarsWithoutReplacingPermissions() async throws {
         let api = client(cookies: [cookie()], teamID: "team-1")
         StubURLProtocol.handler = { request in

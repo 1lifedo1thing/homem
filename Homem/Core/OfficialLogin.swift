@@ -13,6 +13,9 @@ import Observation
     private var mfaToken = ""
     var client: APIClient
     init(client: APIClient? = nil) {
+        #if DEBUG
+        let client = client ?? OfficialLoginFixture.client()
+        #endif
         self.client = client ?? APIClient(baseURL: OfficialServer.apiURL, officialSession: OfficialSession(cookies: []))
     }
     var validEmail: Bool {

@@ -36,14 +36,15 @@ struct OfficialSignInView: View {
                             .secondary
                         ).padding(.horizontal)
                         if let error = login.error { ErrorBanner(message: error).padding(.horizontal) }
-                        Button("Continue in Homem".localized) {
+                        Button {
                             run {
                                 let cookies = await browser.configuration.websiteDataStore.httpCookieStore.allCookies()
                                 try await login.useBrowserCookies(cookies)
                                 self.browser = nil
                                 try await connectSingleWorkspace()
                             }
-                        }.buttonStyle(.borderedProminent).disabled(login.busy).padding()
+                        } label: { Text("Continue in Homem".localized).signInActionLabel() }
+                        .signInPrimaryAction().disabled(login.busy).padding(24)
                     }
                 } else {
                     signInForm
@@ -51,17 +52,18 @@ struct OfficialSignInView: View {
             }.navigationTitle("Sign in to Memoh".localized).navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
-                        Button("Cancel".localized) {
+                        Button {
                             task?.cancel()
                             if let onCancel { onCancel() } else { dismiss() }
-                        }
+                        } label: { Text("Cancel".localized).signInActionLabel(fullWidth: false) }
                     }
                     if browser != nil {
                         ToolbarItem(placement: .topBarTrailing) {
-                            Button("Use email".localized) {
+                            Button {
                                 browser = nil
                                 login.error = nil
-                            }.disabled(login.busy)
+                            } label: { Text("Use email".localized).signInActionLabel(fullWidth: false) }
+                            .disabled(login.busy)
                         }
                     }
                 }
@@ -77,45 +79,40 @@ struct OfficialSignInView: View {
     private var signInForm: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                Text(subtitle).font(.subheadline).foregroundStyle(.secondary)
-                VStack(alignment: .leading, spacing: 16) {
+                Text(subtitle).font(.body).foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 20) {
                     switch login.step {
                     case .email:
                         TextField("Email address".localized, text: $login.email)
                             .textContentType(.emailAddress).keyboardType(.emailAddress)
                             .textInputAutocapitalization(.never).autocorrectionDisabled()
                             .focused($focusedField, equals: .email).submitLabel(.continue)
+                            #if !os(visionOS)
                             .onSubmit { if login.validEmail && !login.busy { sendCode() } }
-                            .padding(16).background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+                            #endif
+                            .signInField()
                             .disabled(login.busy).accessibilityIdentifier("officialEmail")
                         Button { sendCode() } label: { actionLabel("Send sign-in code") }
-                            .buttonStyle(.borderedProminent).controlSize(.large)
+                            .signInPrimaryAction()
                             .disabled(login.busy || !login.validEmail).accessibilityIdentifier("sendOfficialCode")
                     case .code, .mfa:
-                        TextField("114514", text: $login.code)
+                        TextField("000000", text: $login.code)
                             .accessibilityLabel(login.step == .mfa ? "Authenticator code".localized : "Email code".localized)
                             .textContentType(.oneTimeCode).keyboardType(.numberPad)
                             .font(.title2.monospaced()).tracking(6).focused($focusedField, equals: .code)
-                            .padding(16).background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+                            .signInField()
                             .disabled(login.busy).accessibilityIdentifier("officialCode")
                             .onChange(of: login.code) { _, value in
                                 let digits = String(value.filter { $0.isASCII && $0.isNumber }.prefix(6))
                                 if digits != value { login.code = digits; return }
+                                #if !os(visionOS)
                                 if login.validCode && !login.busy { verifyCode() }
+                                #endif
                             }
                         Button { verifyCode() } label: { actionLabel("Verify and continue") }
-                            .buttonStyle(.borderedProminent).controlSize(.large).disabled(login.busy || !login.validCode)
-                        HStack {
-                            if login.step == .code {
-                                TimelineView(.periodic(from: .now, by: 1)) { context in
-                                    let seconds = max(0, Int(ceil(login.resendAfter.timeIntervalSince(context.date))))
-                                    Button(seconds > 0 ? AppLocalization.format("Resend in %llds", seconds) : "Resend code".localized) { run { try await login.sendCode() } }
-                                        .disabled(login.busy || seconds > 0)
-                                }
-                            }
-                            Spacer()
-                            Button("Use a different email".localized) { login.changeEmail(); focusedField = .email }.disabled(login.busy)
-                        }.font(.footnote)
+                            .signInPrimaryAction().disabled(login.busy || !login.validCode)
+                            .accessibilityIdentifier("verifyOfficialCode")
+                        codeRecoveryActions
                     case .workspaces:
                         ForEach(login.teams, id: \.self) { team in
                             Button {
@@ -126,38 +123,72 @@ struct OfficialSignInView: View {
                                     Text(team.text("name", "slug").nonEmpty ?? "Memoh workspace".localized).foregroundStyle(.primary)
                                     Spacer()
                                     Image(systemName: "chevron.right").font(.caption).foregroundStyle(.secondary)
-                                }.padding(14).background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
-                            }.buttonStyle(.plain).disabled(login.busy)
+                                }.padding(14).signInActionLabel().background(Theme.surface, in: RoundedRectangle(cornerRadius: 16))
+                            }.buttonStyle(.plain).spatialHoverEffect().disabled(login.busy)
                         }
                         if login.busy { ProgressView().frame(maxWidth: .infinity) }
                         if login.teams.isEmpty { Text("Finish creating or joining a workspace on Memoh, then return here.".localized).font(.subheadline).foregroundStyle(.secondary) }
-                        Button("Refresh workspaces".localized) { run { try await login.loadWorkspaces() } }.disabled(login.busy)
+                        Button { run { try await login.loadWorkspaces() } } label: { Text("Refresh workspaces".localized).signInActionLabel() }
+                            .signInSecondaryAction().disabled(login.busy)
                     }
                 }
                 if let error = login.error { ErrorBanner(message: error) }
-                Button(login.step == .workspaces ? "Open Memoh in browser".localized : "Continue in browser".localized) { openBrowser() }
-                    .font(.subheadline).frame(maxWidth: .infinity).disabled(login.busy).accessibilityIdentifier("officialBrowser")
-            }.padding(24).frame(maxWidth: 440)
+                Button(action: openBrowser) {
+                    Text(login.step == .workspaces ? "Open Memoh in browser".localized : "Continue in browser".localized).signInActionLabel()
+                }.font(.subheadline).frame(maxWidth: .infinity).signInSecondaryAction().disabled(login.busy).accessibilityIdentifier("officialBrowser")
+            }.padding(32).frame(maxWidth: 520)
                 .background {
                     GeometryReader { proxy in
                         Color.clear.preference(key: SignInFormHeight.self, value: proxy.size.height)
                     }
                 }
                 .frame(maxWidth: .infinity)
-        }.background(Theme.canvas).scrollDismissesKeyboard(.interactively)
+        }.background(Theme.canvas).dismissKeyboardOnScroll()
             .onPreferenceChange(SignInFormHeight.self) { height in
                 if height > 0, abs(formHeight - height) > 1 { formHeight = height }
             }
             .task { updateFocus() }.onChange(of: login.step) { _, _ in updateFocus() }
     }
+    private var codeRecoveryActions: some View {
+        Group {
+            #if os(visionOS)
+            HStack(spacing: 20) { recoveryButtons }
+            #else
+            HStack { recoveryButtons }.font(.footnote)
+            #endif
+        }
+    }
+    @ViewBuilder private var recoveryButtons: some View {
+        if login.step == .code {
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                let seconds = max(0, Int(ceil(login.resendAfter.timeIntervalSince(context.date))))
+                Button { run { try await login.sendCode() } } label: {
+                    Text(seconds > 0 ? AppLocalization.format("Resend in %llds", seconds) : "Resend code".localized)
+                        .monospacedDigit().signInActionLabel()
+                }.signInSecondaryAction().disabled(login.busy || seconds > 0).accessibilityIdentifier("resendOfficialCode")
+            }
+        }
+        #if !os(visionOS)
+        Spacer()
+        #endif
+        Button { login.changeEmail(); updateFocus() } label: {
+            Text("Use a different email".localized).signInActionLabel()
+        }.signInSecondaryAction().disabled(login.busy).accessibilityIdentifier("changeOfficialEmail")
+    }
     private func actionLabel(_ title: String) -> some View {
         HStack(spacing: 10) {
             if login.busy { ProgressView().tint(.white) }
             Text(title.localized).fontWeight(.semibold)
-        }.frame(maxWidth: .infinity).padding(.vertical, 5)
+        }.frame(maxWidth: .infinity).padding(.vertical, 5).signInActionLabel()
     }
     private func updateFocus() {
+        #if os(visionOS)
+        // Do not move the keyboard or select a new target as a network request
+        // finishes. Eye input should choose the next field deliberately.
+        focusedField = nil
+        #else
         switch login.step { case .email: focusedField = .email; case .code, .mfa: focusedField = .code; case .workspaces: focusedField = nil }
+        #endif
     }
     private var subtitle: String {
         switch login.step {
@@ -168,13 +199,15 @@ struct OfficialSignInView: View {
         }
     }
     private func sendCode() {
+        guard login.validEmail else { return }
         focusedField = nil
         run {
             try await login.sendCode()
-            focusedField = .code
+            updateFocus()
         }
     }
     private func verifyCode() {
+        guard login.validCode else { return }
         focusedField = nil
         run {
             try await login.verifyCode()
@@ -223,6 +256,12 @@ private struct SignInPresentation: ViewModifier {
     let browser: Bool
     let formHeight: CGFloat
     @ViewBuilder func body(content: Content) -> some View {
+        #if os(visionOS)
+        // A fitted form changes position under the user's gaze as the code,
+        // cooldown, or error appears. Reserve one stable canvas for all steps.
+        content.frame(width: browser ? 760 : 560, height: browser ? 720 : 660)
+            .presentationSizing(.fitted)
+        #else
         if #available(iOS 18.0, *) {
             if browser {
                 content.frame(idealWidth: 720, idealHeight: 680).presentationSizing(.page)
@@ -231,6 +270,7 @@ private struct SignInPresentation: ViewModifier {
                     .presentationSizing(.fitted)
             }
         } else { content }
+        #endif
     }
 }
 

@@ -8,8 +8,10 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
+import ui_fixture
 
 TOKEN = "homem-local-fixture-token"
+SECOND_TOKEN = "homem-local-fixture-second-token"
 HISTORY = []
 LOCK = threading.Lock()
 
@@ -33,13 +35,18 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def authorized(self):
-        if self.headers.get("Authorization") == f"Bearer {TOKEN}":
+        if self.headers.get("Authorization") in [f"Bearer {TOKEN}", f"Bearer {SECOND_TOKEN}"]:
             return True
         self.send_json({"message": "Sign in required"}, 401)
         return False
 
     def do_GET(self):
         path = urlparse(self.path).path
+        if path.startswith(("/ui/", "/ui-api/", "/api/v1/")):
+            if path.endswith("/web/ws"):
+                return self.websocket()
+            value, status = ui_fixture.response(self.path, "GET", authorization=self.headers.get("Authorization", ""))
+            return self.send_json(value, status)
         if path == "/health":
             return self.send_json({"fixture": "homem"})
         if path == "/avatars/cdn.png":
@@ -78,24 +85,36 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         path = urlparse(self.path).path
         body = self.payload()
+        if path.startswith(("/ui/", "/ui-api/", "/api/v1/")):
+            value, status = ui_fixture.response(self.path, "POST", body, authorization=self.headers.get("Authorization", ""))
+            return self.send_json(value, status)
         if path == "/api/auth/login":
-            if body == {"username": "fixture", "password": "fixture-password"}:
-                return self.send_json({"access_token": TOKEN, "role": "admin"})
+            if body.get("password") == "fixture-password" and body.get("username") in ["fixture", "fixture-two"]:
+                return self.send_json({"access_token": SECOND_TOKEN if body["username"] == "fixture-two" else TOKEN, "role": "admin"})
             return self.send_json({"message": "Wrong fixture credentials"}, 401)
         if not self.authorized():
             return
-        if path == "/api/test/stream":
+        if path in ["/api/test/stream", "/api/test/slow-stream"]:
             self.send_response(200)
             self.send_header("Content-Type", "text/event-stream")
             self.send_header("Connection", "close")
             self.end_headers()
-            for event in [{"type": "started"}, {"type": "step", "message": "Installing"}, {"type": "done", "id": "fixture-install"}]:
-                self.wfile.write(("data: " + json.dumps(event) + "\n\n").encode())
-                self.wfile.flush()
-                time.sleep(0.02)
+            try:
+                for event in [{"type": "started"}, {"type": "step", "message": "Installing"}, {"type": "done", "id": "fixture-install"}]:
+                    self.wfile.write(("data: " + json.dumps(event) + "\n\n").encode())
+                    self.wfile.flush()
+                    time.sleep(3 if path.endswith("/slow-stream") and event["type"] == "started" else 0.02)
+            except (BrokenPipeError, ConnectionResetError):
+                pass  # Signing out intentionally closes an in-progress stream.
             self.close_connection = True
             return
         return self.send_json({"message": "Fixture route not implemented"}, 404)
+
+    def do_DELETE(self):
+        if self.path.startswith("/ui-api/"):
+            value, status = ui_fixture.response(self.path, "DELETE", authorization=self.headers.get("Authorization", ""))
+            return self.send_json(value, status)
+        self.send_json({"message": "Unknown fixture path"}, 404)
 
     def ws_send(self, value, opcode=1):
         data = json.dumps(value).encode() if not isinstance(value, bytes) else value
@@ -117,6 +136,10 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         if urlparse(self.path).path == "/api/display-test/ws":
             return self.desktop()
+        if self.path.startswith('/ui-api/'):
+            with ui_fixture.LOCK:
+                key = 'connections:' + ui_fixture.account_key(self.headers.get('Authorization', ''))
+                ui_fixture.COUNTS[key] = ui_fixture.COUNTS.get(key, 0) + 1
         seq = 1
         run = None
         try:
@@ -154,7 +177,15 @@ class Handler(BaseHTTPRequestHandler):
                     self.ws_send({"type": "runtime_delta", "session_id": session, "epoch": "fixture-epoch", "seq": seq, "delta": {"message_appends": [{"id": 1, "type": "text", "content": "native WebSocket response."}]}})
                     run["messages"][0]["content"] = "Verified native WebSocket response."
                     with LOCK:
-                        HISTORY.extend([user, {"turn_id": turn_id, "role": "assistant", "messages": run["messages"], "timestamp": "2026-09-17T00:00:01Z"}])
+                        turns = [user, {"turn_id": turn_id, "role": "assistant", "messages": run["messages"], "timestamp": "2026-09-17T00:00:01Z"}]
+                        if self.path.startswith("/ui-api/"):
+                            with ui_fixture.LOCK:
+                                account = ui_fixture.account_key(self.headers.get("Authorization", ""))
+                                ui_fixture.MESSAGES.setdefault(ui_fixture.message_key(account, session), []).extend(turns)
+                                key = 'messages:' + account
+                                ui_fixture.COUNTS[key] = ui_fixture.COUNTS.get(key, 0) + 1
+                        else:
+                            HISTORY.extend(turns)
                     seq += 1
                     self.ws_send({"type": "runtime_delta", "session_id": session, "epoch": "fixture-epoch", "seq": seq, "delta": {"run": {"run_id": "fixture-run", "status": "completed"}}})
                     run = None

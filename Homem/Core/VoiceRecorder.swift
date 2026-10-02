@@ -8,7 +8,7 @@ import Observation
     private var url: URL?
     private let speech = AVSpeechSynthesizer()
     func start() async {
-        guard await AVAudioApplication.requestRecordPermission() else { error = "Allow microphone access in iOS Settings to record a voice message."; return }
+        guard await AVAudioApplication.requestRecordPermission() else { error = "Allow microphone access in Settings to record a voice message.".localized; return }
         do {
             let session = AVAudioSession.sharedInstance()
             try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetoothHFP]); try session.setActive(true)

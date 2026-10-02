@@ -1,0 +1,221 @@
+[
+  {
+    "id": "A3B8E4E8-2CBF-49A8-83E3-6E20DFFE1DA3",
+    "attributes": {
+      "manualTagStartCondition": null,
+      "isLockedForEditing": true,
+      "tagStartCondition": null,
+      "lastModifiedDate": "2026-10-02T16:27:01.204Z",
+      "manualPullRequestStartCondition": null,
+      "description": "Test and archive Homem for iOS on master.",
+      "clean": true,
+      "branchStartCondition": {
+        "source": {
+          "isAllMatch": false,
+          "patterns": [
+            {
+              "pattern": "master",
+              "isPrefix": false
+            }
+          ]
+        },
+        "filesAndFoldersRule": null,
+        "autoCancel": true
+      },
+      "containerFilePath": "Homem.xcodeproj",
+      "pullRequestStartCondition": null,
+      "scheduledStartCondition": null,
+      "isEnabled": true,
+      "name": "Homem iOS CI",
+      "manualBranchStartCondition": null,
+      "actions": [
+        {
+          "name": "Test - iOS",
+          "actionType": "TEST",
+          "destination": null,
+          "buildDistributionAudience": null,
+          "testConfiguration": {
+            "kind": "USE_SCHEME_SETTINGS",
+            "testPlanName": "",
+            "testDestinations": [
+              {
+                "deviceTypeName": "iPhone 17 Pro",
+                "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro",
+                "runtimeName": "Latest from Selected Xcode (iOS 27.0)",
+                "runtimeIdentifier": "default",
+                "kind": "SIMULATOR"
+              }
+            ]
+          },
+          "scheme": "Homem",
+          "platform": "IOS",
+          "isRequiredToPass": true
+        },
+        {
+          "name": "Archive - iOS",
+          "actionType": "ARCHIVE",
+          "destination": null,
+          "buildDistributionAudience": "APP_STORE_ELIGIBLE",
+          "testConfiguration": null,
+          "scheme": "Homem",
+          "platform": "IOS",
+          "isRequiredToPass": true
+        }
+      ]
+    },
+    "relationships": {
+      "repository": {
+        "links": {
+          "self": "https://api.appstoreconnect.apple.com/v1/ciWorkflows/A3B8E4E8-2CBF-49A8-83E3-6E20DFFE1DA3/relationships/repository",
+          "related": "https://api.appstoreconnect.apple.com/v1/ciWorkflows/A3B8E4E8-2CBF-49A8-83E3-6E20DFFE1DA3/repository"
+        }
+      }
+    }
+  },
+  {
+    "id": "8c7000f3-3994-4b58-a2fc-23680009593c",
+    "attributes": {
+      "manualTagStartCondition": null,
+      "isLockedForEditing": true,
+      "tagStartCondition": null,
+      "lastModifiedDate": "2026-10-02T16:24:58.849Z",
+      "manualPullRequestStartCondition": null,
+      "description": "Test and archive Homem for visionOS on master.",
+      "clean": true,
+      "branchStartCondition": {
+        "source": {
+          "isAllMatch": false,
+          "patterns": [
+            {
+              "pattern": "master",
+              "isPrefix": false
+            }
+          ]
+        },
+        "filesAndFoldersRule": null,
+        "autoCancel": true
+      },
+      "containerFilePath": "Homem.xcodeproj",
+      "pullRequestStartCondition": null,
+      "scheduledStartCondition": null,
+      "isEnabled": true,
+      "name": "Homem visionOS CI",
+      "manualBranchStartCondition": null,
+      "actions": [
+        {
+          "name": "Test - visionOS",
+          "actionType": "TEST",
+          "destination": null,
+          "buildDistributionAudience": null,
+          "testConfiguration": {
+            "kind": "USE_SCHEME_SETTINGS",
+            "testPlanName": "",
+            "testDestinations": [
+              {
+                "deviceTypeName": "Apple Vision Pro",
+                "deviceTypeIdentifier": "com.apple.CoreSimulator.SimDeviceType.Apple-Vision-Pro-4K",
+                "runtimeName": "visionOS 27.0",
+                "runtimeIdentifier": "com.apple.CoreSimulator.SimRuntime.xrOS-27-0",
+                "kind": "SIMULATOR"
+              }
+            ]
+          },
+          "scheme": "HomemVision",
+          "platform": "VISIONOS",
+          "isRequiredToPass": true
+        },
+        {
+          "name": "Archive - visionOS",
+          "actionType": "ARCHIVE",
+          "destination": "ANY_VISIONOS_DEVICE",
+          "buildDistributionAudience": "APP_STORE_ELIGIBLE",
+          "testConfiguration": null,
+          "scheme": "HomemVision",
+          "platform": "VISIONOS",
+          "isRequiredToPass": true
+        }
+      ]
+    },
+    "relationships": {
+      "repository": {
+        "links": {
+          "self": "https://api.appstoreconnect.apple.com/v1/ciWorkflows/8c7000f3-3994-4b58-a2fc-23680009593c/relationships/repository",
+          "related": "https://api.appstoreconnect.apple.com/v1/ciWorkflows/8c7000f3-3994-4b58-a2fc-23680009593c/repository"
+        }
+      }
+    }
+  },
+  {
+    "id": "d5b424ea-87cb-46c4-8fb9-bb7bcc3394cc",
+    "attributes": {
+      "manualTagStartCondition": null,
+      "isLockedForEditing": true,
+      "tagStartCondition": null,
+      "lastModifiedDate": "2026-10-02T16:25:00.626Z",
+      "manualPullRequestStartCondition": null,
+      "description": "Test and archive Homem for macOS on master.",
+      "clean": true,
+      "branchStartCondition": {
+        "source": {
+          "isAllMatch": false,
+          "patterns": [
+            {
+              "pattern": "master",
+              "isPrefix": false
+            }
+          ]
+        },
+        "filesAndFoldersRule": null,
+        "autoCancel": true
+      },
+      "containerFilePath": "Homem.xcodeproj",
+      "pullRequestStartCondition": null,
+      "scheduledStartCondition": null,
+      "isEnabled": true,
+      "name": "Homem macOS CI",
+      "manualBranchStartCondition": null,
+      "actions": [
+        {
+          "name": "Test - macOS",
+          "actionType": "TEST",
+          "destination": null,
+          "buildDistributionAudience": null,
+          "testConfiguration": {
+            "kind": "USE_SCHEME_SETTINGS",
+            "testPlanName": "",
+            "testDestinations": [
+              {
+                "deviceTypeName": "Mac (Mac Catalyst)",
+                "deviceTypeIdentifier": "mac_catalyst",
+                "runtimeName": "Same As Selected macOS Version",
+                "runtimeIdentifier": "builder",
+                "kind": "MAC"
+              }
+            ]
+          },
+          "scheme": "HomemCatalyst",
+          "platform": "MACOS",
+          "isRequiredToPass": true
+        },
+        {
+          "name": "Archive - macOS",
+          "actionType": "ARCHIVE",
+          "destination": "ANY_MAC_CATALYST",
+          "buildDistributionAudience": "APP_STORE_ELIGIBLE",
+          "testConfiguration": null,
+          "scheme": "HomemCatalyst",
+          "platform": "MACOS",
+          "isRequiredToPass": true
+        }
+      ]
+    },
+    "relationships": {
+      "repository": {
+        "links": {
+          "self": "https://api.appstoreconnect.apple.com/v1/ciWorkflows/d5b424ea-87cb-46c4-8fb9-bb7bcc3394cc/relationships/repository",
+          "related": "https://api.appstoreconnect.apple.com/v1/ciWorkflows/d5b424ea-87cb-46c4-8fb9-bb7bcc3394cc/repository"
+        }
+      }
+    }
+  }
+]

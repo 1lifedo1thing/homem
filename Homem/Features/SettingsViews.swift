@@ -13,7 +13,7 @@ struct SettingsView: View {
             Section {
                 HStack(spacing: 14) {
                     AgentAvatar(name: store.accountName, avatarURL: store.accountAvatarURL, size: 48)
-                    VStack(alignment: .leading, spacing: 4) { Text(store.accountName).font(.headline); Text(store.isDemo ? "Demo workspace".localized : store.api?.baseURL.host ?? "Connected server".localized).font(.caption).foregroundStyle(.secondary) }
+                    VStack(alignment: .leading, spacing: 4) { Text(store.accountName).font(.headline); Text(store.api?.baseURL.host ?? "Connected server".localized).font(.caption).foregroundStyle(.secondary) }
                 }.padding(.vertical, 8)
                 Button("Accounts".localized, systemImage: "person.crop.circle") { accounts = true }
                 NavigationLink("Profile".localized, systemImage: "person") { SettingsDocumentView(title: "Profile", path: "/users/me", template: "/users/me") }
@@ -35,16 +35,18 @@ struct SettingsView: View {
             }
             Section("Preferences".localized) {
                 Link("Privacy policy".localized, destination: URL(string: "https://docs.kitta.co/homem/")!)
+                #if !os(visionOS)
                 Picker("Appearance".localized, selection: $appearance) { Text("System".localized).tag("system"); Text("Light".localized).tag("light"); Text("Dark".localized).tag("dark") }.accessibilityIdentifier("appearancePicker")
+                #endif
                 Picker("Color scheme".localized, selection: $colorScheme) { ForEach(Theme.schemes, id: \.self) { Text(($0 == "memoh" ? "Memoh".localized : $0.capitalized).localized).tag($0) } }.accessibilityIdentifier("accentPicker")
                 Button { if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) } } label: {
                     HStack { Text("App language".localized); Spacer(); Text(Locale.current.localizedString(forLanguageCode: Bundle.main.preferredLocalizations.first ?? "en") ?? "").foregroundStyle(.secondary) }
-                }.accessibilityHint("Change the app language in iOS Settings.".localized)
+                }.accessibilityHint("Change the app language in Settings.".localized)
                 NavigationLink("More connections".localized, systemImage: "link") { ServerConnectionsView() }
                 NavigationLink("About Homem".localized, systemImage: "info.circle") { AboutView() }
             }
             Section {
-                Button(store.isDemo ? "Connect your server".localized : "Sign out".localized, role: store.isDemo ? nil : .destructive) { if store.isDemo { store.signOut() } else { signOut = true } }
+                Button("Sign out".localized, role: .destructive) { signOut = true }
             } footer: { Text("Homem 1.0 · Native Swift client for Memoh".localized) }
         }.navigationTitle("Settings".localized)
             .toolbar { ToolbarItem(placement: .topBarLeading) { WorkspacePickerMenu() }.adaptiveAvatarPlacement() }
@@ -76,7 +78,7 @@ struct AboutView: View {
 }
 
 struct LicenseNoticesView: View {
-    let documents = ["THIRD_PARTY_NOTICES", "AGPL-3.0", "SwiftTerm-LICENSE", "WebRTC-LICENSE", "L10n-swift-LICENSE", "HighlightSwift-LICENSE", "highlight.js-LICENSE"]
+    let documents = ["THIRD_PARTY_NOTICES", "AGPL-3.0", "SwiftTerm-LICENSE", "WebRTC-LICENSE", "LiveKitWebRTC-LICENSE", "L10n-swift-LICENSE", "HighlightSwift-LICENSE", "highlight.js-LICENSE"]
     var body: some View {
         List(documents, id: \.self) { name in
             NavigationLink(name) {

@@ -7,6 +7,7 @@ struct TerminalScreen: View {
     var botID: String
     var embedded = false
     @State private var connectionID = UUID()
+    @State private var suspended = false
     var body: some View {
         Group {
             if embedded { terminal }
@@ -15,11 +16,15 @@ struct TerminalScreen: View {
                     .toolbar(.hidden, for: .tabBar)
                     .toolbar { Button { connectionID = UUID() } label: { Image(systemName: "arrow.clockwise") }.accessibilityLabel("Reconnect terminal".localized) }
             }
-        }.onChange(of: scenePhase) { _, phase in if phase == .active { connectionID = UUID() } }
+        }.onChange(of: scenePhase) { _, phase in
+            if phase == .background { suspended = true }
+            if phase == .active { suspended = false }
+        }
     }
     private var terminal: some View {
         Group {
-            if let api = store.api, !api.isDemo { NativeTerminal(api: api, botID: botID).id(connectionID) }
+            if suspended { Color.clear }
+            else if let api = store.api { NativeTerminal(api: api, botID: botID).id(connectionID) }
             else { EmptyState(title: "Terminal unavailable", symbol: "terminal", detail: "Connect your Memoh server to open an interactive workspace shell.") }
         }
     }
@@ -66,11 +71,11 @@ final class TerminalPaneView: UIView {
             strip.leadingAnchor.constraint(equalTo: safeAreaLayoutGuide.leadingAnchor, constant: 12),
             strip.trailingAnchor.constraint(equalTo: keyboard.leadingAnchor, constant: -4),
             strip.bottomAnchor.constraint(equalTo: safeAreaLayoutGuide.bottomAnchor, constant: -8),
-            strip.heightAnchor.constraint(equalToConstant: 44),
+            strip.heightAnchor.constraint(equalToConstant: Theme.controlSize),
             keyboard.trailingAnchor.constraint(equalTo: safeAreaLayoutGuide.trailingAnchor, constant: -12),
             keyboard.centerYAnchor.constraint(equalTo: strip.centerYAnchor),
-            keyboard.widthAnchor.constraint(equalToConstant: 44),
-            keyboard.heightAnchor.constraint(equalToConstant: 44),
+            keyboard.widthAnchor.constraint(equalToConstant: Theme.controlSize),
+            keyboard.heightAnchor.constraint(equalToConstant: Theme.controlSize),
             keys.leadingAnchor.constraint(equalTo: strip.contentLayoutGuide.leadingAnchor),
             keys.trailingAnchor.constraint(equalTo: strip.contentLayoutGuide.trailingAnchor),
             keys.topAnchor.constraint(equalTo: strip.contentLayoutGuide.topAnchor),
@@ -87,9 +92,10 @@ final class TerminalPaneView: UIView {
                 return attributes
             }
             button.configuration = config
+            button.isPointerInteractionEnabled = true
             button.accessibilityLabel = title.localized
             button.addAction(UIAction { _ in action() }, for: .touchUpInside)
-            button.widthAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
+            button.widthAnchor.constraint(greaterThanOrEqualToConstant: Theme.controlSize).isActive = true
             keys.addArrangedSubview(button)
         }
         key("Esc") { [weak self] in self?.terminal.send([0x1b]) }
@@ -146,7 +152,11 @@ struct NativeTerminal: UIViewRepresentable {
     func makeUIView(context: Context) -> TerminalPaneView {
         let pane = TerminalPaneView(frame: .zero)
         let terminal = pane.terminal
+        #if os(visionOS)
+        terminal.font = UIFont.monospacedSystemFont(ofSize: 18, weight: .regular)
+        #else
         terminal.font = UIFont.monospacedSystemFont(ofSize: 13, weight: .regular)
+        #endif
         terminal.nativeBackgroundColor = UIColor(red: 0.055, green: 0.07, blue: 0.08, alpha: 1)
         terminal.nativeForegroundColor = UIColor(red: 0.85, green: 0.9, blue: 0.87, alpha: 1)
         terminal.terminalDelegate = context.coordinator
@@ -215,7 +225,11 @@ struct NativeTerminal: UIViewRepresentable {
         func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {}
         func scrolled(source: TerminalView, position: Double) {}
         func requestOpenLink(source: TerminalView, link: String, params: [String: String]) { /* Remote terminal output cannot open URLs without a user-facing confirmation flow. */ }
-        func bell(source: TerminalView) { UINotificationFeedbackGenerator().notificationOccurred(.warning) }
+        func bell(source: TerminalView) {
+            #if !os(visionOS)
+            UINotificationFeedbackGenerator().notificationOccurred(.warning)
+            #endif
+        }
         func clipboardCopy(source: TerminalView, content: Data) {}
         func clipboardRead(source: TerminalView) -> Data? { nil }
         func iTermContent(source: TerminalView, content: ArraySlice<UInt8>) {}
