@@ -29,6 +29,8 @@ The chat toolbar's Workspace menu contains **New window** and **Add pane** secti
 - From Mika’s agent details, Command–Shift–F opened **Files · Mika**, independent of the globally selected Atlas agent. The native Window menu listed **Agents · Homem**, **Files · Atlas**, and **Files · Mika**.
 - A separate Files window was moved using **Window → Move to Built-in Retina Display**. The window inventory confirmed Files on display 0 while chat with a Files split pane stayed on display 1. The Files window also restored on display 0 after restarting the app.
 - visionOS UI checks `testAgentToolShortcutsOpenNativeWindows` and `testChatAndFilesUseNativeWindowsWithoutSplitControls` passed: two tests, zero failures. These exercise the real fixture login and native window actions.
+- Five affected iOS UI flows passed in targeted runs: Chinese, Spanish, theme persistence, creating memory/schedule navigation, and expanded tool activity. Japanese encountered a keyboard-focus failure during sign-in; the username scroll correction compiled successfully, but its final rerun stalled in simulator installation before executing a test.
+- A further three-test visionOS rerun also stalled in simulator installation before executing tests. It does not certify account switching or independent chat selections. Only the two completed visionOS checks above are counted as passing.
 - Localization coverage passed for all 741 strings in Chinese, Spanish, and Japanese.
 
 The first Xcode Cloud runs used the earlier `9f073cc` source and failed; [Cloud results](../../XCODE_CLOUD.md) distinguish them from these local checks. The UI changes have not replaced the Mac build already waiting for App Review.
