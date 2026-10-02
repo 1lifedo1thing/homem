@@ -8,9 +8,9 @@ All three platforms use the private [iebb/homem](https://github.com/iebb/homem) 
 | --- | --- | --- | --- |
 | [Homem iOS CI](https://appstoreconnect.apple.com/teams/cbaca10a-f696-4d2b-959e-0d3fa1b23452/xcode-cloud/products/13960BE0-6304-4C11-A080-C67D06BE2E79/workflows/A3B8E4E8-2CBF-49A8-83E3-6E20DFFE1DA3) | `Homem` | iPhone 17 Pro / iOS 27 | iOS device |
 | [Homem visionOS CI](https://appstoreconnect.apple.com/teams/cbaca10a-f696-4d2b-959e-0d3fa1b23452/xcode-cloud/products/13960BE0-6304-4C11-A080-C67D06BE2E79/workflows/8c7000f3-3994-4b58-a2fc-23680009593c) | `HomemVision` | Apple Vision Pro / visionOS 27 | visionOS device |
-| [Homem macOS CI](https://appstoreconnect.apple.com/teams/cbaca10a-f696-4d2b-959e-0d3fa1b23452/xcode-cloud/products/13960BE0-6304-4C11-A080-C67D06BE2E79/workflows/d5b424ea-87cb-46c4-8fb9-bb7bcc3394cc) | `HomemCatalyst` | Mac Catalyst / selected macOS | Mac Catalyst |
+| [Homem macOS CI](https://appstoreconnect.apple.com/teams/cbaca10a-f696-4d2b-959e-0d3fa1b23452/xcode-cloud/products/13960BE0-6304-4C11-A080-C67D06BE2E79/workflows/d5b424ea-87cb-46c4-8fb9-bb7bcc3394cc) | `HomemMac` | Native Mac / selected macOS | Native Mac |
 
-Archives are App Store eligible. App Review submission and release remain manual. All platforms deliver successful archives to **Homem Internal** (three testers). The existing iOS external TestFlight post-action is also retained. Cloud's shared product build counter was advanced from 59 to **68**, above the locally uploaded Mac build 67. Future local uploads must likewise stay ahead of the latest Cloud build number.
+Archives are App Store eligible. App Review submission and release remain manual. All platforms deliver successful archives to **Homem Internal** (three testers). The existing iOS external TestFlight post-action is also retained. Cloud's shared product build counter was advanced to **102**, above the locally uploaded standalone Mac build **101**. Future local uploads must likewise stay ahead of the latest Cloud build number.
 
 The Cloud product is `13960BE0-6304-4C11-A080-C67D06BE2E79`, associated with [Homem (6812852139)](https://appstoreconnect.apple.com/apps/6812852139/distribution). [The workflow snapshot](xcode-cloud/workflows.json) records the public API configuration; TestFlight post-actions and the product build counter are managed in App Store Connect.
 
@@ -18,7 +18,7 @@ The Cloud product is `13960BE0-6304-4C11-A080-C67D06BE2E79`, associated with [Ho
 
 The generated project, shared schemes, and pinned `Package.resolved` are committed. Cloud builds do not require XcodeGen. When changing `project.yml`, regenerate and commit the resulting project.
 
-- `ci_post_clone.sh` checks iOS and visionOS icons, camera/microphone purpose strings, and localization coverage. It permits SwiftTerm's pinned version-metadata build plugin in the disposable worker.
+- `ci_post_clone.sh` checks iOS, visionOS, and native macOS icons, camera/microphone purpose strings, and localization coverage. It permits SwiftTerm's pinned version-metadata build plugin in the disposable worker.
 - `ci_pre_xcodebuild.sh` starts the loopback HTTP/SSE/WebSocket fixture for `test-without-building`, waits for readiness, and fails if startup fails.
 - `ci_post_xcodebuild.sh` stops the fixture. Both `fixture-server.py` and its `ui_fixture.py` dependency are linked into `ci_scripts` for the separate test environment.
 - Integration tests fail if the fixture is unavailable in Cloud. UI tests use the real sign-in and transport against this local fixture. No production credentials are needed.
@@ -64,3 +64,11 @@ The workflow is pinned to Xcode 26.6 (17F113), the installed local toolchain. It
 The direct upload also warned that the prebuilt WebRTC framework lacks a dSYM (UUID `4C4C4496-5555-3144-A149-A7E882FEE780`). This was not the blocking rejection. No credentials or private delivery logs are stored in this repository.
 
 [Build 6](https://appstoreconnect.apple.com/teams/cbaca10a-f696-4d2b-959e-0d3fa1b23452/xcode-cloud/products/13960BE0-6304-4C11-A080-C67D06BE2E79/builds/9d70dbc7-be88-4334-aadb-bd12fef922f9/summary), from commit `74af148`, passed the simulator test and archive actions. App Store Connect processing completed successfully, confirming the privacy-metadata fix. [TestFlight 1.0.0 (6)](https://appstoreconnect.apple.com/teams/cbaca10a-f696-4d2b-959e-0d3fa1b23452/apps/6812852139/testflight/ios/5e8ae4ea-28f4-4536-b332-0cc0e9b9453c) currently shows **Missing Compliance**. The owner subsequently requested `ITSAppUsesNonExemptEncryption = false`. That Boolean declaration is now included in `Homem/Info.plist` for future uploads; it does not retroactively change Build 6. The replacement build must finish processing before tester availability can be confirmed.
+
+## Standalone macOS update — 3 October 2026
+
+The Mac workflow now tests and archives `HomemMac`, with native Mac test destination `mac` and archive destination `ANY_MAC`. Both actions are required to pass; the App Store eligible archive delivers to the existing **Homem Internal** group. Restricted editing is enabled. The other two workflows retain `Homem` and `HomemVision`, respectively. All three configurations were read back from Apple's API after the update.
+
+The standalone source was pushed directly to `master` as `c443934`. Signed local native tests passed **51/51**, and iOS Simulator and arm64 visionOS Simulator builds passed. The native Release archive contains Intel and Apple silicon `MACOS` binaries, with minimum macOS 14. Native build 101 is valid and submitted to App Review with manual release. The next source push starts Cloud runs with the updated configuration; local verification does not imply that those Cloud runs have already completed.
+
+UI evidence: [native workflow](ui/2026-10-03-native/06-native-cloud-workflow.png), [build counter](ui/2026-10-03-native/07-cloud-build-counter.png). Release details: [native Mac submission](app-store/NATIVE-MACOS-2026-10-03.md).
