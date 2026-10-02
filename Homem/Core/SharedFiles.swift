@@ -36,7 +36,9 @@ enum SharedFiles {
             suffix += 1
         }
         try FileManager.default.copyItem(at: source, to: destination)
+        #if !os(macOS)
         try FileManager.default.setAttributes([.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication], ofItemAtPath: destination.path)
+        #endif
         return SharedFile(url: destination, size: size)
     }
     static func load(_ provider: NSItemProvider, into directory: URL) async throws -> SharedFile {
@@ -69,7 +71,11 @@ enum SharedFiles {
     /// Stream the multipart body to disk to stay within a share extension's memory budget.
     static func multipart(file: SharedFile, destination: String, boundary: String, directory: URL) throws -> URL {
         let url = directory.appendingPathComponent(UUID().uuidString + ".multipart")
+        #if os(macOS)
+        FileManager.default.createFile(atPath: url.path, contents: nil, attributes: [.posixPermissions: 0o600])
+        #else
         FileManager.default.createFile(atPath: url.path, contents: nil, attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication])
+        #endif
         let output = try FileHandle(forWritingTo: url)
         let input = try FileHandle(forReadingFrom: file.url)
         defer { try? output.close(); try? input.close() }

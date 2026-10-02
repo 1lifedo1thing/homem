@@ -4,6 +4,7 @@ options:
   deploymentTarget:
     iOS: '17.0'
     visionOS: '26.0'
+    macOS: '14.0'
 settings:
   base:
     SWIFT_VERSION: '5.0'
@@ -32,6 +33,52 @@ packages:
     url: https://github.com/livekit/webrtc-xcframework.git
     exactVersion: 150.7871.02
 targets:
+  HomemMac:
+    type: application
+    platform: macOS
+    deploymentTarget: '14.0'
+    sources:
+      - path: HomemMac
+      - path: Homem/Core
+        group: Homem
+      - path: Homem/Resources/Localizable.xcstrings
+        group: Homem/Resources
+      - path: Homem/Resources/memoh-openapi.json
+        group: Homem/Resources
+      - path: UITestSupport/App/OfficialLoginFixture.swift
+    settings:
+      base:
+        PRODUCT_NAME: Homem
+        PRODUCT_MODULE_NAME: Homem
+        PRODUCT_BUNDLE_IDENTIFIER: ad.neko.homem
+        INFOPLIST_FILE: HomemMac/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Homem/Homem-Mac.entitlements
+        ENABLE_HARDENED_RUNTIME: YES
+        SUPPORTS_MACCATALYST: NO
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    dependencies:
+      - package: HighlightSwift
+      - package: L10n-swift
+      - package: SwiftTerm
+      - package: LiveKitWebRTC
+  HomemMacTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: HomemMacTests
+      - path: HomemTests/RFBClientTests.swift
+      - path: HomemTests/ChatQueueTests.swift
+      - path: HomemTests/ModelCatalogTests.swift
+      - path: HomemTests/OfficialLoginTests.swift
+      - path: HomemTests/SpatialWorkspaceTests.swift
+      - path: HomemTests/CodeFormattingTests.swift
+      - path: HomemTests/KeychainTests.swift
+    dependencies:
+      - target: HomemMac
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Homem.app/Contents/MacOS/Homem"
   Homem:
     type: application
     platform: iOS
@@ -43,7 +90,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: ad.neko.homem
         TARGETED_DEVICE_FAMILY: '1,2'
-        SUPPORTS_MACCATALYST: YES
+        SUPPORTS_MACCATALYST: NO
         INFOPLIST_FILE: Homem/Info.plist
         CODE_SIGN_ENTITLEMENTS: Homem/Homem.entitlements
         'CODE_SIGN_ENTITLEMENTS[sdk=macosx*]': Homem/Homem-Mac.entitlements
@@ -113,7 +160,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: ad.neko.homem.share
         TARGETED_DEVICE_FAMILY: '1,2'
-        SUPPORTS_MACCATALYST: YES
+        SUPPORTS_MACCATALYST: NO
         INFOPLIST_FILE: HomemShare/Info.plist
         CODE_SIGN_ENTITLEMENTS: HomemShare/HomemShare.entitlements
         'CODE_SIGN_ENTITLEMENTS[sdk=macosx*]': HomemShare/HomemShare-Mac.entitlements
@@ -130,7 +177,7 @@ targets:
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
-        SUPPORTS_MACCATALYST: YES
+        SUPPORTS_MACCATALYST: NO
         "TEST_HOST[sdk=macosx*]": "$(BUILT_PRODUCTS_DIR)/Homem.app/Contents/MacOS/Homem"
   HomemUITests:
     type: bundle.ui-testing
@@ -142,18 +189,18 @@ targets:
       base:
         GENERATE_INFOPLIST_FILE: YES
 schemes:
+  HomemMac:
+    build:
+      targets:
+        HomemMac: all
+    test:
+      targets: [HomemMacTests]
   Homem:
     build:
       targets:
         Homem: all
     test:
       targets: [HomemTests, HomemUITests]
-  HomemCatalyst:
-    build:
-      targets:
-        Homem: all
-    test:
-      targets: [HomemTests]
   HomemVision:
     build:
       targets:

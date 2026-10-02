@@ -110,6 +110,18 @@ class Handler(BaseHTTPRequestHandler):
             return
         return self.send_json({"message": "Fixture route not implemented"}, 404)
 
+    def update_ui(self, method):
+        if self.path.startswith("/ui-api/"):
+            value, status = ui_fixture.response(self.path, method, self.payload(), authorization=self.headers.get("Authorization", ""))
+            return self.send_json(value, status)
+        self.send_json({"message": "Unknown fixture path"}, 404)
+
+    def do_PUT(self):
+        self.update_ui("PUT")
+
+    def do_PATCH(self):
+        self.update_ui("PATCH")
+
     def do_DELETE(self):
         if self.path.startswith("/ui-api/"):
             value, status = ui_fixture.response(self.path, "DELETE", authorization=self.headers.get("Authorization", ""))

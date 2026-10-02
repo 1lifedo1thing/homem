@@ -12,7 +12,7 @@ Connect to [official Memoh](https://app.memoh.net) or your own [Memoh server](ht
 - Switch between accounts, servers, and workspaces.
 - Manage agents, models, memories, schedules, apps, and integrations.
 
-Supports iOS 17+, visionOS 26+, Mac Catalyst, system appearance, and English, Simplified Chinese, Spanish, and Japanese.
+Supports iOS 17+, visionOS 26+, macOS 14+, system appearance, and English, Simplified Chinese, Spanish, and Japanese.
 
 ## Get started
 
@@ -50,4 +50,4 @@ The `HomemVision` scheme builds the native visionOS 26+ app with separate native
 
 ## Mac
 
-The `HomemCatalyst` scheme builds the Mac app from the shared iOS and visionOS code. It uses a wide chat sidebar and the same separate chat, files, terminal, and desktop window routes as visionOS. Saved account credentials and account listings use iCloud Keychain when it is enabled on the same Apple Account; unsent drafts stay on each device. See [Mac setup](docs/MACOS.md).
+The `HomemMac` scheme builds a standalone SwiftUI/AppKit Mac app. It shares accounts, API clients, chat state, desktop transport, and window routes with visionOS. Native sidebars, toolbars, split views, and independent chat, files, terminal, and desktop windows support work across multiple displays. Saved account credentials and account listings use iCloud Keychain when it is enabled on the same Apple Account; unsent drafts stay on each device. See [Mac setup](docs/MACOS.md).

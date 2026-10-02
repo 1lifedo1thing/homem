@@ -1,12 +1,6 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-struct ChatDestination: Hashable, Codable {
-    var botID: String; var sessionID: String; var title: String; var botName: String
-    var firstMessage: NewChatDraft? = nil
-    enum CodingKeys: String, CodingKey { case botID, sessionID, title, botName }
-}
-
 struct ConversationsView: View {
     var macSection: Binding<HomeSection>? = nil
     @Environment(\.workspaceSceneID) private var workspaceSceneID

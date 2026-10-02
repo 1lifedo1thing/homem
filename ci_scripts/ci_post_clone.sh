@@ -40,6 +40,23 @@ for usage_key in NSCameraUsageDescription NSMicrophoneUsageDescription; do
     exit 1
   fi
 done
+for usage_key in NSCameraUsageDescription NSMicrophoneUsageDescription; do
+  usage_text="$(/usr/libexec/PlistBuddy -c "Print :$usage_key" "$repo_dir/HomemMac/Info.plist")"
+  if [[ -z "$usage_text" ]]; then
+    echo "error: HomemMac/Info.plist must include a nonempty $usage_key." >&2
+    exit 1
+  fi
+done
+python3 - "$repo_dir" <<'PYMAC'
+import json, pathlib, struct, sys
+icons = pathlib.Path(sys.argv[1]) / 'HomemMac/Assets.xcassets/AppIcon.appiconset'
+for image in json.loads((icons / 'Contents.json').read_text())['images']:
+    data = (icons / image['filename']).read_bytes()
+    size = int(float(image['size'].split('x')[0]) * int(image['scale'][0]))
+    if struct.unpack('>II', data[16:24]) != (size, size):
+        raise SystemExit(f"error: Incorrect Mac icon dimensions: {image['filename']}")
+print('Native Mac icon preflight passed.')
+PYMAC
 echo 'Privacy purpose string preflight passed.'
 
 python3 "$repo_dir/scripts/check-localizations.py"

@@ -248,7 +248,9 @@ import Observation
     }
     private func selectConnection(_ next: AccountConnection) {
         guard connection !== next else { return }
+        #if !os(macOS)
         DesktopPictureInPicture.stopActive(disconnect: true)
+        #endif
         if !accounts.retains(connection) { connection.disconnect() }
         connection = next
         if selectsActiveAccount { vault.activate(next.accountID) }

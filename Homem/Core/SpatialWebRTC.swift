@@ -1,6 +1,6 @@
 // The iOS binary has no visionOS slice. Keep transport and rendering shared
 // while using LiveKit's standalone WebRTC build on Apple Vision Pro.
-#if os(visionOS)
+#if os(visionOS) || os(macOS)
 import LiveKitWebRTC
 
 typealias RTCCVPixelBuffer = LKRTCCVPixelBuffer

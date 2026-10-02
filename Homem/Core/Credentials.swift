@@ -21,10 +21,14 @@ enum Keychain {
         account.hasPrefix("saved-account|") || account.hasPrefix("official-session|") || account == SharedAccountDirectory.key
     }
     private static func query(_ account: String, synchronizable: Bool) -> [String: Any] {
-        [kSecClass as String: kSecClassGenericPassword,
+        var attributes: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
          kSecAttrService as String: service,
          kSecAttrAccount as String: account,
          kSecAttrSynchronizable as String: synchronizable]
+        #if os(macOS)
+        attributes[kSecUseDataProtectionKeychain as String] = true
+        #endif
+        return attributes
     }
     private static func read(_ account: String, synchronizable: Bool) -> String? {
         var q = query(account, synchronizable: synchronizable)
@@ -62,7 +66,10 @@ enum Keychain {
         if synced { SecItemDelete(query(account, synchronizable: false) as CFDictionary) }
     }
     static func migrateDrafts(from oldScope: String, to newScope: String) {
-        let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "ad.neko.homem", kSecReturnAttributes as String: true, kSecMatchLimit as String: kSecMatchLimitAll]
+        var query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "ad.neko.homem", kSecReturnAttributes as String: true, kSecMatchLimit as String: kSecMatchLimitAll]
+        #if os(macOS)
+        query[kSecUseDataProtectionKeychain as String] = true
+        #endif
         var result: CFTypeRef?
         guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess, let items = result as? [[String: Any]] else { return }
         let prefix = "draft|\(oldScope)|"
@@ -73,7 +80,10 @@ enum Keychain {
         }
     }
     static func removeDrafts(server: String) {
-        let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "ad.neko.homem", kSecReturnAttributes as String: true, kSecMatchLimit as String: kSecMatchLimitAll]
+        var query: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "ad.neko.homem", kSecReturnAttributes as String: true, kSecMatchLimit as String: kSecMatchLimitAll]
+        #if os(macOS)
+        query[kSecUseDataProtectionKeychain as String] = true
+        #endif
         var result: CFTypeRef?
         guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess, let items = result as? [[String: Any]] else { return }
         for item in items {

@@ -15,9 +15,9 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "07081692DCD65CDD15621678"
-               BuildableName = "Homem.app"
-               BlueprintName = "Homem"
+               BlueprintIdentifier = "E1CEF0BB98CF53E03295BAB2"
+               BuildableName = "HomemMac.app"
+               BlueprintName = "HomemMac"
                ReferencedContainer = "container:Homem.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
@@ -32,9 +32,9 @@
       <MacroExpansion>
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "07081692DCD65CDD15621678"
-            BuildableName = "Homem.app"
-            BlueprintName = "Homem"
+            BlueprintIdentifier = "E1CEF0BB98CF53E03295BAB2"
+            BuildableName = "HomemMac.app"
+            BlueprintName = "HomemMac"
             ReferencedContainer = "container:Homem.xcodeproj">
          </BuildableReference>
       </MacroExpansion>
@@ -44,9 +44,9 @@
             parallelizable = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "20F5B0BFADD0C88EAE970EC7"
-               BuildableName = "HomemTests.xctest"
-               BlueprintName = "HomemTests"
+               BlueprintIdentifier = "9192DC261C181C4A096BE39B"
+               BuildableName = "HomemMacTests.xctest"
+               BlueprintName = "HomemMacTests"
                ReferencedContainer = "container:Homem.xcodeproj">
             </BuildableReference>
          </TestableReference>
@@ -68,9 +68,9 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "07081692DCD65CDD15621678"
-            BuildableName = "Homem.app"
-            BlueprintName = "Homem"
+            BlueprintIdentifier = "E1CEF0BB98CF53E03295BAB2"
+            BuildableName = "HomemMac.app"
+            BlueprintName = "HomemMac"
             ReferencedContainer = "container:Homem.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
@@ -85,9 +85,9 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "07081692DCD65CDD15621678"
-            BuildableName = "Homem.app"
-            BlueprintName = "Homem"
+            BlueprintIdentifier = "E1CEF0BB98CF53E03295BAB2"
+            BuildableName = "HomemMac.app"
+            BlueprintName = "HomemMac"
             ReferencedContainer = "container:Homem.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>

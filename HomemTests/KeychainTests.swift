@@ -16,12 +16,15 @@ final class KeychainTests: XCTestCase {
     func testSavedAccountUsesSynchronizableKeychainAndMigratesLocalItem() throws {
         let account = "saved-account|keychain-regression-" + UUID().uuidString
         defer { try? Keychain.save(nil, account: account) }
-        let legacy: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
+        var legacy: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
                                      kSecAttrService as String: "ad.neko.homem",
                                      kSecAttrAccount as String: account,
                                      kSecAttrSynchronizable as String: false,
                                      kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
                                      kSecValueData as String: Data("old-token".utf8)]
+        #if os(macOS)
+        legacy[kSecUseDataProtectionKeychain as String] = true
+        #endif
         XCTAssertEqual(SecItemAdd(legacy as CFDictionary, nil), errSecSuccess)
         XCTAssertEqual(Keychain.read(account), "old-token")
         var synced = legacy

@@ -11,3 +11,4 @@ build-catalyst/
 build-release/
 __pycache__/
 *.py[cod]
+build-mac/

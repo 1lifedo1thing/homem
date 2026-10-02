@@ -76,6 +76,7 @@ def response(path, method, body=None, authorization=''):
         if path=='/ui/reset': reset(body.get('scenario','')); return {},200
         if path=='/ui/counts': return dict(COUNTS),200
         COUNTS[path]=COUNTS.get(path,0)+1
+        COUNTS[method+' '+path]=COUNTS.get(method+' '+path,0)+1
         if path=='/api/v1/auth/email-code/send': return {'resend_after':60},200
         if path=='/api/v1/auth/email-code/verify':
             if body.get('code') != '123456': return {'message':'Invalid code'},400
@@ -108,7 +109,21 @@ def response(path, method, body=None, authorization=''):
                     {'name':'Reading list.md','path':'/data/Reading list.md','isDir':False,'size':760},
                 ]},200
             return {'entries':[{'name':'AGENTS.md','path':'/data/AGENTS.md','isDir':False,'size':100}]},200
-        if path.endswith('/container/fs/read'): return {'content':'# A workspace of your own\n\nThis file comes from the local test fixture.\n','revision':'fixture'},200
+        if path.endswith('/container/fs/read'):
+            content='# A workspace of your own\n\nThis file comes from the local test fixture.\n'
+            if SCENARIO == 'screenshots':
+                content='# Weekly plan\n\n## Make room for what matters\n\n- [ ] Protect two morning focus blocks\n- [ ] Prepare Wednesday’s team check-in\n- [ ] Keep Friday afternoon open for follow-ups\n- [ ] Step outside before the day ends\n\nA little breathing room makes the week work better.\n'
+            return {'content':content,'revision':'fixture'},200
+        if method in ('PUT','PATCH'):
+            if path in DOCUMENTS:
+                DOCUMENTS[path].update(body)
+                return DOCUMENTS[path],200
+            parent,_,identifier=path.rpartition('/')
+            record=next((x for x in COLLECTIONS.get(parent,[]) if x.get('id')==identifier),None)
+            if record is not None:
+                record.update(body)
+                return record,200
+            return {'message':'Fixture item not found'},404
         if '/sessions/' in path: return {'id':path.rsplit('/',1)[1],'type':'chat','settings':{}},200
         if method=='GET':
             if path in COLLECTIONS: return {'items':COLLECTIONS[path]},200
